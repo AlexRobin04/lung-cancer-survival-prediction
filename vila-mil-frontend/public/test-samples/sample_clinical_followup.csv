@@ -1,0 +1,4 @@
+case_id,time,status,group_label
+DEMO_FLOW_001,0,0,demo_censored
+DEMO_FLOW_002,36,1,demo_event
+DEMO_FLOW_003,24,0,demo_censored_2

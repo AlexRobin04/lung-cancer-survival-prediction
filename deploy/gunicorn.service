@@ -1,0 +1,30 @@
+# 安装：sudo cp gunicorn.service /etc/systemd/system/vila-mil-api.service
+# 按服务器实际路径修改 WorkingDirectory、User、ExecStart 中的 venv 路径
+# 然后：sudo systemctl daemon-reload && sudo systemctl enable --now vila-mil-api
+
+[Unit]
+Description=ViLa-MIL Flask API (gunicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/srv/vila-mil/ViLa-MIL
+Environment=VILAMIL_PYTHON_BIN=/srv/vila-mil/venv/bin/python
+Environment=PORT=8000
+# 训练子进程使用与 gunicorn 相同的 Python
+ExecStart=/srv/vila-mil/venv/bin/gunicorn \
+    --bind 127.0.0.1:8000 \
+    --workers 2 \
+    --threads 4 \
+    --timeout 300 \
+    --access-logfile - \
+    --error-logfile - \
+    api_server:app
+
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

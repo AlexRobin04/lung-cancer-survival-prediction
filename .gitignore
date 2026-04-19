@@ -1,0 +1,59 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ===== venv =====
+venv/
+.env
+.env.local
+
+# ===== Node =====
+node_modules/
+vite.config.js.timestamp-*
+dist/
+
+# ===== Docker =====
+*.dockerfile
+
+# ===== ViLa-MIL: 大文件/运行时产物 =====
+ViLa-MIL/result/
+ViLa-MIL/ckpt/
+ViLa-MIL/features/
+ViLa-MIL/api_training_logs/
+ViLa-MIL/logging/
+ViLa-MIL/uploaded_features/
+ViLa-MIL/sample_uploads/
+ViLa-MIL/test_assets/
+ViLa-MIL/*.whl
+ViLa-MIL/Miniconda3-*.sh
+ViLa-MIL/get-pip.py
+
+# ===== TRIDENT: 预训练权重（太大，建议单独存放） =====
+TRIDENT/ckpts/
+TRIDENT/_readme/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+Miniconda3-*.sh

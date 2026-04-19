@@ -1,0 +1,6 @@
+This is a placeholder WSI file for workflow testing only.
+
+It is NOT a real whole-slide image and cannot be opened by pathology viewers.
+Upload it to the platform to verify:
+  Clinical -> upload processed WSI -> list -> link to case.
+

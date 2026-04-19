@@ -1,0 +1,6 @@
+case_id,slide_id,time,status,age,sex,stage,histology,smoking
+CASE_DEMO_001,DEMO_001.svs,12,1,66,M,III,LUAD,Yes
+CASE_DEMO_002,DEMO_002.svs,24,0,59,F,II,LUSC,No
+CASE_DEMO_003,DEMO_003.svs,6,1,72,M,IV,LUSC,Yes
+CASE_DEMO_004,DEMO_004.svs,36,0,51,F,I,LUAD,No
+

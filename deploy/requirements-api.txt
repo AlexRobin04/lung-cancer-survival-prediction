@@ -1,0 +1,6 @@
+# 服务器仅跑 api_server 时的最小依赖（在 ViLa-MIL 目录 venv 中安装）
+# pip install -r requirements-api.txt
+flask>=2.0
+flask-cors>=3.0
+gunicorn>=21.0
+werkzeug>=2.0

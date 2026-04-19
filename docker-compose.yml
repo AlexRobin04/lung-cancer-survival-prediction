@@ -1,0 +1,99 @@
+# Apple Silicon（M 系列）宿主机：离线镜像为 linux/amd64，需明确 platform 并走 Rosetta/QEMU 模拟。
+# 后端已改为 gthread，避免单 sync worker 被长请求占满导致整站 API 与健康检查卡死。
+services:
+  backend:
+    platform: linux/amd64
+    build:
+      context: ./ViLa-MIL
+      dockerfile: Dockerfile
+    container_name: vila-mil-backend
+    restart: unless-stopped
+    mem_limit: 8g
+    cpus: 4.0
+    expose:
+      - "8000"
+    environment:
+      - TZ=Asia/Shanghai
+      - TRIDENT_REPO_DIR=/TRIDENT
+      - TRIDENT_PATCH_ENCODER=conch_v15
+      - TRIDENT_ALLOW_RASTER_FALLBACK=0
+      - TRIDENT_MAX_WORKERS=0
+      - TRIDENT_FORCE_FEATURE_DIM=512
+      # ViLa_MIL 预检阈值（按需调整）
+      - VILAMIL_MIN_AVAIL_GB=5.5
+      - VILAMIL_MIN_SWAP_GB=2
+      # 训练空闲超时（日志连续无增长则自动终止）
+      - TRAIN_IDLE_TIMEOUT_MIN=240
+      - TRAIN_IDLE_CHECK_SEC=60
+      - TORCH_LOGS=+ERROR
+    volumes:
+      # 训练结果、日志、任务元数据持久化
+      - ./ViLa-MIL/result:/app/result
+      - ./ViLa-MIL/api_training_logs:/app/api_training_logs
+      - ./ViLa-MIL/uploaded_features:/app/uploaded_features
+      - ./TRIDENT:/TRIDENT:ro
+      # 特征/权重目录（宿主机已有数据）
+      - ./ViLa-MIL/features:/app/features
+      - ./ViLa-MIL/ckpt:/app/ckpt
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  frontend:
+    platform: linux/amd64
+    image: nginx:1.27-alpine
+    container_name: vila-mil-frontend
+    restart: unless-stopped
+    expose:
+      - "80"
+    volumes:
+      - ./vila-mil-frontend/deploy/nginx-frontend.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./vila-mil-frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  gateway:
+    platform: linux/amd64
+    image: nginx:1.27-alpine
+    container_name: vila-mil-gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
