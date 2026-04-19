@@ -111,6 +111,19 @@ parser.add_argument(
     default=False,
     help="EnsembleFeature: do not auto-resolve baseline checkpoints when ensemble_ckpt_dir is unset",
 )
+parser.add_argument(
+    "--ensemble_fusion",
+    type=str,
+    choices=["gate", "concat"],
+    default="gate",
+    help='EnsembleFeature: gate=门控加权融合对齐特征；concat=对齐后拼接再 MLP（消融）',
+)
+parser.add_argument(
+    "--ensemble_exclude",
+    type=str,
+    default="",
+    help="EnsembleFeature: 逗号分隔要掩码的基线键（RRTMIL,AMIL,WiKG,DSMIL,S4MIL），对齐后置零该路特征；不可写满五路",
+)
 
 args = parser.parse_args()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -58,6 +58,28 @@ MODEL_CHOICES = [
     "EnsembleFeature",
 ]
 
+_ENSEMBLE_BRANCH_KEYS_FROZEN = frozenset({"RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL"})
+
+
+def _parse_ensemble_exclude_api(raw: Any) -> list[str]:
+    """解析 ensembleExclude；未知键忽略；若等价于排除全部五路则抛 ValueError。"""
+    if raw is None or raw == "":
+        return []
+    if isinstance(raw, list):
+        parts = [str(x).strip() for x in raw if str(x).strip()]
+    else:
+        parts = [x.strip() for x in str(raw).replace(";", ",").split(",") if x.strip()]
+    out: list[str] = []
+    for p in parts:
+        u = p.upper().replace("-", "_")
+        if u in ("S4", "S4MIL"):
+            u = "S4MIL"
+        if u in _ENSEMBLE_BRANCH_KEYS_FROZEN and u not in out:
+            out.append(u)
+    if len(_ENSEMBLE_BRANCH_KEYS_FROZEN.difference(out)) == 0:
+        raise ValueError("ensembleExclude 不能排除全部五路基线")
+    return out
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -726,12 +748,28 @@ def _load_ensemble_feature_model(ckpt_path: str, feat_dim: int = 512, n_classes:
         return _MODEL_CACHE[key]
     import ml_collections
     import torch
-    from models.EnsembleFeature import EnsembleFeatureMIL
+    from models.EnsembleFeature import ENSEMBLE_BRANCH_ORDER, EnsembleFeatureMIL
 
     config = ml_collections.ConfigDict()
     config.hard_or_soft = False
-    model = EnsembleFeatureMIL(config=config, n_classes=int(n_classes), feat_dim=int(feat_dim), freeze_base=False)
     state = torch.load(ckpt_path, map_location="cpu")
+    fusion_mode = "gate" if any(str(k).startswith("gate_mlp") for k in state.keys()) else "concat"
+    exclude: list[str] = []
+    mkey = "ensemble_branch_mask"
+    if mkey in state:
+        m = state[mkey]
+        if isinstance(m, torch.Tensor) and m.numel() == len(ENSEMBLE_BRANCH_ORDER):
+            for i, b in enumerate(ENSEMBLE_BRANCH_ORDER):
+                if float(m[i].detach().cpu().item()) < 0.5:
+                    exclude.append(b)
+    model = EnsembleFeatureMIL(
+        config=config,
+        n_classes=int(n_classes),
+        feat_dim=int(feat_dim),
+        freeze_base=False,
+        fusion_mode=fusion_mode,
+        ensemble_exclude=exclude,
+    )
     model.load_state_dict(state, strict=False)
     model.eval()
     _MODEL_CACHE[key] = model
@@ -1193,6 +1231,8 @@ def create_app() -> Flask:
         weight_decay: float = 1e-5,
         ensemble_ckpt_dir: str | None = None,
         finetune_ensemble: bool = False,
+        ensemble_fusion: str = "gate",
+        ensemble_exclude: list[str] | None = None,
     ) -> tuple[str, threading.Event]:
         """启动一次训练子进程并写入 tasks.json；返回 task_id 与完成事件。"""
         task_id = str(task_id_override or uuid.uuid4())
@@ -1233,10 +1273,14 @@ def create_app() -> Flask:
         }
         if conch:
             task["conchCheckpointPath"] = conch
+        excl = list(ensemble_exclude or [])
         if model_type == "EnsembleFeature":
             if ensemble_ckpt_dir:
                 task["ensembleCkptDir"] = ensemble_ckpt_dir
             task["finetuneEnsemble"] = bool(finetune_ensemble)
+            task["ensembleFusion"] = str(ensemble_fusion or "gate").strip().lower()
+            if excl:
+                task["ensembleExclude"] = excl
         if batch_id:
             task["batchId"] = batch_id
         if run_index is not None:
@@ -1287,6 +1331,11 @@ def create_app() -> Flask:
                     cmd.extend(["--ensemble_ckpt_dir", epath])
             if finetune_ensemble:
                 cmd.append("--finetune_ensemble")
+            ef = str(ensemble_fusion or "gate").strip().lower()
+            if ef in ("gate", "concat"):
+                cmd.extend(["--ensemble_fusion", ef])
+            if excl:
+                cmd.extend(["--ensemble_exclude", ",".join(excl)])
         task["command"] = " ".join(cmd)
 
         done = threading.Event()
@@ -1524,6 +1573,8 @@ def create_app() -> Flask:
         weight_decay: float = 1e-5,
         ensemble_ckpt_dir: str | None = None,
         finetune_ensemble: bool = False,
+        ensemble_fusion: str = "gate",
+        ensemble_exclude: list[str] | None = None,
     ) -> dict[str, Any]:
         batch_id = str(uuid.uuid4()) if repeat > 1 else None
         task_id, done = _start_one_training(
@@ -1544,6 +1595,8 @@ def create_app() -> Flask:
             weight_decay=weight_decay,
             ensemble_ckpt_dir=ensemble_ckpt_dir,
             finetune_ensemble=finetune_ensemble,
+            ensemble_fusion=ensemble_fusion,
+            ensemble_exclude=ensemble_exclude,
         )
         threading.Thread(target=_watch_idle_timeout_for, args=(task_id,), daemon=True).start()
 
@@ -1571,6 +1624,8 @@ def create_app() -> Flask:
                             weight_decay=weight_decay,
                             ensemble_ckpt_dir=ensemble_ckpt_dir,
                             finetune_ensemble=finetune_ensemble,
+                            ensemble_fusion=ensemble_fusion,
+                            ensemble_exclude=ensemble_exclude,
                         )
                     except Exception:
                         break
@@ -1621,6 +1676,19 @@ def create_app() -> Flask:
             if not tid:
                 return
             try:
+                q_excl: list[str] | None = None
+                if str(q.get("modelType") or "") == "EnsembleFeature":
+                    try:
+                        q_excl = _parse_ensemble_exclude_api(q.get("ensembleExclude"))
+                    except ValueError as ve:
+                        _update_task(
+                            tid,
+                            status="failed",
+                            running=False,
+                            endedAt=_cst_now(),
+                            failReason=f"invalid-ensembleExclude: {ve}",
+                        )
+                        return
                 _launch_training_job(
                     cancer=str(q.get("cancer") or "LUSC"),
                     model_type=str(q.get("modelType") or "RRTMIL"),
@@ -1637,6 +1705,12 @@ def create_app() -> Flask:
                     weight_decay=_parse_weight_decay(q.get("weightDecay")),
                     ensemble_ckpt_dir=str(q.get("ensembleCkptDir") or "").strip() or None,
                     finetune_ensemble=bool(q.get("finetuneEnsemble")),
+                    ensemble_fusion=(
+                        efq
+                        if (efq := str(q.get("ensembleFusion") or "gate").strip().lower()) in ("gate", "concat")
+                        else "gate"
+                    ),
+                    ensemble_exclude=q_excl,
                 )
             except Exception as e:
                 _update_task(tid, status="failed", running=False, endedAt=_cst_now(), failReason=f"queue-dispatch-failed: {e}")
@@ -1718,6 +1792,20 @@ def create_app() -> Flask:
             fe_raw = body.get("finetune_ensemble")
         finetune_ensemble = fe_raw is True or str(fe_raw).strip().lower() in ("1", "true", "yes", "on")
 
+        ef_raw = body.get("ensembleFusion") or body.get("ensemble_fusion")
+        ensemble_fusion = str(ef_raw or "gate").strip().lower()
+        if ensemble_fusion not in ("gate", "concat"):
+            ensemble_fusion = "gate"
+
+        ensemble_exclude: list[str] = []
+        if model_type == "EnsembleFeature":
+            try:
+                ensemble_exclude = _parse_ensemble_exclude_api(
+                    body.get("ensembleExclude") or body.get("ensemble_exclude")
+                )
+            except ValueError as e:
+                return jsonify({"message": str(e)}), 400
+
         # Stability guard: allow at most one active training process.
         # This prevents low-memory hosts from being overloaded by concurrent jobs.
         running_ids: list[str] = []
@@ -1777,6 +1865,9 @@ def create_app() -> Flask:
                     if ensemble_ckpt_dir:
                         queued_task["ensembleCkptDir"] = ensemble_ckpt_dir
                     queued_task["finetuneEnsemble"] = bool(finetune_ensemble)
+                    queued_task["ensembleFusion"] = ensemble_fusion
+                    if ensemble_exclude:
+                        queued_task["ensembleExclude"] = list(ensemble_exclude)
                 _append_task(queued_task)
                 return jsonify({"ok": True, "queued": True, "taskId": task_id, "repeat": repeat, "runningTaskIds": running_ids})
             return (
@@ -1848,6 +1939,8 @@ def create_app() -> Flask:
                 weight_decay=weight_decay,
                 ensemble_ckpt_dir=ensemble_ckpt_dir,
                 finetune_ensemble=finetune_ensemble,
+                ensemble_fusion=ensemble_fusion,
+                ensemble_exclude=ensemble_exclude if model_type == "EnsembleFeature" else None,
             )
         except Exception as e:
             return jsonify({"message": f"启动训练失败: {e}"}), 500

@@ -6,21 +6,64 @@ their bag-level feature representations, concatenating them, and passing through
 a learnable fusion head for final classification.
 
 Architecture:
-    x_s -> [RRTMIL, AMIL, WiKG, DSMIL, S4MIL] -> [f1, f2, f3, f4, f5]
-    -> concat -> Fusion Head -> logits
+    x_s -> [RRTMIL, AMIL, WiKG, DSMIL, S4MIL] -> [f1..f5]
+    -> 各分支 LayerNorm + Linear(->D) 对齐
+    -> fusion_mode:
+       - "gate": concat(z*) 过 gate_mlp -> softmax 得 5 维权重，对 z* 加权求和 -> MLP 分类
+       - "concat": concat(z*) -> MLP 分类（基线）
 """
+
+from __future__ import annotations
+
+import os
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import ml_collections
-import os
 
 from utils.core_utils import *  # nll_loss / nll_loss_soft（与其它 MIL 模型一致）
 
+# 分支顺序：与 ensemble_branch_mask、gate 堆叠顺序一致
+ENSEMBLE_BRANCH_ORDER = ("RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL")
+_ALL_BRANCH_SET = frozenset(ENSEMBLE_BRANCH_ORDER)
+
+
+def _normalize_ensemble_branch(name: str) -> str | None:
+    u = str(name).strip().upper().replace("-", "_")
+    if u in ("S4", "S4MIL"):
+        return "S4MIL"
+    if u in _ALL_BRANCH_SET:
+        return u
+    return None
+
+
+def _parse_ensemble_exclude(exclude) -> list[str]:
+    if exclude is None:
+        return []
+    if isinstance(exclude, str):
+        parts = [x.strip() for x in exclude.replace(";", ",").split(",") if x.strip()]
+    else:
+        parts = [str(x).strip() for x in exclude]
+    out: list[str] = []
+    for p in parts:
+        n = _normalize_ensemble_branch(p)
+        if n and n not in out:
+            out.append(n)
+    return out
+
 
 class EnsembleFeatureMIL(nn.Module):
-    def __init__(self, config, n_classes, feat_dim=512, freeze_base=True):
+    def __init__(
+        self,
+        config,
+        n_classes,
+        feat_dim=512,
+        freeze_base=True,
+        feature_align_dim=512,
+        fusion_mode="gate",
+        ensemble_exclude=None,
+    ):
         """
         Args:
             config: ml_collections.ConfigDict with at least `hard_or_soft`
@@ -28,6 +71,9 @@ class EnsembleFeatureMIL(nn.Module):
             feat_dim: input feature dimension of patch features (default 512)
             freeze_base: if True, freeze all 5 baseline model parameters and only
                          train the fusion head; if False, fine-tune everything
+            feature_align_dim: 拼接前将各基线 bag 特征投影到该维度（配合 LayerNorm 缓解尺度差异）
+            fusion_mode: "gate" 为门控加权融合；"concat" 为对齐后直接拼接再 MLP（消融用）
+            ensemble_exclude: 要掩码掉的基线名称列表（如 ["RRTMIL"]），对齐后该路特征置零，用于 6.1 留一等消融；不可全部排除
         """
         super(EnsembleFeatureMIL, self).__init__()
 
@@ -58,11 +104,39 @@ class EnsembleFeatureMIL(nn.Module):
         wikg_dim = 512
         dsmil_dim = feat_dim
         s4mil_dim = 512
-        total_feat_dim = rrt_dim + amil_dim + wikg_dim + dsmil_dim + s4mil_dim
+        d_align = int(feature_align_dim)
+        if d_align <= 0:
+            raise ValueError("feature_align_dim must be positive")
+
+        # ---- 分支对齐：LN + 投影到统一维度（再拼接），减轻尺度不一导致的梯度主导 ----
+        self.feature_align_dim = d_align
+        self.align_rrt = nn.Sequential(nn.LayerNorm(rrt_dim), nn.Linear(rrt_dim, d_align))
+        self.align_amil = nn.Sequential(nn.LayerNorm(amil_dim), nn.Linear(amil_dim, d_align))
+        self.align_wikg = nn.Sequential(nn.LayerNorm(wikg_dim), nn.Linear(wikg_dim, d_align))
+        self.align_dsmil = nn.Sequential(nn.LayerNorm(dsmil_dim), nn.Linear(dsmil_dim, d_align))
+        self.align_s4mil = nn.Sequential(nn.LayerNorm(s4mil_dim), nn.Linear(s4mil_dim, d_align))
+
+        mode = str(fusion_mode or "gate").strip().lower()
+        if mode not in ("gate", "concat"):
+            raise ValueError('fusion_mode must be "gate" or "concat"')
+        self.fusion_mode = mode
+
+        # ---- 门控：由 5 路对齐特征联合决定各基模型权重（样本自适应）----
+        self.gate_mlp = None
+        if self.fusion_mode == "gate":
+            self.gate_mlp = nn.Sequential(
+                nn.Linear(5 * d_align, 128),
+                nn.ReLU(),
+                nn.Dropout(0.1),
+                nn.Linear(128, 5),
+            )
+            fusion_in = d_align
+        else:
+            fusion_in = 5 * d_align
 
         # ---- fusion classification head ----
         self.fusion_head = nn.Sequential(
-            nn.Linear(total_feat_dim, 512),
+            nn.Linear(fusion_in, 512),
             nn.ReLU(),
             nn.Dropout(0.3),
             nn.Linear(512, 256),
@@ -73,6 +147,15 @@ class EnsembleFeatureMIL(nn.Module):
 
         self.hard_or_soft = config.hard_or_soft
         self.loss_ce = nn.CrossEntropyLoss()
+
+        excl = _parse_ensemble_exclude(ensemble_exclude)
+        excluded_set = frozenset(excl)
+        if not excluded_set.issubset(_ALL_BRANCH_SET):
+            raise ValueError(f"ensemble_exclude 含未知键: {sorted(excluded_set - _ALL_BRANCH_SET)}")
+        if len(excluded_set) >= len(_ALL_BRANCH_SET):
+            raise ValueError("ensemble_exclude 不能排除全部五路基线")
+        mask_list = [0.0 if b in excluded_set else 1.0 for b in ENSEMBLE_BRANCH_ORDER]
+        self.register_buffer("ensemble_branch_mask", torch.tensor(mask_list, dtype=torch.float32))
 
         # ---- freeze baseline parameters if requested ----
         if freeze_base:
@@ -86,6 +169,7 @@ class EnsembleFeatureMIL(nn.Module):
                 param.requires_grad = False
             for param in self.s4mil.parameters():
                 param.requires_grad = False
+            # align_* 与 fusion_head 保持可训练
 
     def load_pretrained(self, rrt_ckpt, amil_ckpt, wikg_ckpt, dsmil_ckpt, s4mil_ckpt, device='cpu'):
         """Load pre-trained checkpoint for each baseline model.
@@ -195,11 +279,26 @@ class EnsembleFeatureMIL(nn.Module):
         f_dsmil = self._extract_dsmil_feature(x_s)
         f_s4mil = self._extract_s4mil_feature(x_s)
 
-        # ---- concatenate ----
-        fused = torch.cat([f_rrt, f_amil, f_wikg, f_dsmil, f_s4mil], dim=-1)
+        # ---- 对齐后拼接 ----
+        z_rrt = self.align_rrt(f_rrt)
+        z_amil = self.align_amil(f_amil)
+        z_wikg = self.align_wikg(f_wikg)
+        z_dsmil = self.align_dsmil(f_dsmil)
+        z_s4mil = self.align_s4mil(f_s4mil)
+        zs = torch.stack([z_rrt, z_amil, z_wikg, z_dsmil, z_s4mil], dim=1)
+        m = self.ensemble_branch_mask.to(device=zs.device, dtype=zs.dtype).view(1, 5, 1)
+        zs = zs * m
+        cat_z = zs.flatten(1)
+
+        if self.fusion_mode == "gate":
+            gate_logits = self.gate_mlp(cat_z)
+            w = F.softmax(gate_logits, dim=-1)
+            fused = (w.unsqueeze(-1) * zs).sum(dim=1)
+        else:
+            fused = cat_z
 
         # ---- fusion head -> logits ----
-        logits = self.fusion_head(fused)  # [1, n_classes]
+        logits = self.fusion_head(fused)  # [B, n_classes]
 
         # ---- loss ----
         loss = None

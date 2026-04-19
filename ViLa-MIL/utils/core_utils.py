@@ -206,11 +206,17 @@ def train(datasets, cur, args):
             )
             model.config = config
         elif args.model_type == "EnsembleFeature":
-            from models.EnsembleFeature import EnsembleFeatureMIL
+            from models.EnsembleFeature import EnsembleFeatureMIL, _parse_ensemble_exclude
             freeze = bool(getattr(args, "freeze_base", True)) and not bool(getattr(args, "finetune_ensemble", False))
+            fusion_mode = str(getattr(args, "ensemble_fusion", "gate") or "gate").strip().lower()
+            if fusion_mode not in ("gate", "concat"):
+                fusion_mode = "gate"
+            excl = _parse_ensemble_exclude(getattr(args, "ensemble_exclude", "") or "")
             model = EnsembleFeatureMIL(
                 config=config, n_classes=args.n_classes,
                 feat_dim=inferred_dim, freeze_base=freeze,
+                fusion_mode=fusion_mode,
+                ensemble_exclude=excl,
             )
             model.config = config
             # 基线预训练权重：1) 显式目录 ensemble_ckpt_dir；2) 否则从 uploaded_features/best_models.json + tasks.json 按当前折自动解析

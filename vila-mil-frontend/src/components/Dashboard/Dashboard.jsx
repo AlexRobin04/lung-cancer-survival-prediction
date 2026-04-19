@@ -48,6 +48,65 @@ const fmtPct = (v) => {
   return Number.isFinite(n) ? `${n.toFixed(2)}%` : '—'
 }
 
+/** 从启动命令中解析 `--flag` 后的第一个 token */
+const parseCmdArg = (cmd, flag) => {
+  const esc = flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const m = String(cmd || '').match(new RegExp(`${esc}\\s+(\\S+)`, 'i'))
+  return m ? m[1].trim() : ''
+}
+
+/**
+ * 合并 tasks.json 字段与 command 字符串，供任务详情展示「本次参数 / 消融」。
+ */
+const buildTaskConfigSnapshot = (task) => {
+  if (!task) return null
+  const cmd = String(task.command || '')
+  const model = String(task.modelType || '')
+  const early =
+    typeof task.earlyStopping === 'boolean'
+      ? task.earlyStopping
+      : /\b--early_stopping\b/i.test(cmd)
+  const fusionRaw = task.ensembleFusion || parseCmdArg(cmd, '--ensemble_fusion')
+  const fusion = fusionRaw ? String(fusionRaw).toLowerCase() : model === 'EnsembleFeature' ? 'gate' : ''
+  let exclude = []
+  if (Array.isArray(task.ensembleExclude)) exclude = [...task.ensembleExclude]
+  else if (task.ensembleExclude && typeof task.ensembleExclude === 'string') {
+    exclude = task.ensembleExclude.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+  }
+  if (exclude.length === 0 && /--ensemble_exclude\b/i.test(cmd)) {
+    exclude = parseCmdArg(cmd, '--ensemble_exclude')
+      .split(/[,;]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  }
+  const finetune = Boolean(task.finetuneEnsemble) || /\b--finetune_ensemble\b/i.test(cmd)
+  const wd = task.weightDecay != null && task.weightDecay !== '' ? task.weightDecay : parseCmdArg(cmd, '--reg')
+  const k = task.kFolds != null ? task.kFolds : parseCmdArg(cmd, '--k')
+  const me = task.maxEpochs != null ? task.maxEpochs : parseCmdArg(cmd, '--max_epochs')
+  const lr = task.learningRate != null ? task.learningRate : parseCmdArg(cmd, '--lr')
+  const seed = task.seed != null ? task.seed : parseCmdArg(cmd, '--seed')
+  const mode = task.mode || parseCmdArg(cmd, '--mode')
+  const ckptDir = (task.ensembleCkptDir || '').trim() || parseCmdArg(cmd, '--ensemble_ckpt_dir') || ''
+
+  return {
+    cancer: task.cancer ?? '—',
+    mode: mode || '—',
+    model,
+    maxEpochs: me ?? '—',
+    learningRate: lr ?? '—',
+    kFolds: k ?? '—',
+    weightDecay: wd !== '' && wd != null ? wd : '—',
+    seed: seed ?? '—',
+    earlyStopping: early,
+    batchSize: task.batchSize,
+    repeatTotal: task.repeatTotal ?? task.repeat,
+    ensembleFusion: fusion,
+    finetuneEnsemble: finetune,
+    ensembleExclude: exclude,
+    ensembleCkptDir: ckptDir,
+  }
+}
+
 const trainingTaskCanStop = (t) => {
   const s = String(t?.status || '').toLowerCase()
   return s === 'running' || s === 'queued'
@@ -625,18 +684,6 @@ export default function Dashboard() {
                       {Number(selectedTask.batchSize) > 0 ? selectedTask.batchSize : '—（MIL 未用 batch）'}
                     </Typography>
                   </Grid>
-                  {String(selectedTask.modelType || '') === 'EnsembleFeature' && (
-                    <Grid item xs={12}>
-                      <Typography variant="body2" color="text.secondary">
-                        EnsembleFeature（特征级集成）
-                      </Typography>
-                      <Typography variant="body1">
-                        基线权重：默认由后端根据 best_models / tasks 自动解析；若任务命令行中含 --ensemble_ckpt_dir
-                        则为手动目录覆盖。
-                        {selectedTask.finetuneEnsemble ? ' · 端到端微调' : ''}
-                      </Typography>
-                    </Grid>
-                  )}
                 </Grid>
 
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -645,6 +692,90 @@ export default function Dashboard() {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                   开始: {selectedTask.startedAt ?? '—'} {' | '} 结束: {selectedTask.endedAt ?? '—'}
                 </Typography>
+
+                {(() => {
+                  const cfg = buildTaskConfigSnapshot(selectedTask)
+                  if (!cfg) return null
+                  const fusionLabel =
+                    cfg.ensembleFusion === 'gate'
+                      ? '门控加权 (gate)'
+                      : cfg.ensembleFusion === 'concat'
+                        ? '对齐后拼接 (concat)'
+                        : cfg.ensembleFusion || '—'
+                  const kv = (label, val) => (
+                    <Grid item xs={12} sm={6} md={4} key={label}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {label}
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {val}
+                      </Typography>
+                    </Grid>
+                  )
+                  return (
+                    <>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                        训练参数与消融（本次任务）
+                      </Typography>
+                      <Box
+                        sx={{
+                          mb: 2,
+                          p: 1.5,
+                          borderRadius: 1,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          bgcolor: (theme) => alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.12 : 0.06),
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                          以下由任务记录与启动命令综合得出；旧任务若缺少部分字段，会尽量从命令行反查。
+                        </Typography>
+                        <Grid container spacing={1.5}>
+                          {kv('癌种 (cancer)', cfg.cancer)}
+                          {kv('模式 (mode)', cfg.mode)}
+                          {kv('最大轮数 (maxEpochs)', cfg.maxEpochs)}
+                          {kv('学习率 (lr)', cfg.learningRate)}
+                          {kv('交叉验证折数 (k)', cfg.kFolds)}
+                          {kv('权重衰减 (reg)', cfg.weightDecay)}
+                          {kv('随机种子 (seed)', cfg.seed)}
+                          {kv('早停 (--early_stopping)', cfg.earlyStopping ? '开启' : '关闭')}
+                          {kv(
+                            'Batch size',
+                            Number(cfg.batchSize) > 0 ? String(cfg.batchSize) : '—（MIL 通常为 0）'
+                          )}
+                          {cfg.repeatTotal != null && Number(cfg.repeatTotal) > 1
+                            ? kv('重复训练轮次 (repeat)', String(cfg.repeatTotal))
+                            : null}
+                          {String(cfg.model) === 'EnsembleFeature' ? (
+                            <>
+                              <Grid item xs={12}>
+                                <Divider sx={{ my: 0.5 }} />
+                              </Grid>
+                              <Grid item xs={12}>
+                                <Typography variant="caption" color="primary" sx={{ fontWeight: 700 }}>
+                                  EnsembleFeature 消融选项
+                                </Typography>
+                              </Grid>
+                              {kv('融合方式', fusionLabel)}
+                              {kv(
+                                '冻结五基线（仅训对齐/门控/融合）',
+                                cfg.finetuneEnsemble ? '否（已开启端到端微调 finetune_ensemble）' : '是'
+                              )}
+                              {kv(
+                                '排除的基线特征 (ensembleExclude)',
+                                cfg.ensembleExclude.length > 0 ? cfg.ensembleExclude.join('、') : '无（五路均参与）'
+                              )}
+                              {kv(
+                                '手动基线权重目录',
+                                cfg.ensembleCkptDir ? <code style={{ wordBreak: 'break-all' }}>{cfg.ensembleCkptDir}</code> : '—（走 best_models / tasks 自动解析）'
+                              )}
+                            </>
+                          ) : null}
+                        </Grid>
+                      </Box>
+                    </>
+                  )
+                })()}
 
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>
                   启动命令
