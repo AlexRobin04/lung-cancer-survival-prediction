@@ -225,8 +225,10 @@ export const predictApi = {
     })
     return data
   },
-  async listPredictions(limit = 50) {
-    const { data } = await client.get('/predictions', { params: { limit } })
+  async listPredictions(limit = 50, { taskId } = {}) {
+    const params = { limit: Math.min(500, Math.max(1, Number(limit) || 50)) }
+    if (taskId) params.taskId = taskId
+    const { data } = await client.get('/predictions', { params })
     return data
   },
 }

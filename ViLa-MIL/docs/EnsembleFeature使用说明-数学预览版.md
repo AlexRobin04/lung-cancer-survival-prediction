@@ -3,8 +3,6 @@
 > **本文定位**：与 **[`EnsembleFeature使用说明.md`](./EnsembleFeature使用说明.md)** 内容一致，但第三节起**不用** `` ```latex ... ``` `` 代码块里的 `\begin{equation}`，而改用 **Markdown 原生数学环境**（`$...$` 行内、`$$...$$` 独立显示）。在 **Cursor / VS Code / GitHub** 等支持 MathJax 的预览中，公式会**渲染为可读数学式**，而不是整段「人话解释公式」。
 >
 > **仍需要整段 `\begin{equation}` 复制到 Word / LaTeX 时**：请用 **原版** 文档第三节的代码块。
->
-> **姊妹篇**：[通俗版（无公式、口语对应编号）](./EnsembleFeature使用说明-通俗版.md)
 
 ---
 

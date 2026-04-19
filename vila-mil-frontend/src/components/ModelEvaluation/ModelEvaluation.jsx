@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
   Box,
@@ -10,6 +10,7 @@ import {
   CircularProgress,
   FormControl,
   FormControlLabel,
+  Divider,
   InputLabel,
   MenuItem,
   Select,
@@ -39,6 +40,11 @@ import {
   YAxis,
 } from 'recharts'
 import { evaluationApi, trainingApi } from '../../services/api'
+import {
+  buildTaskConfigSnapshot,
+  ensembleActiveBranches,
+  formatFusionModeLabel,
+} from '../../utils/trainingTaskConfigSnapshot'
 
 const sectionCardSx = (accent, { mb = 3, mt } = {}) => (theme) => ({
   mb,
@@ -182,6 +188,8 @@ export default function ModelEvaluation() {
   const [compareReloadNonce, setCompareReloadNonce] = useState(0)
   /** 「全部刷新」时触发「最佳」模式下的 best 与 taskId 逻辑重跑 */
   const [bestReloadNonce, setBestReloadNonce] = useState(0)
+  /** 当前曲线 taskId 对应的训练参数（与 Dashboard 任务详情同源） */
+  const [taskConfigSnapshot, setTaskConfigSnapshot] = useState(null)
 
   const pickBestCompletedRun = (list, cancer, modelType) => {
     const cands = (list || []).filter(
@@ -228,14 +236,6 @@ export default function ModelEvaluation() {
     setCompareReloadNonce((n) => n + 1)
   }
 
-  /** 任务列表 + 对比/总览 + 当前任务曲线 +（最佳模式下）best 信息 */
-  const refreshAll = async () => {
-    await loadRuns()
-    setCompareReloadNonce((n) => n + 1)
-    if (selectMode === 'best') setBestReloadNonce((n) => n + 1)
-    if (taskId) await loadCurves()
-  }
-
   const loadCurves = async () => {
     if (!taskId) return
     setError('')
@@ -245,6 +245,31 @@ export default function ModelEvaluation() {
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '加载曲线失败')
       setCurves(null)
+    }
+  }
+
+  const pullTaskConfigSnapshot = useCallback(async (id) => {
+    if (!id) {
+      setTaskConfigSnapshot(null)
+      return
+    }
+    try {
+      const data = await trainingApi.status(id)
+      const t = data?.task || data
+      setTaskConfigSnapshot(buildTaskConfigSnapshot(t))
+    } catch {
+      setTaskConfigSnapshot(null)
+    }
+  }, [])
+
+  /** 任务列表 + 对比/总览 + 当前任务曲线 +（最佳模式下）best 信息 */
+  const refreshAll = async () => {
+    await loadRuns()
+    setCompareReloadNonce((n) => n + 1)
+    if (selectMode === 'best') setBestReloadNonce((n) => n + 1)
+    if (taskId) {
+      await loadCurves()
+      await pullTaskConfigSnapshot(taskId)
     }
   }
 
@@ -276,6 +301,7 @@ export default function ModelEvaluation() {
 
   useEffect(() => {
     loadCurves()
+    pullTaskConfigSnapshot(taskId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId])
 
@@ -629,6 +655,103 @@ export default function ModelEvaluation() {
               </FormControl>
             )}
           </Box>
+
+          {taskId ? (
+            <Box
+              sx={(theme) => ({
+                mt: 2,
+                p: 2,
+                borderRadius: 1.5,
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.14 : 0.06),
+              })}
+            >
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+                当前曲线任务 · 训练参数与融合选项
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.25 }}>
+                taskId <code>{taskId}</code> · 数据来自 <code>/api/training/status</code>（与 Dashboard 任务详情一致）
+              </Typography>
+              {taskConfigSnapshot ? (
+                <Grid container spacing={1.25}>
+                  {[
+                    ['癌种', taskConfigSnapshot.cancer],
+                    ['模式', taskConfigSnapshot.mode],
+                    ['maxEpochs', taskConfigSnapshot.maxEpochs],
+                    ['learningRate', taskConfigSnapshot.learningRate],
+                    ['kFolds', taskConfigSnapshot.kFolds],
+                    ['weightDecay', taskConfigSnapshot.weightDecay],
+                    ['seed', taskConfigSnapshot.seed],
+                    ['earlyStopping', taskConfigSnapshot.earlyStopping ? 'true' : 'false'],
+                  ].map(([lab, val]) => (
+                    <Grid item xs={6} sm={4} md={3} key={lab}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        {lab}
+                      </Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {val ?? '—'}
+                      </Typography>
+                    </Grid>
+                  ))}
+                  {String(taskConfigSnapshot.model) === 'EnsembleFeature' ? (
+                    <>
+                      <Grid item xs={12}>
+                        <Divider sx={{ my: 0.75 }} />
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="caption" color="primary" sx={{ fontWeight: 700 }}>
+                          EnsembleFeature
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={4} md={3}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          融合方式
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {formatFusionModeLabel(taskConfigSnapshot.ensembleFusion)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6} sm={4} md={3}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          finetuneEnsemble
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 600, fontFamily: 'ui-monospace, Menlo, monospace' }}
+                        >
+                          {String(taskConfigSnapshot.finetuneEnsemble)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} sm={8} md={6}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          参与融合的基线
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {(taskConfigSnapshot.ensembleActiveBranches || ensembleActiveBranches(taskConfigSnapshot.ensembleExclude)).join('、')}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12} sm={8} md={6}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          ensembleExclude
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 600, fontFamily: 'ui-monospace, Menlo, monospace' }}
+                        >
+                          {JSON.stringify(taskConfigSnapshot.ensembleExclude || [])}
+                        </Typography>
+                      </Grid>
+                    </>
+                  ) : null}
+                </Grid>
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  未能加载该任务的训练记录（任务可能已删除或后端暂不可用）。
+                </Typography>
+              )}
+            </Box>
+          ) : null}
 
           {selectMode === 'best' && bestInfo?.bestTaskId && (
             <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>

@@ -33,6 +33,11 @@ import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
 import StopOutlinedIcon from '@mui/icons-material/StopOutlined'
 import { healthApi, trainingApi, evaluationApi, predictApi, dataApi, clinicalApi } from '../../services/api'
 import { sanitizeTrainingLogContent } from '../../utils/trainingLogSanitize'
+import {
+  buildTaskConfigSnapshot,
+  ensembleActiveBranches,
+  formatFusionModeLabel,
+} from '../../utils/trainingTaskConfigSnapshot'
 
 const nowSec = () => Date.now() / 1000
 const parseToSec = (t) => {
@@ -46,65 +51,6 @@ const parseToSec = (t) => {
 const fmtPct = (v) => {
   const n = Number(v)
   return Number.isFinite(n) ? `${n.toFixed(2)}%` : '—'
-}
-
-/** 从启动命令中解析 `--flag` 后的第一个 token */
-const parseCmdArg = (cmd, flag) => {
-  const esc = flag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const m = String(cmd || '').match(new RegExp(`${esc}\\s+(\\S+)`, 'i'))
-  return m ? m[1].trim() : ''
-}
-
-/**
- * 合并 tasks.json 字段与 command 字符串，供任务详情展示「本次参数 / 消融」。
- */
-const buildTaskConfigSnapshot = (task) => {
-  if (!task) return null
-  const cmd = String(task.command || '')
-  const model = String(task.modelType || '')
-  const early =
-    typeof task.earlyStopping === 'boolean'
-      ? task.earlyStopping
-      : /\b--early_stopping\b/i.test(cmd)
-  const fusionRaw = task.ensembleFusion || parseCmdArg(cmd, '--ensemble_fusion')
-  const fusion = fusionRaw ? String(fusionRaw).toLowerCase() : model === 'EnsembleFeature' ? 'gate' : ''
-  let exclude = []
-  if (Array.isArray(task.ensembleExclude)) exclude = [...task.ensembleExclude]
-  else if (task.ensembleExclude && typeof task.ensembleExclude === 'string') {
-    exclude = task.ensembleExclude.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
-  }
-  if (exclude.length === 0 && /--ensemble_exclude\b/i.test(cmd)) {
-    exclude = parseCmdArg(cmd, '--ensemble_exclude')
-      .split(/[,;]/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-  }
-  const finetune = Boolean(task.finetuneEnsemble) || /\b--finetune_ensemble\b/i.test(cmd)
-  const wd = task.weightDecay != null && task.weightDecay !== '' ? task.weightDecay : parseCmdArg(cmd, '--reg')
-  const k = task.kFolds != null ? task.kFolds : parseCmdArg(cmd, '--k')
-  const me = task.maxEpochs != null ? task.maxEpochs : parseCmdArg(cmd, '--max_epochs')
-  const lr = task.learningRate != null ? task.learningRate : parseCmdArg(cmd, '--lr')
-  const seed = task.seed != null ? task.seed : parseCmdArg(cmd, '--seed')
-  const mode = task.mode || parseCmdArg(cmd, '--mode')
-  const ckptDir = (task.ensembleCkptDir || '').trim() || parseCmdArg(cmd, '--ensemble_ckpt_dir') || ''
-
-  return {
-    cancer: task.cancer ?? '—',
-    mode: mode || '—',
-    model,
-    maxEpochs: me ?? '—',
-    learningRate: lr ?? '—',
-    kFolds: k ?? '—',
-    weightDecay: wd !== '' && wd != null ? wd : '—',
-    seed: seed ?? '—',
-    earlyStopping: early,
-    batchSize: task.batchSize,
-    repeatTotal: task.repeatTotal ?? task.repeat,
-    ensembleFusion: fusion,
-    finetuneEnsemble: finetune,
-    ensembleExclude: exclude,
-    ensembleCkptDir: ckptDir,
-  }
 }
 
 const trainingTaskCanStop = (t) => {
@@ -170,6 +116,8 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState([])
   const [runs, setRuns] = useState([])
   const [preds, setPreds] = useState([])
+  /** 与 /predictions 同源：历史预测 + Clinical 随访的队列 C-index */
+  const [cohortCIndexAll, setCohortCIndexAll] = useState(null)
   const [datasets, setDatasets] = useState(null)
   const [cases, setCases] = useState([])
   const [selectedTaskId, setSelectedTaskId] = useState('')
@@ -199,6 +147,7 @@ export default function Dashboard() {
       setTasks(th?.tasks || th?.data?.tasks || [])
       setRuns(r?.runs || [])
       setPreds(p?.items || [])
+      setCohortCIndexAll(p?.cohortCIndex ?? null)
       setDatasets(d)
       setCases(c?.cases || [])
     } catch (e) {
@@ -220,7 +169,8 @@ export default function Dashboard() {
     })
   }, [tasks, timeRangeMin])
 
-  const recentTasks = useMemo(() => filteredTasks.slice(0, 15), [filteredTasks])
+  /** 与「时间范围」一致：不再硬截断 15 条，由外层滚动容器承载长列表 */
+  const trainingTasksForList = useMemo(() => filteredTasks, [filteredTasks])
   const completedRuns = useMemo(() => (runs || []).filter((x) => x?.hasMetrics).slice(0, 15), [runs])
   const selectedRunMeta = useMemo(
     () => (runs || []).find((r) => r.taskId === selectedRunId) || null,
@@ -422,6 +372,25 @@ export default function Dashboard() {
             <Typography variant="body2" color="text.secondary">
               最近三条
             </Typography>
+            {cohortCIndexAll ? (
+              <Box sx={{ mt: 0.75, mb: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.5 }}>
+                  队列 C-index（全部预测合并）：
+                  {cohortCIndexAll.cIndex != null
+                    ? Number(cohortCIndexAll.cIndex).toFixed(4)
+                    : cohortCIndexAll.cIndexSuppressedZh
+                      ? '—'
+                      : '—（可比样本不足）'}
+                  ，可用病例 n={cohortCIndexAll.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
+                  {cohortCIndexAll.comparablePairs ?? '—'}
+                </Typography>
+                {cohortCIndexAll.cIndexSuppressedZh ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.45 }}>
+                    {cohortCIndexAll.cIndexSuppressedZh}
+                  </Typography>
+                ) : null}
+              </Box>
+            ) : null}
             {(preds || []).slice(0, 3).map((it) => (
               <Box
                 key={it.id}
@@ -450,7 +419,7 @@ export default function Dashboard() {
             accent="#00897b"
             icon={<ModelTrainingOutlinedIcon fontSize="small" />}
             title="Recent Training Tasks"
-            subheader="点击左侧行查看详情；运行中或排队任务右侧有「停止」按钮（自动刷新）"
+            subheader="点击行查看详情；可停止运行中/排队任务。列表区域内滚动查看全部匹配（「全部」不再只显示 15 条）。"
             action={
               <FormControl size="small" sx={{ minWidth: 180 }}>
                 <InputLabel id="range-label">时间范围</InputLabel>
@@ -469,21 +438,28 @@ export default function Dashboard() {
               </FormControl>
             }
           >
-            {recentTasks.length === 0 ? (
+            {trainingTasksForList.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
                 当前时间范围内暂无任务
               </Typography>
             ) : (
-              <Box
-                sx={{
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  bgcolor: 'background.paper',
-                  overflow: 'visible',
-                }}
-              >
-                {recentTasks.map((t) => (
+              <>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                  共 {trainingTasksForList.length} 条（区域内上下滚动）
+                </Typography>
+                <Box
+                  sx={{
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'background.paper',
+                    maxHeight: { xs: 'min(55vh, 420px)', sm: 'min(58vh, 480px)', md: 'min(62vh, 520px)' },
+                    overflowY: 'auto',
+                    overflowX: 'hidden',
+                    scrollbarGutter: 'stable',
+                  }}
+                >
+                  {trainingTasksForList.map((t) => (
                   <Box
                     key={t.taskId}
                     sx={{
@@ -560,7 +536,8 @@ export default function Dashboard() {
                     ) : null}
                   </Box>
                 ))}
-              </Box>
+                </Box>
+              </>
             )}
           </DashboardPanel>
         </Grid>
@@ -696,12 +673,7 @@ export default function Dashboard() {
                 {(() => {
                   const cfg = buildTaskConfigSnapshot(selectedTask)
                   if (!cfg) return null
-                  const fusionLabel =
-                    cfg.ensembleFusion === 'gate'
-                      ? '门控加权 (gate)'
-                      : cfg.ensembleFusion === 'concat'
-                        ? '对齐后拼接 (concat)'
-                        : cfg.ensembleFusion || '—'
+                  const fusionLabel = formatFusionModeLabel(cfg.ensembleFusion)
                   const kv = (label, val) => (
                     <Grid item xs={12} sm={6} md={4} key={label}>
                       <Typography variant="caption" color="text.secondary" display="block">
@@ -758,13 +730,42 @@ export default function Dashboard() {
                               </Grid>
                               {kv('融合方式', fusionLabel)}
                               {kv(
-                                '冻结五基线（仅训对齐/门控/融合）',
-                                cfg.finetuneEnsemble ? '否（已开启端到端微调 finetune_ensemble）' : '是'
+                                'finetuneEnsemble',
+                                <Box component="span" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>
+                                  {String(cfg.finetuneEnsemble)}
+                                </Box>
                               )}
-                              {kv(
-                                '排除的基线特征 (ensembleExclude)',
-                                cfg.ensembleExclude.length > 0 ? cfg.ensembleExclude.join('、') : '无（五路均参与）'
-                              )}
+                              {(() => {
+                                const ex = cfg.ensembleExclude || []
+                                const active = cfg.ensembleActiveBranches || ensembleActiveBranches(ex)
+                                const json = JSON.stringify(ex)
+                                const cmdEx = cfg.ensembleExcludeFromCmd
+                                const mismatch =
+                                  cmdEx != null &&
+                                  JSON.stringify([...ex].sort()) !== JSON.stringify([...cmdEx].sort())
+                                const activeLine = active.length > 0 ? active.join('、') : '—'
+                                return (
+                                  <Grid item xs={12} md={8} key="ensembleBranches">
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                      参与融合的基线（与训练页勾选「包含」一致，由 ensembleExclude 反推）
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.25 }}>
+                                      {activeLine}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                                      ensembleExclude（置零 / 未勾选的分支，API 与命令行）
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>
+                                      {json}
+                                    </Typography>
+                                    {mismatch ? (
+                                      <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
+                                        与 command 中 --ensemble_exclude 解析结果不一致：{JSON.stringify(cmdEx)}；以启动命令为准。
+                                      </Typography>
+                                    ) : null}
+                                  </Grid>
+                                )
+                              })()}
                               {kv(
                                 '手动基线权重目录',
                                 cfg.ensembleCkptDir ? <code style={{ wordBreak: 'break-all' }}>{cfg.ensembleCkptDir}</code> : '—（走 best_models / tasks 自动解析）'

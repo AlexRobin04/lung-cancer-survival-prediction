@@ -6,12 +6,20 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Chip,
   CircularProgress,
   FormControl,
   InputLabel,
   LinearProgress,
   MenuItem,
+  Paper,
   Select,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -54,6 +62,19 @@ const getBarColorByName = (name) => {
   return '#1976d2'
 }
 
+const shortTaskId = (id) => {
+  const s = String(id || '')
+  if (s.length <= 16) return s
+  return `${s.slice(0, 8)}…${s.slice(-4)}`
+}
+
+const cohortQueueCIndexText = (row) => {
+  if (!row) return '—'
+  if (row.cIndex != null) return Number(row.cIndex).toFixed(4)
+  if (row.cIndexSuppressedZh) return '—'
+  return '—'
+}
+
 export default function Prediction() {
   const [cases, setCases] = useState([])
   const [tasks, setTasks] = useState([])
@@ -72,6 +93,20 @@ export default function Prediction() {
   const [result, setResult] = useState(null)
   const [notice, setNotice] = useState('')
   const [caseFeatureMeta, setCaseFeatureMeta] = useState(null)
+  /** 基于 predictions + Clinical 随访的队列生存 C-index（后端计算） */
+  const [cohortCIndexAll, setCohortCIndexAll] = useState(null)
+  const [cohortCIndexByTask, setCohortCIndexByTask] = useState([])
+
+  const loadCohortCIndex = async () => {
+    try {
+      const data = await predictApi.listPredictions(250, {})
+      setCohortCIndexAll(data?.cohortCIndex ?? null)
+      setCohortCIndexByTask(Array.isArray(data?.cohortCIndexByTask) ? data.cohortCIndexByTask : [])
+    } catch {
+      setCohortCIndexAll(null)
+      setCohortCIndexByTask([])
+    }
+  }
 
   const load = async () => {
     setError('')
@@ -256,6 +291,53 @@ export default function Prediction() {
     return x.map((name, i) => ({ name, p: y[i] ?? 0, fill: getBarColorByName(name) }))
   }, [result])
 
+  /** 去掉算不出 C-index 的任务；同一模型类型多任务时保留队列 C-index 最高的一条 */
+  const cohortCindexRowsByModel = useMemo(() => {
+    const rows = cohortCIndexByTask || []
+    const valid = rows.filter((r) => r.cIndex != null && Number.isFinite(Number(r.cIndex)))
+    const byModel = new Map()
+    for (const r of valid) {
+      const key = String(r.modelType || '—').trim() || '—'
+      const prev = byModel.get(key)
+      if (!prev) {
+        byModel.set(key, r)
+        continue
+      }
+      const nv = Number(r.cIndex)
+      const pv = Number(prev.cIndex)
+      if (nv > pv) {
+        byModel.set(key, r)
+      } else if (nv === pv) {
+        const rPairs = Number(r.comparablePairs) || 0
+        const pPairs = Number(prev.comparablePairs) || 0
+        if (rPairs > pPairs) byModel.set(key, r)
+        else if (rPairs === pPairs) {
+          const rn = Number(r.nUsableCasesJoinedClinical) || 0
+          const pn = Number(prev.nUsableCasesJoinedClinical) || 0
+          if (rn > pn) byModel.set(key, r)
+        }
+      }
+    }
+    return Array.from(byModel.values()).sort((a, b) =>
+      String(a.modelType || '').localeCompare(String(b.modelType || ''))
+    )
+  }, [cohortCIndexByTask])
+
+  const cohortCindexBestAmongDisplay = useMemo(() => {
+    const rows = cohortCindexRowsByModel
+    if (!rows.length) return null
+    return rows.reduce((best, r) => {
+      if (!best) return r
+      const nv = Number(r.cIndex)
+      const bv = Number(best.cIndex)
+      if (nv > bv) return r
+      if (nv < bv) return best
+      const rp = Number(r.comparablePairs) || 0
+      const bp = Number(best.comparablePairs) || 0
+      return rp > bp ? r : best
+    }, null)
+  }, [cohortCindexRowsByModel])
+
   const effectiveTaskId = useMemo(() => {
     if (taskPickMode === 'best') {
       const bestId = String(bestTaskMeta?.bestTaskId || '')
@@ -266,6 +348,11 @@ export default function Prediction() {
     }
     return taskId
   }, [taskPickMode, bestTaskMeta, taskId, inputMode, caseFeatureMeta, compatibleTaskIdSet])
+
+  useEffect(() => {
+    loadCohortCIndex()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks])
 
   useEffect(() => {
     if (!taskId) return
@@ -297,6 +384,7 @@ export default function Prediction() {
       setResult(res)
       setNotice('预测完成')
       setPredictProgress(100)
+      await loadCohortCIndex()
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '预测失败')
     } finally {
@@ -328,6 +416,118 @@ export default function Prediction() {
           选择训练任务后，按病例推理（使用 Clinical 中该病例已绑定的 20×/10× 特征）。
         </Typography>
       </Box>
+
+      {(cohortCIndexAll || (cohortCIndexByTask && cohortCIndexByTask.length > 0)) && (
+        <Card sx={{ mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+          <CardHeader title="历史预测队列 · 生存 C-index（按模型）" />
+          <CardContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              <strong>怎么用：</strong>在 Clinical 填写随访 <code>time</code> / <code>status</code>，用各模型任务对多病例做{' '}
+              <strong>Predict</strong> 写入历史。下表<strong>每个模型类型一行</strong>：只保留已能算出队列 C-index 的任务；若同模型有多个训练任务，取
+              <strong>C-index 最高</strong>的那条并展示其 taskId。
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
+              注意：这与训练日志里的<strong>验证集 C-index</strong>不同；此处为「历史 riskScore + 随访」的队列一致性。
+            </Typography>
+            {cohortCIndexAll ? (
+              <Box sx={{ mb: 2, p: 1.5, borderRadius: 1, bgcolor: (theme) => alpha(theme.palette.info.main, 0.06), border: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  全部任务合并（不区分 taskId）
+                </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                  C-index:{' '}
+                  <strong>
+                    {cohortCIndexAll.cIndex != null
+                      ? Number(cohortCIndexAll.cIndex).toFixed(4)
+                      : cohortCIndexAll.cIndexSuppressedZh
+                        ? '—'
+                        : '—（可比样本不足）'}
+                  </strong>
+                  {' · '}
+                  可用病例 n={cohortCIndexAll.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
+                  {cohortCIndexAll.comparablePairs ?? '—'}
+                </Typography>
+                {cohortCIndexAll.cIndexSuppressedZh ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                    {cohortCIndexAll.cIndexSuppressedZh}
+                  </Typography>
+                ) : null}
+              </Box>
+            ) : null}
+
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+              各模型队列 C-index
+            </Typography>
+            {cohortCIndexByTask.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                暂无带 <code>taskId</code> 的预测记录。请先在下方选择任务并完成至少一次 Predict；表格会在刷新页面或预测成功后自动更新。
+              </Typography>
+            ) : cohortCindexRowsByModel.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                暂无各模型可计算的队列 C-index（多为随访不足或可比患者对为 0）。请补充 Clinical 的 <code>time</code>/<code>status</code> 并增加预测后再看。
+              </Typography>
+            ) : (
+              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 380 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>模型类型</TableCell>
+                      <TableCell>代表任务 taskId</TableCell>
+                      <TableCell align="right">队列 C-index</TableCell>
+                      <TableCell align="right">可用病例 n</TableCell>
+                      <TableCell align="right">可比患者对</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {cohortCindexRowsByModel.map((row) => {
+                      const sel = Boolean(effectiveTaskId && String(row.taskId) === String(effectiveTaskId))
+                      const isBest =
+                        cohortCindexBestAmongDisplay &&
+                        String(row.taskId) === String(cohortCindexBestAmongDisplay.taskId) &&
+                        String(row.modelType) === String(cohortCindexBestAmongDisplay.modelType)
+                      return (
+                        <TableRow
+                          key={`${row.modelType}-${row.taskId}`}
+                          hover
+                          selected={sel}
+                          sx={
+                            sel
+                              ? (theme) => ({
+                                  bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.22 : 0.1),
+                                })
+                              : undefined
+                          }
+                        >
+                          <TableCell sx={{ fontWeight: 600 }}>{row.modelType ?? '—'}</TableCell>
+                          <TableCell title={row.taskId}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                              <Typography component="span" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                                {shortTaskId(row.taskId)}
+                              </Typography>
+                              {isBest ? <Chip size="small" color="success" label="全局最高" /> : null}
+                              {sel ? <Chip size="small" color="primary" label="当前选中" /> : null}
+                            </Box>
+                            {row.taskLabel ? (
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {row.taskLabel}
+                              </Typography>
+                            ) : null}
+                          </TableCell>
+                          <TableCell align="right">
+                            <strong>{Number(row.cIndex).toFixed(4)}</strong>
+                          </TableCell>
+                          <TableCell align="right">{row.nUsableCasesJoinedClinical ?? '—'}</TableCell>
+                          <TableCell align="right">{row.comparablePairs ?? '—'}</TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>

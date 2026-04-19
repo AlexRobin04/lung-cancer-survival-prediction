@@ -683,6 +683,19 @@ def _discover_checkpoints(results_dir: str) -> list[str]:
     return sorted(out)
 
 
+def _resolve_task_results_dir(task: dict[str, Any]) -> str:
+    """兼容任务里记录的 Docker 路径 /app/result/...：在本机开发时回退到仓库 result/api_runs/<taskId>。"""
+    rd = str((task or {}).get("resultsDir") or "").strip()
+    tid = str((task or {}).get("taskId") or (task or {}).get("id") or "").strip()
+    if rd and os.path.isdir(rd):
+        return rd
+    if tid:
+        alt = os.path.join(RESULT_API_RUNS, tid)
+        if os.path.isdir(alt):
+            return alt
+    return rd
+
+
 def _build_vila_config(task: dict[str, Any]) -> Any:
     import ml_collections
     import numpy as np
@@ -870,6 +883,160 @@ def _append_prediction_history(record: dict[str, Any]) -> str:
     return rid
 
 
+def _latest_prediction_per_case(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """同一 caseId 多条记录时取 createdAt 最新一条（ISO 字符串可字典序比较）。"""
+    by_case: dict[str, dict[str, Any]] = {}
+    for it in items:
+        cid = str(it.get("caseId") or "").strip()
+        if not cid or cid.startswith("files:") or cid.startswith("raster:"):
+            continue
+        prev = by_case.get(cid)
+        cur_ts = str(it.get("createdAt") or "")
+        if not prev or cur_ts >= str(prev.get("createdAt") or ""):
+            by_case[cid] = it
+    return by_case
+
+
+def _survival_concordance_index_simple(
+    times: list[float], events: list[int], scores: list[float]
+) -> tuple[float | None, int]:
+    """
+    简化版生存 C-index：对可比患者对 (i,j)，若较早时间点发生事件，则比较预测风险是否更高。
+    scores 越大表示模型预测风险越高；与 lifelines 的 IPCW 全量实现不同，适合队列演示。
+    """
+    n = len(times)
+    if n < 2:
+        return None, 0
+    conc = disc = ties = 0
+    comparable = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            ti, tj = times[i], times[j]
+            ei, ej = events[i], events[j]
+            si, sj = scores[i], scores[j]
+            if ti < tj and ei == 1:
+                comparable += 1
+                if si > sj:
+                    conc += 1
+                elif si < sj:
+                    disc += 1
+                else:
+                    ties += 1
+            elif tj < ti and ej == 1:
+                comparable += 1
+                if sj > si:
+                    conc += 1
+                elif sj < si:
+                    disc += 1
+                else:
+                    ties += 1
+    if comparable == 0:
+        return None, 0
+    return (conc + 0.5 * ties) / comparable, comparable
+
+
+def _cohort_prediction_cindex(all_items: list[dict[str, Any]], *, task_id: str | None) -> dict[str, Any]:
+    """用已保存的预测记录 + Clinical 随访 time/status 估计队列 C-index。"""
+    items = list(all_items or [])
+    if task_id:
+        tid = str(task_id).strip()
+        items = [x for x in items if str(x.get("taskId") or "") == tid]
+    latest = _latest_prediction_per_case(items)
+    cases_blob = _load_cases().get("cases", {})
+    times: list[float] = []
+    events: list[int] = []
+    scores: list[float] = []
+    case_ids_used: list[str] = []
+    skipped: list[dict[str, str]] = []
+    for cid, rec in latest.items():
+        c = cases_blob.get(cid)
+        if not c:
+            skipped.append({"caseId": cid, "reason": "Clinical 无该病例"})
+            continue
+        try:
+            t = float(c.get("time", 0))
+            ev = int(c.get("status", 0))
+        except (TypeError, ValueError):
+            skipped.append({"caseId": cid, "reason": "time/status 非数值"})
+            continue
+        if t <= 0:
+            skipped.append({"caseId": cid, "reason": "time<=0"})
+            continue
+        if ev not in (0, 1):
+            skipped.append({"caseId": cid, "reason": "status 非 0/1"})
+            continue
+        try:
+            s = float(rec.get("riskScore"))
+        except (TypeError, ValueError):
+            skipped.append({"caseId": cid, "reason": "riskScore 缺失"})
+            continue
+        times.append(t)
+        events.append(ev)
+        scores.append(s)
+        case_ids_used.append(cid)
+
+    n = len(times)
+    ci, pairs = _survival_concordance_index_simple(times, events, scores)
+    note = (
+        "合并 predictions.json 中的历史预测：每个 caseId 取最新一条的 riskScore，与 Clinical 中 time（随访/生存时间）"
+        "及 status（1=事件 0=删失）配对；在「较早发生事件」的可比患者对上，检验预测风险排序是否与预后一致。"
+        " 若删失过多或尚未录入随访，C-index 可能无法计算。"
+    )
+    return {
+        "taskIdFilter": str(task_id).strip() if task_id else None,
+        "nPredictionRecordsScanned": len(items),
+        "nDistinctCasesWithPrediction": len(latest),
+        "nUsableCasesJoinedClinical": n,
+        "comparablePairs": pairs,
+        "cIndex": ci,
+        "caseIdsUsed": case_ids_used[:80],
+        "skippedSample": skipped[:30],
+        "noteZh": note,
+    }
+
+
+def _cohort_prediction_cindex_table_by_task(all_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """按 taskId 分列：每个曾写入预测的训练任务一行队列 C-index（规则同 _cohort_prediction_cindex）。"""
+    items = list(all_items or [])
+    tids: set[str] = set()
+    model_from_pred: dict[str, str] = {}
+    for x in items:
+        tid = str(x.get("taskId") or "").strip()
+        if not tid:
+            continue
+        tids.add(tid)
+        if tid not in model_from_pred:
+            mt = str(x.get("modelType") or x.get("model_type") or "").strip()
+            if mt:
+                model_from_pred[tid] = mt
+    tasks_by_id: dict[str, dict[str, Any]] = {}
+    for t in _load_tasks().get("tasks", []) or []:
+        tid = str(t.get("taskId") or t.get("id") or "").strip()
+        if tid:
+            tasks_by_id[tid] = t
+    rows: list[dict[str, Any]] = []
+    for tid in sorted(tids):
+        tmeta = tasks_by_id.get(tid) or {}
+        full = _cohort_prediction_cindex(all_items, task_id=tid)
+        mt = str(tmeta.get("modelType") or tmeta.get("model_type") or model_from_pred.get(tid) or "").strip() or "—"
+        rows.append(
+            {
+                "taskId": tid,
+                "modelType": mt,
+                "cancer": tmeta.get("cancer"),
+                "taskLabel": (str(tmeta.get("name") or "").strip() or None),
+                "cIndex": full.get("cIndex"),
+                "nUsableCasesJoinedClinical": full.get("nUsableCasesJoinedClinical"),
+                "comparablePairs": full.get("comparablePairs"),
+                "cIndexSuppressedZh": full.get("cIndexSuppressedZh"),
+                "nDistinctCasesWithPrediction": full.get("nDistinctCasesWithPrediction"),
+                "nPredictionRecordsScanned": full.get("nPredictionRecordsScanned"),
+            }
+        )
+    rows.sort(key=lambda r: (str(r.get("modelType") or ""), str(r.get("taskId") or "")))
+    return rows
+
+
 RASTER_PREDICT_DISCLAIMER_ZH = (
     "本路径由上传的 PNG/JPEG 等位图经 ImageNet ResNet50 截取 512 维特征并生成双尺度 H5，"
     "与常规流程中基于切片编码器（如 CONCH）的 TCGA 特征分布可能不一致，输出仅供流程/演示，不作为临床依据。"
@@ -910,8 +1077,9 @@ def _execute_predict_pipeline(
     extra: dict[str, Any] = {}
     probs: list[float] = []
 
+    results_dir = _resolve_task_results_dir(t)
     if model_type == "EnsembleFeature":
-        ckpts_ef = _discover_checkpoints(str(t.get("resultsDir") or ""))
+        ckpts_ef = _discover_checkpoints(results_dir)
         if not ckpts_ef:
             return ({"message": "未找到 checkpoint（期望 resultsDir 下存在 s_<fold>_checkpoint.pt）"}, 400)
         feat_dim = int(x_s.size(-1))
@@ -942,7 +1110,7 @@ def _execute_predict_pipeline(
         probs = (probs_t / max(1, len(used))).squeeze(0).tolist() if probs_t is not None else []
         extra["ensembleFeature"] = {"enabled": True, "featDim": feat_dim}
     else:
-        ckpts = _discover_checkpoints(t.get("resultsDir"))
+        ckpts = _discover_checkpoints(results_dir)
         if not ckpts:
             return ({"message": "未找到 checkpoint（期望 resultsDir 下存在 s_<fold>_checkpoint.pt）"}, 400)
         probs_t = None
@@ -1279,8 +1447,8 @@ def create_app() -> Flask:
                 task["ensembleCkptDir"] = ensemble_ckpt_dir
             task["finetuneEnsemble"] = bool(finetune_ensemble)
             task["ensembleFusion"] = str(ensemble_fusion or "gate").strip().lower()
-            if excl:
-                task["ensembleExclude"] = excl
+            # 始终写入列表（可为空），避免 _update_task 合并时沿用排队记录里旧的 ensembleExclude
+            task["ensembleExclude"] = list(excl)
         if batch_id:
             task["batchId"] = batch_id
         if run_index is not None:
@@ -1866,8 +2034,7 @@ def create_app() -> Flask:
                         queued_task["ensembleCkptDir"] = ensemble_ckpt_dir
                     queued_task["finetuneEnsemble"] = bool(finetune_ensemble)
                     queued_task["ensembleFusion"] = ensemble_fusion
-                    if ensemble_exclude:
-                        queued_task["ensembleExclude"] = list(ensemble_exclude)
+                    queued_task["ensembleExclude"] = list(ensemble_exclude or [])
                 _append_task(queued_task)
                 return jsonify({"ok": True, "queued": True, "taskId": task_id, "repeat": repeat, "runningTaskIds": running_ids})
             return (
@@ -2065,7 +2232,7 @@ def create_app() -> Flask:
         # Convert timestamps for all tasks to UTC+8 for UI display
         tasks = []
         for t in data["tasks"]:
-            ckpts = _discover_checkpoints(str(t.get("resultsDir") or ""))
+            ckpts = _discover_checkpoints(_resolve_task_results_dir(t))
             tasks.append(
                 {
                     **t,
@@ -3257,9 +3424,18 @@ def create_app() -> Flask:
     @app.get("/api/predictions")
     def predictions_list():
         lim = min(500, max(1, int(request.args.get("limit") or 50)))
+        task_id_q = (request.args.get("taskId") or request.args.get("task_id") or "").strip() or None
         data = _read_json(PREDICTIONS_PATH, {"items": []})
-        items = (data.get("items") or [])[:lim]
-        return jsonify({"items": items})
+        all_items = data.get("items") or []
+        items = all_items[:lim]
+        out: dict[str, Any] = {
+            "items": items,
+            "cohortCIndex": _cohort_prediction_cindex(all_items, task_id=None),
+            "cohortCIndexByTask": _cohort_prediction_cindex_table_by_task(all_items),
+        }
+        if task_id_q:
+            out["cohortCIndexForTask"] = _cohort_prediction_cindex(all_items, task_id=task_id_q)
+        return jsonify(out)
 
     @app.post("/api/predict")
     def predict_single():

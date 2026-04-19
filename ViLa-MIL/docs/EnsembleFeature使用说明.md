@@ -1,8 +1,6 @@
 # 特征级多模型集成 MIL 框架（EnsembleFeatureMIL）
 
-> **姊妹篇**  
-> - **[`EnsembleFeature使用说明-数学预览版.md`](./EnsembleFeature使用说明-数学预览版.md)**：公式用 `$` / `$$` 写成，在 Cursor / GitHub 等预览里**按数学式渲染**（不是口语替公式）。  
-> - **[`EnsembleFeature使用说明-通俗版.md`](./EnsembleFeature使用说明-通俗版.md)**：无 LaTeX、用日常语言对应编号；若你要的是「数学式」而非「人话」，请优先打开上一篇。  
+> **姊妹篇**：[**`EnsembleFeature使用说明-数学预览版.md`**](./EnsembleFeature使用说明-数学预览版.md) — 公式用 `$` / `$$` 写成，在 Cursor / GitHub 等预览里按数学式渲染。  
 > **本文件**仍保留 `\begin{equation}` 代码块，便于复制到 Word / LaTeX 论文。
 
 > **使用说明**：本文档中所有公式均已采用标准 LaTeX 语法，可直接复制粘贴至以下环境：
