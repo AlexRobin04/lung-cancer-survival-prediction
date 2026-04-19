@@ -29,6 +29,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import { modelApi, trainingApi } from '../../services/api'
 import useCancerOptions from '../../hooks/useCancerOptions'
 import { CANCER_CN_MAP } from '../../constants/trainingOptions'
+import { sanitizeTrainingLogContent } from '../../utils/trainingLogSanitize'
 import Toast from '../common/Toast.jsx'
 
 const sectionCardSx = (accent, { mb = 3 } = {}) => (theme) => ({
@@ -76,6 +77,7 @@ export default function Training() {
   const [historyDlgOpen, setHistoryDlgOpen] = useState(false)
   const [selectedDeleteIds, setSelectedDeleteIds] = useState([])
   const [deleteArtifacts, setDeleteArtifacts] = useState(true)
+  const [historyStopping, setHistoryStopping] = useState(false)
 
   const loadModels = async () => {
     try {
@@ -160,7 +162,7 @@ export default function Training() {
         const s = await trainingApi.status(selectedTaskId)
         setTask(s?.task || s)
         const lg = await trainingApi.log(selectedTaskId, 200)
-        setLogText(lg?.content || '')
+        setLogText(sanitizeTrainingLogContent(lg?.content || ''))
       } catch (e) {
         setError(e?.response?.data?.message || e.message || '加载任务失败')
       }
@@ -176,18 +178,20 @@ export default function Training() {
         const s = await trainingApi.status(task.taskId)
         if (!stopped) setTask(s?.task || s)
         const lg = await trainingApi.log(task.taskId, 200)
-        if (!stopped) setLogText(lg?.content || '')
+        if (!stopped) setLogText(sanitizeTrainingLogContent(lg?.content || ''))
       } catch {
         // ignore
       }
     }
     tick()
-    const tmr = setInterval(tick, 5000)
+    const running = String(task?.status || '').toLowerCase() === 'running'
+    const ms = running ? 2000 : 4000
+    const tmr = setInterval(tick, ms)
     return () => {
       stopped = true
       clearInterval(tmr)
     }
-  }, [task?.taskId])
+  }, [task?.taskId, task?.status])
 
   const start = async () => {
     setLoading(true)
@@ -241,6 +245,33 @@ export default function Training() {
       setError(e?.response?.data?.message || e.message || '停止失败')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const canStopSelectedHistory = useMemo(() => {
+    const id = String(selectedTaskId || '').trim()
+    if (!id || String(task?.taskId || '') !== id) return false
+    const s = String(task?.status || '').toLowerCase()
+    return s === 'running' || s === 'queued'
+  }, [selectedTaskId, task])
+
+  const stopSelectedFromHistory = async () => {
+    if (!canStopSelectedHistory || !selectedTaskId) return
+    setHistoryStopping(true)
+    setError('')
+    setNotice('')
+    try {
+      await trainingApi.stop(selectedTaskId)
+      setNotice('已发送停止请求')
+      await loadHistory()
+      const s = await trainingApi.status(selectedTaskId)
+      setTask(s?.task || s)
+      const lg = await trainingApi.log(selectedTaskId, 200)
+      setLogText(sanitizeTrainingLogContent(lg?.content || ''))
+    } catch (e) {
+      setError(e?.response?.data?.message || e.message || '停止失败')
+    } finally {
+      setHistoryStopping(false)
     }
   }
 
@@ -585,8 +616,25 @@ export default function Training() {
             </Select>
           </FormControl>
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            选择历史任务后会自动拉取 status 与 log。
+            选择历史任务后会自动拉取 status 与 log。下方橙色按钮可停止<strong>当前下拉框选中</strong>的任务（仅 running / queued）。
           </Typography>
+          <Divider sx={{ my: 2 }} />
+          <Button
+            fullWidth
+            variant={canStopSelectedHistory ? 'contained' : 'outlined'}
+            color="warning"
+            size="medium"
+            disabled={!canStopSelectedHistory || historyStopping || loading}
+            onClick={stopSelectedFromHistory}
+            sx={{ fontWeight: 700 }}
+          >
+            {historyStopping ? '正在停止…' : '停止所选任务（历史列表）'}
+          </Button>
+          {!canStopSelectedHistory && selectedTaskId && (
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+              当前选中任务状态为「{String(task?.status || '未知')}」，已结束的任务无法停止；请换选 running 或 queued 条目。
+            </Typography>
+          )}
         </CardContent>
       </Card>
 

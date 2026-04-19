@@ -3,10 +3,16 @@ from __future__ import print_function
 import argparse
 import logging
 import os
+import warnings
 from datetime import datetime
 
-# 抑制 PyTorch NNPACK CPU 警告刷屏（不影响训练，仅过滤 WARNING 日志）
-os.environ["TORCH_LOGS"] = "+ERROR"
+# TORCH_LOGS 只能是 PyTorch 文档中的模块/artifact 名列表；非法值（如 +ERROR）会在 import torch 时抛 ValueError。
+os.environ.pop("TORCH_LOGS", None)
+
+# NNPACK 等 CPU 后端提示：不影响正确性，仅减少 stderr/训练日志刷屏（须在 import torch 之前注册）。
+_nnpack_msg = r"(?is).*(?:\bnnpack\b|could not initialize nnpack|nnpack is not supported|compiled without nnpack).*"
+for _cat in (UserWarning, RuntimeWarning):
+    warnings.filterwarnings("ignore", message=_nnpack_msg, category=_cat)
 
 import numpy as np
 import pandas as pd

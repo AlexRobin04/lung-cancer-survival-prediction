@@ -201,6 +201,20 @@ def _tail_file(path: str, n: int) -> str:
         return ""
 
 
+_TRAINING_LOG_SCRUB = re.compile(
+    r"(?i)(?:\bnnpack\b|could not initialize nnpack|nnpack is not supported|compiled without nnpack)",
+)
+
+
+def _scrub_training_log_content(text: str) -> str:
+    """去掉训练日志里 NNPACK 等噪声行（前端 Log tail 同源过滤；C++ 直打 stderr 时 warnings 挡不住）。"""
+    if not text:
+        return text
+    lines = text.split("\n")
+    kept = [ln for ln in lines if not _TRAINING_LOG_SCRUB.search(ln)]
+    return "\n".join(kept)
+
+
 def _pid_alive(pid: int | None) -> bool:
     if not pid:
         return False
@@ -993,12 +1007,12 @@ def _execute_predict_pipeline(
     return (out, 200)
 
 
-def _parse_log_metrics(text: str) -> tuple[float | None, float | None, int | None, int | None]:
-    """从训练日志中尽力解析 loss / c-index(或AUC) / epoch / fold。"""
+def _parse_log_metrics_loose_forward(lines: list[str]) -> tuple[float | None, float | None, int | None, int | None]:
+    """自上而下扫描，取最后一次匹配（兼容旧格式 / survival 等）。"""
     loss = cidx = None
     epoch = None
     fold = None
-    for line in text.splitlines():
+    for line in lines:
         m = re.search(r"loss[:\s=]+([0-9.eE+-]+)", line, re.I)
         if m:
             try:
@@ -1011,10 +1025,8 @@ def _parse_log_metrics(text: str) -> tuple[float | None, float | None, int | Non
                 cidx = float(m.group(1))
             except ValueError:
                 pass
-        # 兼容当前训练脚本输出的分类指标（UI 字段名仍叫 cIndex）
-        # 例如: "Val error: 0.1234, ROC AUC: 0.5678, F1: 0.4321"
         m = re.search(r"ROC\s*AUC[:\s=]+([0-9.eE+-]+)", line, re.I)
-        if m and cidx is None:
+        if m:
             try:
                 cidx = float(m.group(1))
             except ValueError:
@@ -1025,7 +1037,6 @@ def _parse_log_metrics(text: str) -> tuple[float | None, float | None, int | Non
                 epoch = int(m.group(1))
             except ValueError:
                 pass
-        # 兼容训练循环打印格式: "Epoch: {n}, train_loss: ..."
         m = re.search(r"Epoch:\s*([0-9]+)\b", line)
         if m:
             try:
@@ -1039,6 +1050,72 @@ def _parse_log_metrics(text: str) -> tuple[float | None, float | None, int | Non
             except ValueError:
                 pass
     return loss, cidx, epoch, fold
+
+
+def _parse_log_metrics(text: str) -> tuple[float | None, float | None, int | None, int | None]:
+    """从训练日志解析 loss / c-index 或 AUC / epoch / fold。
+
+    优先自文件末尾反向匹配 core_utils 的结构化行（与当前 epoch 对齐），避免 tail 过短时
+    误匹配历史行；仍缺字段时用宽松正向扫描兜底。
+    """
+    if not (text or "").strip():
+        return None, None, None, None
+    lines = text.splitlines()
+    loss = cidx = epoch = fold = None
+    for line in reversed(lines):
+        if loss is None or epoch is None:
+            m = re.search(r"Epoch:\s*(\d+),\s*train_loss:\s*([0-9.eE+-]+)", line, re.I)
+            if m:
+                try:
+                    epoch = int(m.group(1))
+                    loss = float(m.group(2))
+                except ValueError:
+                    pass
+        if cidx is None:
+            m = re.search(
+                r"Val Set,\s*val_loss:\s*[0-9.eE+-]+,\s*val_error:\s*[0-9.eE+-]+,\s*auc:\s*([0-9.eE+-]+)",
+                line,
+                re.I,
+            )
+            if m:
+                try:
+                    cidx = float(m.group(1))
+                except ValueError:
+                    pass
+        if cidx is None:
+            m = re.search(r"Val error:\s*[0-9.eE+-]+,\s*ROC AUC:\s*([0-9.eE+-]+)", line, re.I)
+            if m:
+                try:
+                    cidx = float(m.group(1))
+                except ValueError:
+                    pass
+        if cidx is None:
+            m = re.search(r"Train error:\s*[0-9.eE+-]+,\s*ROC AUC:\s*([0-9.eE+-]+)", line, re.I)
+            if m:
+                try:
+                    cidx = float(m.group(1))
+                except ValueError:
+                    pass
+        if fold is None:
+            m = re.search(r"Training Fold\s+(\d+)\s*!", line, re.I)
+            if m:
+                try:
+                    fold = int(m.group(1))
+                except ValueError:
+                    pass
+        if loss is not None and cidx is not None and epoch is not None and fold is not None:
+            break
+    fl, fc, fe, ff = _parse_log_metrics_loose_forward(lines)
+    return (
+        loss if loss is not None else fl,
+        cidx if cidx is not None else fc,
+        epoch if epoch is not None else fe,
+        fold if fold is not None else ff,
+    )
+
+
+# training/status 解析用：默认 8000 行，避免长日志时仍只看到旧 tail
+_TRAINING_STATUS_LOG_TAIL_LINES = int(os.environ.get("VILAMIL_STATUS_LOG_TAIL_LINES", "8000"))
 
 
 def _extract_task_curve_stats(task: dict[str, Any]) -> dict[str, Any]:
@@ -1234,7 +1311,7 @@ def create_app() -> Flask:
             _append_task(task)
 
         def _finalize(exit_code: int) -> None:
-            tail = _tail_file(log_path, 400)
+            tail = _tail_file(log_path, max(400, _TRAINING_STATUS_LOG_TAIL_LINES))
             loss, cidx, ep, _fold = _parse_log_metrics(tail)
             progress = 100.0 if exit_code == 0 else max(0.0, task.get("progress", 0.0))
             status = "completed" if exit_code == 0 else "failed"
@@ -1813,7 +1890,7 @@ def create_app() -> Flask:
             return jsonify({"task": t_out})
 
         log_path = t.get("logPath") or os.path.join(LOG_DIR, f"{task_id}.log")
-        tail = _tail_file(log_path, 120)
+        tail = _tail_file(log_path, _TRAINING_STATUS_LOG_TAIL_LINES)
         loss, cidx, ep, fold = _parse_log_metrics(tail)
         me = max(1, int(t.get("maxEpochs") or 1))
         cur = ep if ep is not None else int(t.get("epoch") or 0)
@@ -1991,11 +2068,12 @@ def create_app() -> Flask:
         model_type = str(request.args.get("modelType") or request.args.get("model_type") or "RRTMIL").strip()
         mode = str(request.args.get("mode") or "transformer").strip()
         key = _best_key(cancer, model_type, mode)
-        # 始终先按当前 completed 任务重算一次，避免 best_models 缓存滞后。
+        # 重算 best：含 completed，以及 failed/stopped（日志里若有 Val Set 仍可参与 val_loss 最小比较，便于 EnsembleFeature）
         try:
             candidates: list[str] = []
             for t in _load_tasks().get("tasks", []):
-                if t.get("status") != "completed":
+                st = str(t.get("status") or "").lower()
+                if st not in ("completed", "failed", "stopped"):
                     continue
                 if str(t.get("cancer") or "") != cancer:
                     continue
@@ -2012,9 +2090,41 @@ def create_app() -> Flask:
             pass
         bm = _load_best_models()
         rec = (bm.get("byKey") or {}).get(key)
-        if not rec:
-            return jsonify({"ok": False, "message": "未找到该模型的最佳训练记录", "key": key}), 404
-        return jsonify({"ok": True, **rec})
+        if rec:
+            return jsonify({"ok": True, **rec})
+        # 尚无 best_models：仍返回 200 + 最近一条同键任务，便于前端「最佳」展示曲线（含仅 failed 的 EnsembleFeature）
+        last_tid: str | None = None
+        last_ts = -1.0
+        for t in _load_tasks().get("tasks", []):
+            if str(t.get("cancer") or "") != cancer:
+                continue
+            if str(t.get("modelType") or "") != model_type:
+                continue
+            if str(t.get("mode") or "transformer") != mode:
+                continue
+            tid = str(t.get("taskId") or t.get("id") or "").strip()
+            if not tid:
+                continue
+            ts = float(t.get("startedAtTs") or 0) or 0.0
+            if ts >= last_ts:
+                last_ts = ts
+                last_tid = tid
+        if last_tid:
+            v = _best_val_loss_from_log(last_tid)
+            return jsonify(
+                {
+                    "ok": True,
+                    "key": key,
+                    "cancer": cancer,
+                    "modelType": model_type,
+                    "mode": mode,
+                    "bestTaskId": last_tid,
+                    "metric": {"bestValLoss": v, "updatedAt": _utc_now(), "provisional": True},
+                    "history": [],
+                    "message": "尚无 best_models 记录；已返回最近任务 taskId（可含 failed，用于曲线展示）",
+                }
+            )
+        return jsonify({"ok": False, "message": "未找到该癌种/模型/mode 的训练任务", "key": key}), 404
 
     @app.post("/api/training/history/delete")
     def training_history_delete():
@@ -2104,7 +2214,7 @@ def create_app() -> Flask:
         tail_n = int(request.args.get("tail") or 200)
         t = _find_task(task_id)
         log_path = (t or {}).get("logPath") or os.path.join(LOG_DIR, f"{task_id}.log")
-        content = _tail_file(log_path, tail_n)
+        content = _scrub_training_log_content(_tail_file(log_path, tail_n))
         return jsonify({"content": content, "taskId": task_id})
 
     @app.post("/api/data/upload")
@@ -2386,7 +2496,11 @@ def create_app() -> Flask:
                         {
                             "epoch": ge,
                             "trainLoss": None,
+                            "trainError": None,
                             "valLoss": None,
+                            "valError": None,
+                            "valF1": None,
+                            "trainF1": None,
                             "testLoss": None,
                             "trainRocAuc": None,
                             "valRocAuc": None,
@@ -2398,6 +2512,10 @@ def create_app() -> Flask:
                         },
                     )
                     p["trainLoss"] = tl
+                    try:
+                        p["trainError"] = float(m.group(3))
+                    except (IndexError, ValueError, TypeError):
+                        pass
                     continue
 
                 m = re.search(
@@ -2407,15 +2525,19 @@ def create_app() -> Flask:
                 )
                 if m:
                     vl = float(m.group(1))
+                    ve = float(m.group(2))
                     auc = float(m.group(3))
+                    vf1 = float(m.group(4))
                     last_val_auc = auc
                     candidates = [k for k in points.keys() if (k // max_epochs) == cur_fold]
                     if candidates:
                         ge = max(candidates)
                         p = points[ge]
                         p["valLoss"] = vl
+                        p["valError"] = ve
                         p["valRocAuc"] = auc
                         p["valCIndex"] = auc
+                        p["valF1"] = vf1
                     continue
 
                 m = re.search(r"Val error:\s*([0-9.eE+-]+),\s*ROC AUC:\s*([0-9.eE+-]+),\s*F1:\s*([0-9.eE+-]+)", line, re.I)
@@ -2430,12 +2552,16 @@ def create_app() -> Flask:
 
                 m = re.search(r"Train error:\s*([0-9.eE+-]+),\s*ROC AUC:\s*([0-9.eE+-]+),\s*F1:\s*([0-9.eE+-]+)", line, re.I)
                 if m:
+                    tr_err = float(m.group(1))
                     auc = float(m.group(2))
+                    tf1 = float(m.group(3))
                     candidates = [k for k in points.keys() if (k // max_epochs) == cur_fold]
                     if candidates:
                         ge = max(candidates)
                         points[ge]["trainRocAuc"] = auc
                         points[ge]["trainCIndex"] = auc
+                        points[ge]["trainF1"] = tf1
+                        points[ge]["trainError"] = tr_err
                     continue
             return [points[k] for k in sorted(points.keys())], last_val_auc, last_test_auc
 
@@ -2460,6 +2586,19 @@ def create_app() -> Flask:
         if final_train is not None and final_val is not None:
             overfit = float(final_train) - float(final_val)
 
+        def _series_floats(key: str) -> list[float]:
+            out: list[float] = []
+            for p in series or []:
+                v = p.get(key)
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    out.append(float(v))
+            return out
+
+        vf1s = _series_floats("valF1")
+        tf1s = _series_floats("trainF1")
+        ves = _series_floats("valError")
+        tres = _series_floats("trainError")
+
         summary = {
             # existing keys used elsewhere
             "valAuc": last_val_auc,
@@ -2479,6 +2618,16 @@ def create_app() -> Flask:
             "finalTrainCIndex": final_train,
             "bestValLoss": min([p.get("valLoss") for p in series if isinstance(p.get("valLoss"), (int, float))], default=None),
             "finalValLoss": ([p.get("valLoss") for p in series if isinstance(p.get("valLoss"), (int, float))] or [None])[-1],
+            # Val Set 行解析：F1 / error（分类训练日志；与 survival 真 c-index 不同源）
+            "bestValF1": max(vf1s) if vf1s else None,
+            "finalValF1": vf1s[-1] if vf1s else None,
+            "bestTrainF1": max(tf1s) if tf1s else None,
+            "finalTrainF1": tf1s[-1] if tf1s else None,
+            "minValError": min(ves) if ves else None,
+            "bestValError": min(ves) if ves else None,
+            "finalValError": ves[-1] if ves else None,
+            "minTrainError": min(tres) if tres else None,
+            "finalTrainError": tres[-1] if tres else None,
             # overfitting/overfit gap (not available with current printed metrics)
             "overfit": overfit,
             "overfitting": overfit,

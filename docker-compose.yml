@@ -25,7 +25,6 @@ services:
       # 训练空闲超时（日志连续无增长则自动终止）
       - TRAIN_IDLE_TIMEOUT_MIN=240
       - TRAIN_IDLE_CHECK_SEC=60
-      - TORCH_LOGS=+ERROR
     volumes:
       # 训练结果、日志、任务元数据持久化
       - ./ViLa-MIL/result:/app/result

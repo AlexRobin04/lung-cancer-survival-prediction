@@ -39,6 +39,8 @@ npm install
 npm run dev
 ```
 
+生产构建产物在 `vila-mil-frontend/dist`：可在 **`vila-mil` 仓库根** 直接执行 **`npm run build`**（根目录 `package.json` 会转发到 `vila-mil-frontend`），或 `cd vila-mil-frontend && npm run build`。
+
 默认 Vite 开发服务器；需将 API 代理到本机后端（按项目内 `vite` 配置，一般指向带 `/api` 的后端地址）。
 
 ### 后端 API
@@ -62,7 +64,7 @@ gunicorn --bind 127.0.0.1:8000 api_server:app
 | **Docker Compose**（推荐一键：网关 `:80`，同源 `/api/*`） | [`DOCKER_DEPLOY.md`](./DOCKER_DEPLOY.md) |
 | **宿主机 Nginx + gunicorn + systemd** | [`deploy/README.md`](./deploy/README.md) |
 
-Docker 场景下注意：**首次**需按 `DOCKER_DEPLOY.md` 构建本地基础镜像 `vila-mil-backend-base:local`，再 `docker compose up`；前端需先在宿主机执行 `npm run build` 生成 `vila-mil-frontend/dist`。
+Docker 场景下注意：**首次**需按 `DOCKER_DEPLOY.md` 构建本地基础镜像 `vila-mil-backend-base:local`，再 `docker compose up`；前端需先在宿主机于**仓库根**执行 `npm run build`（或进入 `vila-mil-frontend` 再 build）生成 `vila-mil-frontend/dist`。
 
 ## API 与模型
 

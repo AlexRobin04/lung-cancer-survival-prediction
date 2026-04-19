@@ -77,6 +77,14 @@ const fmt = (v, digits = 4) => {
 const legendName = {
   trainLoss: '训练集 Loss',
   valLoss: '验证集 Loss',
+  trainRocAuc: '训练集 AUC',
+  valRocAuc: '验证集 AUC',
+  trainCIndex: '训练集 AUC（≈cIndex）',
+  valCIndex: '验证集 AUC（≈cIndex）',
+  trainF1: '训练集 F1',
+  valF1: '验证集 F1',
+  trainError: '训练集 error',
+  valError: '验证集 error',
 }
 const COMPARE_MODELS = ['RRTMIL', 'AMIL', 'WiKG', 'DSMIL', 'S4MIL', 'EnsembleFeature']
 const COMPARE_COLORS = {
@@ -167,9 +175,13 @@ export default function ModelEvaluation() {
   const [compareLoading, setCompareLoading] = useState(false)
   const [compareSeries, setCompareSeries] = useState([])
   const [compareMeta, setCompareMeta] = useState([])
-  const [compareMetric, setCompareMetric] = useState('valLoss') // valLoss | trainLoss
+  const [compareMetric, setCompareMetric] = useState('valLoss') // valLoss | trainLoss | valRocAuc
   const [visibleCompareModels, setVisibleCompareModels] = useState(COMPARE_MODELS)
   const [compareMonotonicDisplay, setCompareMonotonicDisplay] = useState(false)
+  /** 仅用于触发「最优对比 / 指标总览」重新拉取，避免随 runs 每 5s 抖动 */
+  const [compareReloadNonce, setCompareReloadNonce] = useState(0)
+  /** 「全部刷新」时触发「最佳」模式下的 best 与 taskId 逻辑重跑 */
+  const [bestReloadNonce, setBestReloadNonce] = useState(0)
 
   const pickBestCompletedRun = (list, cancer, modelType) => {
     const cands = (list || []).filter(
@@ -187,6 +199,18 @@ export default function ModelEvaluation() {
     return byLoss[0] || cands[0]
   }
 
+  /** 优先 completed 中 loss 最小；否则同一癌种+模型下任取最近一条（含 failed，便于 EnsembleFeature 出曲线） */
+  const pickBestRunForDisplay = (completedList, allRuns, cancer, modelType) => {
+    const fromDone = pickBestCompletedRun(completedList, cancer, modelType)
+    if (fromDone) return fromDone
+    const cands = (allRuns || []).filter(
+      (r) => String(r?.cancer || '') === cancer && String(r?.modelType || '') === modelType
+    )
+    if (cands.length === 0) return null
+    const ts = (r) => Number(r?.startedAtTs) || 0
+    return [...cands].sort((a, b) => ts(b) - ts(a))[0] || null
+  }
+
   const loadRuns = async () => {
     setError('')
     try {
@@ -196,6 +220,20 @@ export default function ModelEvaluation() {
       setError(e?.response?.data?.message || e.message || '加载 runs 失败')
       setRuns([])
     }
+  }
+
+  /** 更新任务列表并重新拉取「最优对比 / 指标总览」数据（不与曲线轮询绑定） */
+  const refreshCompareBlock = async () => {
+    await loadRuns()
+    setCompareReloadNonce((n) => n + 1)
+  }
+
+  /** 任务列表 + 对比/总览 + 当前任务曲线 +（最佳模式下）best 信息 */
+  const refreshAll = async () => {
+    await loadRuns()
+    setCompareReloadNonce((n) => n + 1)
+    if (selectMode === 'best') setBestReloadNonce((n) => n + 1)
+    if (taskId) await loadCurves()
   }
 
   const loadCurves = async () => {
@@ -246,10 +284,10 @@ export default function ModelEvaluation() {
     let stopped = false
     const tick = async () => {
       try {
-        const [c, r] = await Promise.all([evaluationApi.curves(taskId), evaluationApi.runs()])
+        const c = await evaluationApi.curves(taskId)
         if (stopped) return
         setCurves(c)
-        setRuns(r?.runs || [])
+        // 不在此轮询 runs：否则 runs 每 5s 更新会触发「最优任务对比」等重载，体验很差；列表请用「刷新列表」
       } catch {
         // ignore polling errors
       }
@@ -280,6 +318,24 @@ export default function ModelEvaluation() {
     const hi = max + pad
     return [lo, hi]
   }, [series, yScaleMode])
+
+  const errorDomain = useMemo(() => {
+    if (yScaleMode !== 'auto') return undefined
+    const vals = []
+    for (const p of series || []) {
+      const a = Number(p?.trainError)
+      const b = Number(p?.valError)
+      if (Number.isFinite(a)) vals.push(a)
+      if (Number.isFinite(b)) vals.push(b)
+    }
+    if (vals.length === 0) return undefined
+    const min = Math.min(...vals)
+    const max = Math.max(...vals)
+    const span = max - min
+    const pad = Math.max(span * 0.12, Math.abs(max) * 0.02, 1e-6)
+    return [min - pad, max + pad]
+  }, [series, yScaleMode])
+
   const completedRuns = useMemo(
     () => (runs || []).filter((r) => String(r?.status || '').toLowerCase() === 'completed'),
     [runs]
@@ -295,7 +351,7 @@ export default function ModelEvaluation() {
   }, [completedRuns])
   const bestModelOptions = useMemo(() => {
     const map = new Map()
-    for (const r of completedRuns || []) {
+    for (const r of runs || []) {
       const c = String(r?.cancer || '').trim()
       const m = String(r?.modelType || '').trim()
       if (!c || !m) continue
@@ -305,7 +361,7 @@ export default function ModelEvaluation() {
     return Array.from(map.values()).sort((a, b) =>
       `${a.cancer}-${a.modelType}`.localeCompare(`${b.cancer}-${b.modelType}`)
     )
-  }, [completedRuns])
+  }, [runs])
   const luscKmChartData = useMemo(() => {
     const curves = luscKm?.curves || []
     const ours = curves.find((c) => String(c?.label || '').toLowerCase() === 'ours')
@@ -317,13 +373,18 @@ export default function ModelEvaluation() {
     if (!compareMonotonicDisplay) return compareSeries
     const out = (compareSeries || []).map((r) => ({ ...r }))
     for (const model of COMPARE_MODELS) {
-      for (const metric of ['valLoss', 'trainLoss']) {
+      for (const metric of ['valLoss', 'trainLoss', 'valRocAuc']) {
         const k = `${model}_${metric}`
-        let best = Number.POSITIVE_INFINITY
+        const higherBetter = metric === 'valRocAuc'
+        let best = higherBetter ? Number.NEGATIVE_INFINITY : Number.POSITIVE_INFINITY
         for (let i = 0; i < out.length; i += 1) {
           const v = Number(out[i]?.[k])
           if (!Number.isFinite(v)) continue
-          if (v < best) best = v
+          if (higherBetter) {
+            if (v > best) best = v
+          } else if (v < best) {
+            best = v
+          }
           out[i][k] = best
         }
       }
@@ -344,22 +405,31 @@ export default function ModelEvaluation() {
     ;(async () => {
       setError('')
       setBestInfo(null)
-      const localBest = pickBestCompletedRun(completedRuns, cancer, modelType)
+      let runsList = runs
+      let completedList = completedRuns
+      try {
+        const r = await evaluationApi.runs()
+        runsList = r?.runs || []
+        completedList = (runsList || []).filter((x) => String(x?.status || '').toLowerCase() === 'completed')
+      } catch {
+        // 使用当前 state
+      }
+      const localBest = pickBestRunForDisplay(completedList, runsList, cancer, modelType)
       if (localBest?.taskId) setTaskId(localBest.taskId)
       try {
         const res = await trainingApi.best({ cancer, modelType, mode: 'transformer' })
         setBestInfo(res)
         setBestRefreshedAt(new Date().toLocaleString())
         const bestId = String(res?.bestTaskId || '')
-        const inCompleted = (completedRuns || []).some((r) => String(r?.taskId || '') === bestId)
-        if (bestId && inCompleted) setTaskId(bestId)
+        const known = (runsList || []).some((r) => String(r?.taskId || '') === bestId)
+        if (bestId && known) setTaskId(bestId)
       } catch (e) {
         setBestInfo(null)
         setBestRefreshedAt('')
-        if (!localBest?.taskId) setError(e?.response?.data?.message || e.message || '未找到可用的已完成训练记录')
+        if (!localBest?.taskId) setError(e?.response?.data?.message || e.message || '未找到可用的训练记录')
       }
     })()
-  }, [selectMode, bestModelKey, completedRuns])
+  }, [selectMode, bestModelKey, bestReloadNonce])
 
   useEffect(() => {
     if (!compareCancerOptions.includes(compareCancer)) {
@@ -372,6 +442,15 @@ export default function ModelEvaluation() {
     ;(async () => {
       setCompareLoading(true)
       try {
+        let runsList = runs
+        let completedList = completedRuns
+        try {
+          const r = await evaluationApi.runs()
+          runsList = r?.runs || []
+          completedList = (runsList || []).filter((x) => String(x?.status || '').toLowerCase() === 'completed')
+        } catch {
+          // 使用当前 state
+        }
         const loaded = []
         for (const modelType of COMPARE_MODELS) {
           let targetTaskId = ''
@@ -382,7 +461,7 @@ export default function ModelEvaluation() {
             // ignore and fallback to local pick
           }
           if (!targetTaskId) {
-            const localBest = pickBestCompletedRun(completedRuns, compareCancer, modelType)
+            const localBest = pickBestRunForDisplay(completedList, runsList, compareCancer, modelType)
             targetTaskId = String(localBest?.taskId || '')
           }
           if (!targetTaskId) continue
@@ -413,6 +492,9 @@ export default function ModelEvaluation() {
               const hit = m.points.find((p) => Number(p?.epoch) === epoch)
               row[`${m.modelType}_valLoss`] = Number.isFinite(Number(hit?.valLoss)) ? Number(hit?.valLoss) : null
               row[`${m.modelType}_trainLoss`] = Number.isFinite(Number(hit?.trainLoss)) ? Number(hit?.trainLoss) : null
+              row[`${m.modelType}_valRocAuc`] = Number.isFinite(Number(hit?.valRocAuc))
+                ? Number(hit?.valRocAuc)
+                : null
             }
             return row
           })
@@ -432,7 +514,7 @@ export default function ModelEvaluation() {
     return () => {
       cancelled = true
     }
-  }, [compareCancer, completedRuns])
+  }, [compareCancer, compareReloadNonce])
 
   const exportCsv = () => {
     if (!taskId || series.length === 0) return
@@ -440,8 +522,24 @@ export default function ModelEvaluation() {
       epoch: p.epoch,
       trainLoss: p.trainLoss ?? '',
       valLoss: p.valLoss ?? '',
+      trainError: p.trainError ?? '',
+      valError: p.valError ?? '',
+      trainRocAuc: p.trainRocAuc ?? '',
+      valRocAuc: p.valRocAuc ?? '',
+      trainF1: p.trainF1 ?? '',
+      valF1: p.valF1 ?? '',
     }))
-    const headers = ['epoch', 'trainLoss', 'valLoss']
+    const headers = [
+      'epoch',
+      'trainLoss',
+      'valLoss',
+      'trainError',
+      'valError',
+      'trainRocAuc',
+      'valRocAuc',
+      'trainF1',
+      'valF1',
+    ]
     const csv = toCsv(rows, headers)
     downloadText(`model-evaluation-${taskId}.csv`, csv)
   }
@@ -467,7 +565,8 @@ export default function ModelEvaluation() {
           模型评估（训练曲线）
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          这里展示的是后端从训练日志解析得到的训练曲线（Loss），并附带 LUSC 示例 KM 对比。
+          后端从训练日志解析 Loss、AUC（与任务列表中的 cIndex 同源：分类下为 Val Set 的 auc）、F1、error
+          等；生存任务若日志格式不同，部分字段可能为「—」。
         </Typography>
       </Box>
 
@@ -482,9 +581,14 @@ export default function ModelEvaluation() {
           title="选择训练任务（Run）"
           titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
           action={
-            <Button variant="outlined" onClick={loadRuns}>
-              刷新列表
-            </Button>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button variant="outlined" onClick={loadRuns}>
+                刷新列表
+              </Button>
+              <Button variant="contained" onClick={refreshAll}>
+                全部刷新
+              </Button>
+            </Stack>
           }
         />
         <CardContent>
@@ -535,11 +639,23 @@ export default function ModelEvaluation() {
                  ；bestValLoss: <code>{String(bestInfo.metric.bestValLoss)}</code>
                 </>
               ) : null}
+              {bestInfo?.metric?.provisional ? (
+                <>
+                  {' '}
+                  ；<span style={{ color: '#b45309' }}>临时最佳</span>（仅最近任务 / 尚无 best_models 持久化）
+                </>
+              ) : null}
               {bestRefreshedAt ? (
                 <>
                   {' '}
                   ；最后刷新: <code>{bestRefreshedAt}</code>
                 </>
+              ) : null}
+              {bestInfo?.message ? (
+                <span>
+                  {' '}
+                  — {bestInfo.message}
+                </span>
               ) : null}
             </Typography>
           )}
@@ -550,7 +666,7 @@ export default function ModelEvaluation() {
         <CardHeader
           title="训练曲线"
           titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
-          subheader="同一任务可能包含 k-fold；曲线横轴 epoch 为“全局 epoch”（fold × maxEpochs + epoch）"
+          subheader="同一任务可能包含 k-fold；横轴为全局 epoch（fold × maxEpochs + epoch）。AUC 与平台 cIndex 一致（分类任务来自 Val Set 的 auc）。"
           action={
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <ToggleButtonGroup
@@ -577,6 +693,45 @@ export default function ModelEvaluation() {
             <Alert severity="info">暂无曲线数据（请先选择 completed 的 run）</Alert>
           ) : (
             <>
+              {curves?.summary && (
+                <Box
+                  sx={(theme) => ({
+                    mb: 2,
+                    p: 2,
+                    borderRadius: 1.5,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.info.main, 0.12) : alpha(theme.palette.info.main, 0.06),
+                  })}
+                >
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                    摘要指标（全日志解析）
+                  </Typography>
+                  <Grid container spacing={1.5}>
+                    {[
+                      ['bestValLoss', '最低 val_loss'],
+                      ['finalValLoss', '最后 val_loss'],
+                      ['bestValRocAuc', '最高 val AUC'],
+                      ['finalValRocAuc', '最后 val AUC'],
+                      ['bestValF1', '最高 val F1'],
+                      ['finalValF1', '最后 val F1'],
+                      ['minValError', '最低 val error'],
+                      ['finalValError', '最后 val error'],
+                      ['finalTrainError', '最后 train error'],
+                      ['overfit', 'train−val AUC 差'],
+                    ].map(([k, lab]) => (
+                      <Grid item xs={6} sm={4} md={2} key={k}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          {lab}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {fmt(curves.summary[k], 4)}
+                        </Typography>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              )}
               <Grid container spacing={2}>
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
@@ -648,6 +803,130 @@ export default function ModelEvaluation() {
                     </ResponsiveContainer>
                   </Box>
                 </Grid>
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                    验证集 / 训练集 AUC（日志 auc；与任务 cIndex 字段同源）
+                  </Typography>
+                  <Box sx={(theme) => chartPanelSx(theme)}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={series}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={alpha('#90a4ae', 0.35)} />
+                        <XAxis dataKey="epoch" />
+                        <YAxis domain={[0, 1]} tickFormatter={(v) => fmt(v, 3)} width={54} />
+                        <Tooltip
+                          formatter={(value, name) => [fmt(value), legendName[name] || name]}
+                          labelFormatter={(label) => `epoch ${label}`}
+                          contentStyle={{
+                            borderRadius: 10,
+                            border: '1px solid #d7dee8',
+                            boxShadow: '0 8px 18px rgba(15,23,42,0.12)',
+                          }}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="valRocAuc"
+                          name={legendName.valRocAuc}
+                          stroke="#6a1b9a"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="trainRocAuc"
+                          name={legendName.trainRocAuc}
+                          stroke="#0277bd"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                    验证集 / 训练集 F1
+                  </Typography>
+                  <Box sx={(theme) => chartPanelSx(theme)}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={series}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={alpha('#90a4ae', 0.35)} />
+                        <XAxis dataKey="epoch" />
+                        <YAxis domain={[0, 1]} tickFormatter={(v) => fmt(v, 3)} width={54} />
+                        <Tooltip
+                          formatter={(value, name) => [fmt(value), legendName[name] || name]}
+                          labelFormatter={(label) => `epoch ${label}`}
+                          contentStyle={{
+                            borderRadius: 10,
+                            border: '1px solid #d7dee8',
+                            boxShadow: '0 8px 18px rgba(15,23,42,0.12)',
+                          }}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="valF1"
+                          name={legendName.valF1}
+                          stroke="#c62828"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="trainF1"
+                          name={legendName.trainF1}
+                          stroke="#2e7d32"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
+                    验证集 / 训练集 error（分类错误率）
+                  </Typography>
+                  <Box sx={(theme) => chartPanelSx(theme)}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={series}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={alpha('#90a4ae', 0.35)} />
+                        <XAxis dataKey="epoch" />
+                        <YAxis
+                          domain={yScaleMode === 'auto' ? errorDomain : [0, 'auto']}
+                          tickFormatter={(v) => fmt(v, 3)}
+                          width={54}
+                        />
+                        <Tooltip
+                          formatter={(value, name) => [fmt(value), legendName[name] || name]}
+                          labelFormatter={(label) => `epoch ${label}`}
+                          contentStyle={{
+                            borderRadius: 10,
+                            border: '1px solid #d7dee8',
+                            boxShadow: '0 8px 18px rgba(15,23,42,0.12)',
+                          }}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="valError"
+                          name={legendName.valError}
+                          stroke="#ef6c00"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="trainError"
+                          name={legendName.trainError}
+                          stroke="#5d4037"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </Box>
+                </Grid>
               </Grid>
 
               <Collapse in={showEpochTable} timeout="auto" unmountOnExit>
@@ -669,6 +948,12 @@ export default function ModelEvaluation() {
                           <TableCell>epoch</TableCell>
                           <TableCell align="right">trainLoss</TableCell>
                           <TableCell align="right">valLoss</TableCell>
+                          <TableCell align="right">trainError</TableCell>
+                          <TableCell align="right">valError</TableCell>
+                          <TableCell align="right">trainAUC</TableCell>
+                          <TableCell align="right">valAUC</TableCell>
+                          <TableCell align="right">trainF1</TableCell>
+                          <TableCell align="right">valF1</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -677,6 +962,12 @@ export default function ModelEvaluation() {
                             <TableCell>{p.epoch}</TableCell>
                             <TableCell align="right">{fmt(p.trainLoss)}</TableCell>
                             <TableCell align="right">{fmt(p.valLoss)}</TableCell>
+                            <TableCell align="right">{fmt(p.trainError)}</TableCell>
+                            <TableCell align="right">{fmt(p.valError)}</TableCell>
+                            <TableCell align="right">{fmt(p.trainRocAuc)}</TableCell>
+                            <TableCell align="right">{fmt(p.valRocAuc)}</TableCell>
+                            <TableCell align="right">{fmt(p.trainF1)}</TableCell>
+                            <TableCell align="right">{fmt(p.valF1)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -714,7 +1005,7 @@ export default function ModelEvaluation() {
                   ))}
                 </Select>
               </FormControl>
-              <Button variant="outlined" onClick={loadRuns}>
+              <Button variant="outlined" onClick={refreshCompareBlock}>
                 刷新
               </Button>
             </Box>
@@ -736,6 +1027,7 @@ export default function ModelEvaluation() {
                 <ToggleButtonGroup value={compareMetric} exclusive size="small" onChange={(_, v) => v && setCompareMetric(v)}>
                   <ToggleButton value="valLoss">验证集 Loss</ToggleButton>
                   <ToggleButton value="trainLoss">训练集 Loss</ToggleButton>
+                  <ToggleButton value="valRocAuc">验证集 AUC</ToggleButton>
                 </ToggleButtonGroup>
                 <FormControlLabel
                   control={
@@ -776,9 +1068,21 @@ export default function ModelEvaluation() {
                   <LineChart data={compareDisplaySeries}>
                     <CartesianGrid strokeDasharray="3 3" stroke={alpha('#90a4ae', 0.35)} />
                     <XAxis dataKey="epoch" />
-                    <YAxis tickFormatter={(v) => fmt(v, 3)} width={54} />
+                    <YAxis
+                      domain={compareMetric === 'valRocAuc' ? [0, 1] : undefined}
+                      tickFormatter={(v) => fmt(v, 3)}
+                      width={54}
+                    />
                     <Tooltip
-                      formatter={(value, name) => [fmt(value), `${name} ${compareMetric === 'valLoss' ? '验证集 Loss' : '训练集 Loss'}`]}
+                      formatter={(value, name) => {
+                        const lab =
+                          compareMetric === 'valLoss'
+                            ? '验证集 Loss'
+                            : compareMetric === 'trainLoss'
+                              ? '训练集 Loss'
+                              : '验证集 AUC'
+                        return [fmt(value), `${name} ${lab}`]
+                      }}
                       labelFormatter={(label) => `epoch ${label}`}
                     />
                     <Legend />
@@ -843,8 +1147,10 @@ export default function ModelEvaluation() {
                     <TableCell>模型</TableCell>
                     <TableCell>bestTaskId</TableCell>
                     <TableCell align="right">bestValLoss</TableCell>
-                    <TableCell align="right">finalValCIndex</TableCell>
-                    <TableCell align="right">finalTestCIndex</TableCell>
+                    <TableCell align="right">finalValAUC</TableCell>
+                    <TableCell align="right">bestValF1</TableCell>
+                    <TableCell align="right">finalValF1</TableCell>
+                    <TableCell align="right">finalTestAUC</TableCell>
                     <TableCell align="right">epochCount</TableCell>
                   </TableRow>
                 </TableHead>
@@ -855,7 +1161,7 @@ export default function ModelEvaluation() {
                       return (
                         <TableRow key={modelType}>
                           <TableCell>{modelType}</TableCell>
-                          <TableCell colSpan={5} sx={{ color: 'text.secondary' }}>
+                          <TableCell colSpan={7} sx={{ color: 'text.secondary' }}>
                             暂无最佳任务
                           </TableCell>
                         </TableRow>
@@ -869,8 +1175,10 @@ export default function ModelEvaluation() {
                           <code>{String(row.taskId || '').slice(0, 12)}...</code>
                         </TableCell>
                         <TableCell align="right">{fmt(s.bestValLoss ?? row.bestValLoss)}</TableCell>
-                        <TableCell align="right">{fmt(s.finalValCIndex)}</TableCell>
-                        <TableCell align="right">{fmt(s.finalTestCIndex)}</TableCell>
+                        <TableCell align="right">{fmt(s.finalValCIndex ?? s.finalValRocAuc)}</TableCell>
+                        <TableCell align="right">{fmt(s.bestValF1)}</TableCell>
+                        <TableCell align="right">{fmt(s.finalValF1)}</TableCell>
+                        <TableCell align="right">{fmt(s.finalTestCIndex ?? s.finalTestRocAuc)}</TableCell>
                         <TableCell align="right">{Number.isFinite(Number(s.epochCount)) ? Number(s.epochCount) : '—'}</TableCell>
                       </TableRow>
                     )

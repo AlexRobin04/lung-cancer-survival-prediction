@@ -1,0 +1,10 @@
+{
+  "name": "vila-mil",
+  "private": true,
+  "description": "根目录占位：前端在 vila-mil-frontend，请在此执行 npm run build 或进入子目录构建。",
+  "scripts": {
+    "build": "npm run build --prefix vila-mil-frontend",
+    "dev": "npm run dev --prefix vila-mil-frontend",
+    "install:frontend": "npm install --prefix vila-mil-frontend"
+  }
+}

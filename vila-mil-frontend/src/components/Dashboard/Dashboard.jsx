@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogActions,
   Chip,
+  CircularProgress,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined'
@@ -29,7 +30,9 @@ import StorageOutlinedIcon from '@mui/icons-material/StorageOutlined'
 import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined'
 import ModelTrainingOutlinedIcon from '@mui/icons-material/ModelTrainingOutlined'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
+import StopOutlinedIcon from '@mui/icons-material/StopOutlined'
 import { healthApi, trainingApi, evaluationApi, predictApi, dataApi, clinicalApi } from '../../services/api'
+import { sanitizeTrainingLogContent } from '../../utils/trainingLogSanitize'
 
 const nowSec = () => Date.now() / 1000
 const parseToSec = (t) => {
@@ -43,6 +46,11 @@ const parseToSec = (t) => {
 const fmtPct = (v) => {
   const n = Number(v)
   return Number.isFinite(n) ? `${n.toFixed(2)}%` : '—'
+}
+
+const trainingTaskCanStop = (t) => {
+  const s = String(t?.status || '').toLowerCase()
+  return s === 'running' || s === 'queued'
 }
 
 /** 分区卡片：顶边色带 + 浅色底 + 图标，便于一眼区分各模块 */
@@ -111,9 +119,11 @@ export default function Dashboard() {
   const [selectedRunId, setSelectedRunId] = useState('')
   const [selectedRunCurves, setSelectedRunCurves] = useState(null)
   const [runDetailLoading, setRunDetailLoading] = useState(false)
-  const [timeRangeMin, setTimeRangeMin] = useState(15)
+  /** 默认「全部」避免只显示最近 15 分钟时列表为空，看不到任务与停止入口 */
+  const [timeRangeMin, setTimeRangeMin] = useState(0)
   const [detailOpen, setDetailOpen] = useState(false)
   const [runDetailOpen, setRunDetailOpen] = useState(false)
+  const [stoppingTaskId, setStoppingTaskId] = useState('')
 
   const load = async () => {
     setError('')
@@ -164,9 +174,26 @@ export default function Dashboard() {
       const s = await trainingApi.status(taskId)
       setSelectedTask(s?.task || s)
       const lg = await trainingApi.log(taskId, 2000)
-      setSelectedLog(lg?.content || '')
+      setSelectedLog(sanitizeTrainingLogContent(lg?.content || ''))
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '加载任务详情失败')
+    }
+  }
+
+  const stopTrainingTask = async (taskId) => {
+    if (!taskId || stoppingTaskId) return
+    setStoppingTaskId(taskId)
+    setError('')
+    try {
+      await trainingApi.stop(taskId)
+      await load()
+      if (selectedTaskId === taskId) {
+        await loadTaskDetail(taskId)
+      }
+    } catch (e) {
+      setError(e?.response?.data?.message || e.message || '停止任务失败')
+    } finally {
+      setStoppingTaskId('')
     }
   }
 
@@ -192,13 +219,14 @@ export default function Dashboard() {
       await loadTaskDetail(selectedTaskId)
     }
     tick()
-    const tmr = setInterval(tick, 5000)
+    const ms = detailOpen ? 2000 : 4000
+    const tmr = setInterval(tick, ms)
     return () => {
       stopped = true
       clearInterval(tmr)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTaskId])
+  }, [selectedTaskId, detailOpen])
 
   useEffect(() => {
     let stopped = false
@@ -363,7 +391,7 @@ export default function Dashboard() {
             accent="#00897b"
             icon={<ModelTrainingOutlinedIcon fontSize="small" />}
             title="Recent Training Tasks"
-            subheader="点击任务查看详情、指标与日志（自动刷新）"
+            subheader="点击左侧行查看详情；运行中或排队任务右侧有「停止」按钮（自动刷新）"
             action={
               <FormControl size="small" sx={{ minWidth: 180 }}>
                 <InputLabel id="range-label">时间范围</InputLabel>
@@ -387,46 +415,93 @@ export default function Dashboard() {
                 当前时间范围内暂无任务
               </Typography>
             ) : (
-              <List
-                dense
-                disablePadding
+              <Box
                 sx={{
                   borderRadius: 1,
-                  overflow: 'hidden',
                   border: '1px solid',
                   borderColor: 'divider',
                   bgcolor: 'background.paper',
+                  overflow: 'visible',
                 }}
               >
                 {recentTasks.map((t) => (
-                  <ListItemButton
+                  <Box
                     key={t.taskId}
-                    selected={selectedTaskId === t.taskId}
-                    onClick={() => {
-                      setSelectedTaskId(t.taskId)
-                      setSelectedTask(null)
-                      setSelectedLog('')
-                      setDetailOpen(true)
-                    }}
                     sx={{
-                      '&.Mui-selected': {
-                        bgcolor: (theme) => alpha('#00897b', theme.palette.mode === 'dark' ? 0.28 : 0.12),
-                        borderLeft: '3px solid #00897b',
-                      },
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      borderBottom: '1px solid',
+                      borderColor: 'divider',
+                      '&:last-of-type': { borderBottom: 'none' },
                     }}
                   >
-                    <ListItemText
-                      primary={`${t.name || `${t.cancer || ''} ${t.modelType || ''} Training`}`.trim()}
-                      secondary={
-                        <span>
-                          <b>{t.status}</b>  ·  Progress: {fmtPct(t.progress)}  ·  Loss: {t.loss ?? '—'}  ·  C-Index:{' '}
-                          {t.cIndex ?? '—'}
-                        </span>
-                      }
-                    />
-                  </ListItemButton>
+                    <ListItemButton
+                      dense
+                      selected={selectedTaskId === t.taskId}
+                      onClick={() => {
+                        setSelectedTaskId(t.taskId)
+                        setSelectedTask(null)
+                        setSelectedLog('')
+                        setDetailOpen(true)
+                      }}
+                      sx={{
+                        flex: 1,
+                        minWidth: 0,
+                        py: 1,
+                        '&.Mui-selected': {
+                          bgcolor: (theme) => alpha('#00897b', theme.palette.mode === 'dark' ? 0.28 : 0.12),
+                          borderLeft: '3px solid #00897b',
+                        },
+                      }}
+                    >
+                      <ListItemText
+                        primary={`${t.name || `${t.cancer || ''} ${t.modelType || ''} Training`}`.trim()}
+                        secondary={
+                          <span>
+                            <b>{t.status}</b>  ·  Progress: {fmtPct(t.progress)}  ·  Loss: {t.loss ?? '—'}  ·  C-Index:{' '}
+                            {t.cIndex ?? '—'}
+                          </span>
+                        }
+                      />
+                    </ListItemButton>
+                    {trainingTaskCanStop(t) ? (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          flexShrink: 0,
+                          px: 0.75,
+                          borderLeft: '1px solid',
+                          borderColor: 'divider',
+                          bgcolor: (theme) => alpha(theme.palette.warning.main, theme.palette.mode === 'dark' ? 0.12 : 0.06),
+                        }}
+                      >
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="warning"
+                          disabled={Boolean(stoppingTaskId)}
+                          startIcon={
+                            stoppingTaskId === t.taskId ? (
+                              <CircularProgress size={14} color="inherit" />
+                            ) : (
+                              <StopOutlinedIcon sx={{ fontSize: 18 }} />
+                            )
+                          }
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            stopTrainingTask(t.taskId)
+                          }}
+                          sx={{ whiteSpace: 'nowrap', minWidth: 72 }}
+                        >
+                          {stoppingTaskId === t.taskId ? '停止中' : '停止'}
+                        </Button>
+                      </Box>
+                    ) : null}
+                  </Box>
                 ))}
-              </List>
+              </Box>
             )}
           </DashboardPanel>
         </Grid>
@@ -546,7 +621,9 @@ export default function Dashboard() {
                     <Typography variant="body2" color="text.secondary">
                       Batch size
                     </Typography>
-                    <Typography variant="body1">{selectedTask.batchSize ?? '—'}</Typography>
+                    <Typography variant="body1">
+                      {Number(selectedTask.batchSize) > 0 ? selectedTask.batchSize : '—（MIL 未用 batch）'}
+                    </Typography>
                   </Grid>
                   {String(selectedTask.modelType || '') === 'EnsembleFeature' && (
                     <Grid item xs={12}>
@@ -611,7 +688,20 @@ export default function Dashboard() {
               </>
             )}
           </DialogContent>
-          <DialogActions>
+          <DialogActions sx={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+            {selectedTask && trainingTaskCanStop(selectedTask) ? (
+              <Button
+                color="warning"
+                variant="outlined"
+                startIcon={<StopOutlinedIcon />}
+                disabled={Boolean(stoppingTaskId)}
+                onClick={() => stopTrainingTask(selectedTask.taskId)}
+              >
+                {stoppingTaskId === selectedTask.taskId ? '正在停止…' : '停止该任务'}
+              </Button>
+            ) : (
+              <span />
+            )}
             <Button onClick={() => setDetailOpen(false)}>关闭</Button>
           </DialogActions>
         </Dialog>
