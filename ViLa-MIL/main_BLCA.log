@@ -1,0 +1,4180 @@
+
+Load Dataset
+split_dir: /home/yuehailin/dazewen/ViLa-MIL/splits/TCGA_BLCA
+################# Settings ###################
+num_splits:  4
+k_start:  -1
+k_end:  -1
+task:  task_tcga_blca_subrisk
+max_epochs:  200
+lr:  1e-05
+experiment:  None
+label_frac:  1.0
+seed:  1
+model_type:  S4MIL
+mode:  transformer
+use_drop_out:  True
+weighted_sample:  False
+opt:  adam
+split_dir:  /home/yuehailin/dazewen/ViLa-MIL/splits/TCGA_BLCA
+
+Training Fold 0!
+
+Init train/val/test splits...
+Training on 257 samples
+Validating on 65 samples
+Testing on 115 samples
+/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+
+dropout:  0.25
+
+
+Epoch: 0, train_loss: 1.0318, train_c_index: 0.4927
+Epoch: 0, validation_loss: 1.9519, validation_c_index: 0.6112
+Epoch: 0, Test_loss: 1.9303, c_index: 0.5558
+
+
+Epoch: 1, train_loss: 0.9250, train_c_index: 0.5017
+Epoch: 1, validation_loss: 1.8276, validation_c_index: 0.6344
+Epoch: 1, Test_loss: 1.8091, c_index: 0.5769
+
+
+Epoch: 2, train_loss: 0.8801, train_c_index: 0.5282
+Epoch: 2, validation_loss: 1.7505, validation_c_index: 0.6320
+Epoch: 2, Test_loss: 1.7366, c_index: 0.5866
+
+
+Epoch: 3, train_loss: 0.8624, train_c_index: 0.5051
+Epoch: 3, validation_loss: 1.7024, validation_c_index: 0.6312
+Epoch: 3, Test_loss: 1.6904, c_index: 0.5926
+
+
+Epoch: 4, train_loss: 0.8494, train_c_index: 0.5413
+Epoch: 4, validation_loss: 1.6852, validation_c_index: 0.6304
+Epoch: 4, Test_loss: 1.6740, c_index: 0.5934
+
+
+Epoch: 5, train_loss: 0.8432, train_c_index: 0.5625
+Epoch: 5, validation_loss: 1.6635, validation_c_index: 0.6280
+Epoch: 5, Test_loss: 1.6534, c_index: 0.5915
+
+
+Epoch: 6, train_loss: 0.8390, train_c_index: 0.5691
+Epoch: 6, validation_loss: 1.6575, validation_c_index: 0.6088
+Epoch: 6, Test_loss: 1.6494, c_index: 0.5926
+
+
+Epoch: 7, train_loss: 0.8341, train_c_index: 0.5594
+Epoch: 7, validation_loss: 1.6455, validation_c_index: 0.6032
+Epoch: 7, Test_loss: 1.6366, c_index: 0.5923
+
+
+Epoch: 8, train_loss: 0.8310, train_c_index: 0.5950
+Epoch: 8, validation_loss: 1.6319, validation_c_index: 0.6144
+Epoch: 8, Test_loss: 1.6240, c_index: 0.5961
+
+
+Epoch: 9, train_loss: 0.8231, train_c_index: 0.5995
+Epoch: 9, validation_loss: 1.6288, validation_c_index: 0.6120
+Epoch: 9, Test_loss: 1.6216, c_index: 0.6050
+
+
+Epoch: 10, train_loss: 0.8196, train_c_index: 0.6057
+Epoch: 10, validation_loss: 1.6200, validation_c_index: 0.6096
+Epoch: 10, Test_loss: 1.6147, c_index: 0.6021
+
+
+Epoch: 11, train_loss: 0.8152, train_c_index: 0.6147
+Epoch: 11, validation_loss: 1.6233, validation_c_index: 0.6024
+Epoch: 11, Test_loss: 1.6159, c_index: 0.6031
+
+
+Epoch: 12, train_loss: 0.8135, train_c_index: 0.6194
+Epoch: 12, validation_loss: 1.6185, validation_c_index: 0.5992
+Epoch: 12, Test_loss: 1.6125, c_index: 0.6034
+
+
+Epoch: 13, train_loss: 0.8056, train_c_index: 0.6531
+Epoch: 13, validation_loss: 1.6157, validation_c_index: 0.6128
+Epoch: 13, Test_loss: 1.6118, c_index: 0.6029
+
+
+Epoch: 14, train_loss: 0.7994, train_c_index: 0.6385
+Epoch: 14, validation_loss: 1.6140, validation_c_index: 0.6224
+Epoch: 14, Test_loss: 1.6089, c_index: 0.6107
+
+
+Epoch: 15, train_loss: 0.7964, train_c_index: 0.6396
+Epoch: 15, validation_loss: 1.6212, validation_c_index: 0.6256
+Epoch: 15, Test_loss: 1.6137, c_index: 0.6137
+
+
+Epoch: 16, train_loss: 0.7944, train_c_index: 0.6544
+Epoch: 16, validation_loss: 1.6289, validation_c_index: 0.6240
+Epoch: 16, Test_loss: 1.6217, c_index: 0.6145
+
+
+Epoch: 17, train_loss: 0.7861, train_c_index: 0.6658
+Epoch: 17, validation_loss: 1.6278, validation_c_index: 0.6248
+Epoch: 17, Test_loss: 1.6228, c_index: 0.6129
+
+
+Epoch: 18, train_loss: 0.7803, train_c_index: 0.6666
+Epoch: 18, validation_loss: 1.6334, validation_c_index: 0.6288
+Epoch: 18, Test_loss: 1.6284, c_index: 0.6121
+
+
+Epoch: 19, train_loss: 0.7797, train_c_index: 0.6757
+Epoch: 19, validation_loss: 1.6171, validation_c_index: 0.6256
+Epoch: 19, Test_loss: 1.6149, c_index: 0.6178
+
+
+Epoch: 20, train_loss: 0.7712, train_c_index: 0.6722
+Epoch: 20, validation_loss: 1.6272, validation_c_index: 0.6296
+Epoch: 20, Test_loss: 1.6263, c_index: 0.6194
+
+
+Epoch: 21, train_loss: 0.7654, train_c_index: 0.6804
+Epoch: 21, validation_loss: 1.6196, validation_c_index: 0.6312
+Epoch: 21, Test_loss: 1.6188, c_index: 0.6218
+
+
+Epoch: 22, train_loss: 0.7639, train_c_index: 0.6757
+Epoch: 22, validation_loss: 1.6289, validation_c_index: 0.6256
+Epoch: 22, Test_loss: 1.6276, c_index: 0.6253
+
+
+Epoch: 23, train_loss: 0.7599, train_c_index: 0.6780
+Epoch: 23, validation_loss: 1.6249, validation_c_index: 0.6264
+Epoch: 23, Test_loss: 1.6237, c_index: 0.6253
+
+
+Epoch: 24, train_loss: 0.7614, train_c_index: 0.6732
+Epoch: 24, validation_loss: 1.6147, validation_c_index: 0.6256
+Epoch: 24, Test_loss: 1.6159, c_index: 0.6280
+
+
+Epoch: 25, train_loss: 0.7502, train_c_index: 0.6848
+Epoch: 25, validation_loss: 1.6091, validation_c_index: 0.6216
+Epoch: 25, Test_loss: 1.6097, c_index: 0.6262
+
+
+Epoch: 26, train_loss: 0.7451, train_c_index: 0.6802
+Epoch: 26, validation_loss: 1.6426, validation_c_index: 0.6248
+Epoch: 26, Test_loss: 1.6384, c_index: 0.6191
+
+
+Epoch: 27, train_loss: 0.7418, train_c_index: 0.6900
+Epoch: 27, validation_loss: 1.6363, validation_c_index: 0.6248
+Epoch: 27, Test_loss: 1.6321, c_index: 0.6183
+
+
+Epoch: 28, train_loss: 0.7388, train_c_index: 0.6801
+Epoch: 28, validation_loss: 1.6460, validation_c_index: 0.6224
+Epoch: 28, Test_loss: 1.6400, c_index: 0.6213
+
+
+Epoch: 29, train_loss: 0.7349, train_c_index: 0.7051
+Epoch: 29, validation_loss: 1.6279, validation_c_index: 0.6208
+Epoch: 29, Test_loss: 1.6229, c_index: 0.6164
+
+
+Epoch: 30, train_loss: 0.7322, train_c_index: 0.6905
+Epoch: 30, validation_loss: 1.6415, validation_c_index: 0.6144
+Epoch: 30, Test_loss: 1.6374, c_index: 0.6221
+
+
+Epoch: 31, train_loss: 0.7264, train_c_index: 0.7076
+Epoch: 31, validation_loss: 1.6693, validation_c_index: 0.6112
+Epoch: 31, Test_loss: 1.6590, c_index: 0.6270
+
+
+Epoch: 32, train_loss: 0.7177, train_c_index: 0.6998
+Epoch: 32, validation_loss: 1.6372, validation_c_index: 0.6200
+Epoch: 32, Test_loss: 1.6278, c_index: 0.6240
+
+
+Epoch: 33, train_loss: 0.7190, train_c_index: 0.7015
+Epoch: 33, validation_loss: 1.6301, validation_c_index: 0.6200
+Epoch: 33, Test_loss: 1.6232, c_index: 0.6207
+
+
+Epoch: 34, train_loss: 0.7134, train_c_index: 0.7152
+Epoch: 34, validation_loss: 1.6457, validation_c_index: 0.6168
+Epoch: 34, Test_loss: 1.6347, c_index: 0.6194
+
+
+Epoch: 35, train_loss: 0.7152, train_c_index: 0.7050
+Epoch: 35, validation_loss: 1.6516, validation_c_index: 0.6088
+Epoch: 35, Test_loss: 1.6397, c_index: 0.6202
+
+
+Epoch: 36, train_loss: 0.7094, train_c_index: 0.7076
+Epoch: 36, validation_loss: 1.6484, validation_c_index: 0.6112
+Epoch: 36, Test_loss: 1.6348, c_index: 0.6169
+
+
+Epoch: 37, train_loss: 0.7039, train_c_index: 0.7033
+Epoch: 37, validation_loss: 1.6660, validation_c_index: 0.6120
+Epoch: 37, Test_loss: 1.6474, c_index: 0.6129
+
+
+Epoch: 38, train_loss: 0.7019, train_c_index: 0.7116
+Epoch: 38, validation_loss: 1.6451, validation_c_index: 0.6056
+Epoch: 38, Test_loss: 1.6244, c_index: 0.6126
+
+
+Epoch: 39, train_loss: 0.6960, train_c_index: 0.7086
+Epoch: 39, validation_loss: 1.6440, validation_c_index: 0.6048
+Epoch: 39, Test_loss: 1.6238, c_index: 0.6134
+
+
+Epoch: 40, train_loss: 0.6923, train_c_index: 0.7129
+Epoch: 40, validation_loss: 1.6414, validation_c_index: 0.6088
+Epoch: 40, Test_loss: 1.6186, c_index: 0.6142
+
+
+Epoch: 41, train_loss: 0.6900, train_c_index: 0.7129
+Epoch: 41, validation_loss: 1.6747, validation_c_index: 0.6064
+Epoch: 41, Test_loss: 1.6519, c_index: 0.6118
+
+
+Epoch: 42, train_loss: 0.6873, train_c_index: 0.7113
+Epoch: 42, validation_loss: 1.6811, validation_c_index: 0.6112
+Epoch: 42, Test_loss: 1.6626, c_index: 0.6104
+
+
+Epoch: 43, train_loss: 0.6845, train_c_index: 0.7081
+Epoch: 43, validation_loss: 1.6488, validation_c_index: 0.6104
+Epoch: 43, Test_loss: 1.6351, c_index: 0.6064
+
+
+Epoch: 44, train_loss: 0.6771, train_c_index: 0.7148
+Epoch: 44, validation_loss: 1.6567, validation_c_index: 0.6168
+Epoch: 44, Test_loss: 1.6370, c_index: 0.6075
+
+
+Epoch: 45, train_loss: 0.6752, train_c_index: 0.7198
+Epoch: 45, validation_loss: 1.6662, validation_c_index: 0.6136
+Epoch: 45, Test_loss: 1.6464, c_index: 0.6058
+
+
+Epoch: 46, train_loss: 0.6745, train_c_index: 0.7188
+Epoch: 46, validation_loss: 1.6497, validation_c_index: 0.6064
+Epoch: 46, Test_loss: 1.6299, c_index: 0.6026
+
+
+Epoch: 47, train_loss: 0.6696, train_c_index: 0.7271
+Epoch: 47, validation_loss: 1.6559, validation_c_index: 0.6048
+Epoch: 47, Test_loss: 1.6281, c_index: 0.6015
+
+
+Epoch: 48, train_loss: 0.6627, train_c_index: 0.7213
+Epoch: 48, validation_loss: 1.6560, validation_c_index: 0.6072
+Epoch: 48, Test_loss: 1.6255, c_index: 0.6018
+
+
+Epoch: 49, train_loss: 0.6587, train_c_index: 0.7266
+Epoch: 49, validation_loss: 1.6684, validation_c_index: 0.6096
+Epoch: 49, Test_loss: 1.6368, c_index: 0.6050
+
+
+Epoch: 50, train_loss: 0.6606, train_c_index: 0.7245
+Epoch: 50, validation_loss: 1.6774, validation_c_index: 0.6008
+Epoch: 50, Test_loss: 1.6439, c_index: 0.6034
+
+
+Epoch: 51, train_loss: 0.6548, train_c_index: 0.7290
+Epoch: 51, validation_loss: 1.6532, validation_c_index: 0.6048
+Epoch: 51, Test_loss: 1.6192, c_index: 0.5961
+
+
+Epoch: 52, train_loss: 0.6561, train_c_index: 0.7174
+Epoch: 52, validation_loss: 1.6562, validation_c_index: 0.6016
+Epoch: 52, Test_loss: 1.6195, c_index: 0.5950
+
+
+Epoch: 53, train_loss: 0.6502, train_c_index: 0.7244
+Epoch: 53, validation_loss: 1.6702, validation_c_index: 0.6032
+Epoch: 53, Test_loss: 1.6364, c_index: 0.5937
+
+
+Epoch: 54, train_loss: 0.6463, train_c_index: 0.7276
+Epoch: 54, validation_loss: 1.6451, validation_c_index: 0.6096
+Epoch: 54, Test_loss: 1.6113, c_index: 0.5866
+
+
+Epoch: 55, train_loss: 0.6424, train_c_index: 0.7223
+Epoch: 55, validation_loss: 1.6642, validation_c_index: 0.6032
+Epoch: 55, Test_loss: 1.6258, c_index: 0.5883
+
+
+Epoch: 56, train_loss: 0.6353, train_c_index: 0.7275
+Epoch: 56, validation_loss: 1.6597, validation_c_index: 0.6048
+Epoch: 56, Test_loss: 1.6209, c_index: 0.5918
+
+
+Epoch: 57, train_loss: 0.6341, train_c_index: 0.7249
+Epoch: 57, validation_loss: 1.6607, validation_c_index: 0.6072
+Epoch: 57, Test_loss: 1.6216, c_index: 0.5874
+
+
+Epoch: 58, train_loss: 0.6305, train_c_index: 0.7264
+Epoch: 58, validation_loss: 1.6565, validation_c_index: 0.6096
+Epoch: 58, Test_loss: 1.6132, c_index: 0.5853
+
+
+Epoch: 59, train_loss: 0.6243, train_c_index: 0.7350
+Epoch: 59, validation_loss: 1.6529, validation_c_index: 0.6072
+Epoch: 59, Test_loss: 1.6111, c_index: 0.5877
+
+
+Epoch: 60, train_loss: 0.6194, train_c_index: 0.7397
+Epoch: 60, validation_loss: 1.6713, validation_c_index: 0.6032
+Epoch: 60, Test_loss: 1.6251, c_index: 0.5872
+
+
+Epoch: 61, train_loss: 0.6194, train_c_index: 0.7373
+Epoch: 61, validation_loss: 1.6464, validation_c_index: 0.6048
+Epoch: 61, Test_loss: 1.6001, c_index: 0.5901
+
+
+Epoch: 62, train_loss: 0.6153, train_c_index: 0.7344
+Epoch: 62, validation_loss: 1.6704, validation_c_index: 0.6032
+Epoch: 62, Test_loss: 1.6259, c_index: 0.5888
+
+
+Epoch: 63, train_loss: 0.6141, train_c_index: 0.7314
+Epoch: 63, validation_loss: 1.6976, validation_c_index: 0.6008
+Epoch: 63, Test_loss: 1.6448, c_index: 0.5861
+
+
+Epoch: 64, train_loss: 0.6069, train_c_index: 0.7438
+Epoch: 64, validation_loss: 1.6778, validation_c_index: 0.6016
+Epoch: 64, Test_loss: 1.6247, c_index: 0.5874
+
+
+Epoch: 65, train_loss: 0.6076, train_c_index: 0.7465
+Epoch: 65, validation_loss: 1.7135, validation_c_index: 0.6008
+Epoch: 65, Test_loss: 1.6530, c_index: 0.5874
+
+
+Epoch: 66, train_loss: 0.6028, train_c_index: 0.7343
+Epoch: 66, validation_loss: 1.6776, validation_c_index: 0.5984
+Epoch: 66, Test_loss: 1.6246, c_index: 0.5858
+
+
+Epoch: 67, train_loss: 0.6011, train_c_index: 0.7319
+Epoch: 67, validation_loss: 1.6764, validation_c_index: 0.6000
+Epoch: 67, Test_loss: 1.6252, c_index: 0.5831
+
+
+Epoch: 68, train_loss: 0.5954, train_c_index: 0.7423
+Epoch: 68, validation_loss: 1.6882, validation_c_index: 0.6000
+Epoch: 68, Test_loss: 1.6323, c_index: 0.5836
+
+
+Epoch: 69, train_loss: 0.5899, train_c_index: 0.7387
+Epoch: 69, validation_loss: 1.7009, validation_c_index: 0.5976
+Epoch: 69, Test_loss: 1.6381, c_index: 0.5874
+
+
+Epoch: 70, train_loss: 0.5884, train_c_index: 0.7418
+Epoch: 70, validation_loss: 1.6967, validation_c_index: 0.6064
+Epoch: 70, Test_loss: 1.6359, c_index: 0.5820
+
+
+Epoch: 71, train_loss: 0.5849, train_c_index: 0.7487
+Epoch: 71, validation_loss: 1.6793, validation_c_index: 0.5976
+Epoch: 71, Test_loss: 1.6185, c_index: 0.5769
+
+
+Epoch: 72, train_loss: 0.5849, train_c_index: 0.7398
+Epoch: 72, validation_loss: 1.6691, validation_c_index: 0.6048
+Epoch: 72, Test_loss: 1.6057, c_index: 0.5769
+
+
+Epoch: 73, train_loss: 0.5831, train_c_index: 0.7391
+Epoch: 73, validation_loss: 1.6999, validation_c_index: 0.5968
+Epoch: 73, Test_loss: 1.6335, c_index: 0.5796
+
+
+Epoch: 74, train_loss: 0.5768, train_c_index: 0.7503
+Epoch: 74, validation_loss: 1.6695, validation_c_index: 0.5952
+Epoch: 74, Test_loss: 1.5979, c_index: 0.5812
+
+
+Epoch: 75, train_loss: 0.5743, train_c_index: 0.7370
+Epoch: 75, validation_loss: 1.6995, validation_c_index: 0.5944
+Epoch: 75, Test_loss: 1.6313, c_index: 0.5777
+
+
+Epoch: 76, train_loss: 0.5678, train_c_index: 0.7524
+Epoch: 76, validation_loss: 1.6964, validation_c_index: 0.5960
+Epoch: 76, Test_loss: 1.6286, c_index: 0.5788
+
+
+Epoch: 77, train_loss: 0.5661, train_c_index: 0.7532
+Epoch: 77, validation_loss: 1.6923, validation_c_index: 0.6016
+Epoch: 77, Test_loss: 1.6242, c_index: 0.5763
+
+
+Epoch: 78, train_loss: 0.5634, train_c_index: 0.7488
+Epoch: 78, validation_loss: 1.7018, validation_c_index: 0.6000
+Epoch: 78, Test_loss: 1.6377, c_index: 0.5780
+
+
+Epoch: 79, train_loss: 0.5621, train_c_index: 0.7393
+Epoch: 79, validation_loss: 1.6443, validation_c_index: 0.5952
+Epoch: 79, Test_loss: 1.5705, c_index: 0.5766
+
+
+Epoch: 80, train_loss: 0.5589, train_c_index: 0.7518
+Epoch: 80, validation_loss: 1.7081, validation_c_index: 0.5936
+Epoch: 80, Test_loss: 1.6291, c_index: 0.5758
+
+
+Epoch: 81, train_loss: 0.5545, train_c_index: 0.7524
+Epoch: 81, validation_loss: 1.6853, validation_c_index: 0.6008
+Epoch: 81, Test_loss: 1.6104, c_index: 0.5744
+
+
+Epoch: 82, train_loss: 0.5522, train_c_index: 0.7478
+Epoch: 82, validation_loss: 1.6744, validation_c_index: 0.5968
+Epoch: 82, Test_loss: 1.6007, c_index: 0.5769
+
+
+Epoch: 83, train_loss: 0.5486, train_c_index: 0.7618
+Epoch: 83, validation_loss: 1.6993, validation_c_index: 0.5864
+Epoch: 83, Test_loss: 1.6178, c_index: 0.5788
+
+
+Epoch: 84, train_loss: 0.5473, train_c_index: 0.7521
+Epoch: 84, validation_loss: 1.7266, validation_c_index: 0.5832
+Epoch: 84, Test_loss: 1.6380, c_index: 0.5774
+
+
+Epoch: 85, train_loss: 0.5421, train_c_index: 0.7525
+Epoch: 85, validation_loss: 1.6873, validation_c_index: 0.5920
+Epoch: 85, Test_loss: 1.6088, c_index: 0.5734
+
+
+Epoch: 86, train_loss: 0.5423, train_c_index: 0.7477
+Epoch: 86, validation_loss: 1.7078, validation_c_index: 0.5864
+Epoch: 86, Test_loss: 1.6192, c_index: 0.5731
+
+
+Epoch: 87, train_loss: 0.5384, train_c_index: 0.7559
+Epoch: 87, validation_loss: 1.7158, validation_c_index: 0.5920
+Epoch: 87, Test_loss: 1.6247, c_index: 0.5772
+
+
+Epoch: 88, train_loss: 0.5321, train_c_index: 0.7536
+Epoch: 88, validation_loss: 1.7505, validation_c_index: 0.5896
+Epoch: 88, Test_loss: 1.6558, c_index: 0.5772
+
+
+Epoch: 89, train_loss: 0.5283, train_c_index: 0.7545
+Epoch: 89, validation_loss: 1.7186, validation_c_index: 0.5952
+Epoch: 89, Test_loss: 1.6309, c_index: 0.5720
+
+
+Epoch: 90, train_loss: 0.5268, train_c_index: 0.7604
+Epoch: 90, validation_loss: 1.7064, validation_c_index: 0.5960
+Epoch: 90, Test_loss: 1.6150, c_index: 0.5666
+
+
+Epoch: 91, train_loss: 0.5183, train_c_index: 0.7649
+Epoch: 91, validation_loss: 1.6455, validation_c_index: 0.5928
+Epoch: 91, Test_loss: 1.5653, c_index: 0.5666
+
+
+Epoch: 92, train_loss: 0.5192, train_c_index: 0.7594
+Epoch: 92, validation_loss: 1.7452, validation_c_index: 0.5880
+Epoch: 92, Test_loss: 1.6445, c_index: 0.5696
+
+
+Epoch: 93, train_loss: 0.5176, train_c_index: 0.7621
+Epoch: 93, validation_loss: 1.7353, validation_c_index: 0.5904
+Epoch: 93, Test_loss: 1.6406, c_index: 0.5688
+
+
+Epoch: 94, train_loss: 0.5154, train_c_index: 0.7681
+Epoch: 94, validation_loss: 1.7328, validation_c_index: 0.5896
+Epoch: 94, Test_loss: 1.6328, c_index: 0.5669
+
+
+Epoch: 95, train_loss: 0.5062, train_c_index: 0.7656
+Epoch: 95, validation_loss: 1.7046, validation_c_index: 0.5920
+Epoch: 95, Test_loss: 1.6014, c_index: 0.5666
+
+
+Epoch: 96, train_loss: 0.5078, train_c_index: 0.7616
+Epoch: 96, validation_loss: 1.7168, validation_c_index: 0.5872
+Epoch: 96, Test_loss: 1.6134, c_index: 0.5682
+
+
+Epoch: 97, train_loss: 0.5056, train_c_index: 0.7652
+Epoch: 97, validation_loss: 1.7372, validation_c_index: 0.5856
+Epoch: 97, Test_loss: 1.6341, c_index: 0.5644
+
+
+Epoch: 98, train_loss: 0.4998, train_c_index: 0.7657
+Epoch: 98, validation_loss: 1.6989, validation_c_index: 0.5896
+Epoch: 98, Test_loss: 1.6012, c_index: 0.5596
+
+
+Epoch: 99, train_loss: 0.5017, train_c_index: 0.7647
+Epoch: 99, validation_loss: 1.7026, validation_c_index: 0.5872
+Epoch: 99, Test_loss: 1.6090, c_index: 0.5601
+
+
+Epoch: 100, train_loss: 0.4950, train_c_index: 0.7689
+Epoch: 100, validation_loss: 1.6355, validation_c_index: 0.5904
+Epoch: 100, Test_loss: 1.5431, c_index: 0.5577
+
+
+Epoch: 101, train_loss: 0.4944, train_c_index: 0.7653
+Epoch: 101, validation_loss: 1.6830, validation_c_index: 0.5912
+Epoch: 101, Test_loss: 1.5789, c_index: 0.5661
+
+
+Epoch: 102, train_loss: 0.4900, train_c_index: 0.7680
+Epoch: 102, validation_loss: 1.7229, validation_c_index: 0.5904
+Epoch: 102, Test_loss: 1.6220, c_index: 0.5625
+
+
+Epoch: 103, train_loss: 0.4892, train_c_index: 0.7675
+Epoch: 103, validation_loss: 1.7284, validation_c_index: 0.5928
+Epoch: 103, Test_loss: 1.6192, c_index: 0.5612
+
+
+Epoch: 104, train_loss: 0.4837, train_c_index: 0.7667
+Epoch: 104, validation_loss: 1.7039, validation_c_index: 0.5872
+Epoch: 104, Test_loss: 1.6083, c_index: 0.5639
+
+
+Epoch: 105, train_loss: 0.4819, train_c_index: 0.7713
+Epoch: 105, validation_loss: 1.7269, validation_c_index: 0.5824
+Epoch: 105, Test_loss: 1.6309, c_index: 0.5642
+
+
+Epoch: 106, train_loss: 0.4802, train_c_index: 0.7704
+Epoch: 106, validation_loss: 1.7274, validation_c_index: 0.5848
+Epoch: 106, Test_loss: 1.6232, c_index: 0.5629
+
+
+Epoch: 107, train_loss: 0.4759, train_c_index: 0.7703
+Epoch: 107, validation_loss: 1.6957, validation_c_index: 0.5824
+Epoch: 107, Test_loss: 1.5925, c_index: 0.5593
+
+
+Epoch: 108, train_loss: 0.4709, train_c_index: 0.7767
+Epoch: 108, validation_loss: 1.7540, validation_c_index: 0.5800
+Epoch: 108, Test_loss: 1.6429, c_index: 0.5590
+
+
+Epoch: 109, train_loss: 0.4752, train_c_index: 0.7740
+Epoch: 109, validation_loss: 1.6969, validation_c_index: 0.5808
+Epoch: 109, Test_loss: 1.5894, c_index: 0.5593
+
+
+Epoch: 110, train_loss: 0.4689, train_c_index: 0.7745
+Epoch: 110, validation_loss: 1.7156, validation_c_index: 0.5856
+Epoch: 110, Test_loss: 1.6170, c_index: 0.5568
+
+
+Epoch: 111, train_loss: 0.4658, train_c_index: 0.7791
+Epoch: 111, validation_loss: 1.7607, validation_c_index: 0.5808
+Epoch: 111, Test_loss: 1.6484, c_index: 0.5563
+
+
+Epoch: 112, train_loss: 0.4606, train_c_index: 0.7824
+Epoch: 112, validation_loss: 1.8003, validation_c_index: 0.5776
+Epoch: 112, Test_loss: 1.6683, c_index: 0.5631
+
+
+Epoch: 113, train_loss: 0.4579, train_c_index: 0.7771
+Epoch: 113, validation_loss: 1.7150, validation_c_index: 0.5824
+Epoch: 113, Test_loss: 1.5960, c_index: 0.5555
+
+
+Epoch: 114, train_loss: 0.4545, train_c_index: 0.7767
+Epoch: 114, validation_loss: 1.7339, validation_c_index: 0.5776
+Epoch: 114, Test_loss: 1.6173, c_index: 0.5593
+
+
+Epoch: 115, train_loss: 0.4538, train_c_index: 0.7756
+Epoch: 115, validation_loss: 1.7254, validation_c_index: 0.5736
+Epoch: 115, Test_loss: 1.6071, c_index: 0.5593
+
+
+Epoch: 116, train_loss: 0.4498, train_c_index: 0.7849
+Epoch: 116, validation_loss: 1.7518, validation_c_index: 0.5776
+Epoch: 116, Test_loss: 1.6332, c_index: 0.5571
+
+
+Epoch: 117, train_loss: 0.4491, train_c_index: 0.7828
+Epoch: 117, validation_loss: 1.7422, validation_c_index: 0.5832
+Epoch: 117, Test_loss: 1.6222, c_index: 0.5560
+
+
+Epoch: 118, train_loss: 0.4460, train_c_index: 0.7750
+Epoch: 118, validation_loss: 1.7280, validation_c_index: 0.5808
+Epoch: 118, Test_loss: 1.6195, c_index: 0.5539
+
+
+Epoch: 119, train_loss: 0.4433, train_c_index: 0.7872
+Epoch: 119, validation_loss: 1.7534, validation_c_index: 0.5712
+Epoch: 119, Test_loss: 1.6365, c_index: 0.5585
+
+
+Epoch: 120, train_loss: 0.4403, train_c_index: 0.7779
+Epoch: 120, validation_loss: 1.7412, validation_c_index: 0.5776
+Epoch: 120, Test_loss: 1.6121, c_index: 0.5593
+
+
+Epoch: 121, train_loss: 0.4388, train_c_index: 0.7800
+Epoch: 121, validation_loss: 1.8072, validation_c_index: 0.5800
+Epoch: 121, Test_loss: 1.6773, c_index: 0.5587
+
+
+Epoch: 122, train_loss: 0.4391, train_c_index: 0.7768
+Epoch: 122, validation_loss: 1.7294, validation_c_index: 0.5784
+Epoch: 122, Test_loss: 1.6218, c_index: 0.5568
+
+
+Epoch: 123, train_loss: 0.4279, train_c_index: 0.7854
+Epoch: 123, validation_loss: 1.7934, validation_c_index: 0.5752
+Epoch: 123, Test_loss: 1.6676, c_index: 0.5574
+
+
+Epoch: 124, train_loss: 0.4295, train_c_index: 0.7851
+Epoch: 124, validation_loss: 1.7156, validation_c_index: 0.5752
+Epoch: 124, Test_loss: 1.5974, c_index: 0.5522
+
+
+Epoch: 125, train_loss: 0.4280, train_c_index: 0.7846
+Epoch: 125, validation_loss: 1.7152, validation_c_index: 0.5800
+Epoch: 125, Test_loss: 1.5864, c_index: 0.5528
+
+
+Epoch: 126, train_loss: 0.4256, train_c_index: 0.7877
+Epoch: 126, validation_loss: 1.7452, validation_c_index: 0.5760
+Epoch: 126, Test_loss: 1.6070, c_index: 0.5577
+
+
+Epoch: 127, train_loss: 0.4184, train_c_index: 0.7835
+Epoch: 127, validation_loss: 1.7089, validation_c_index: 0.5800
+Epoch: 127, Test_loss: 1.5855, c_index: 0.5525
+
+
+Epoch: 128, train_loss: 0.4149, train_c_index: 0.7853
+Epoch: 128, validation_loss: 1.7481, validation_c_index: 0.5720
+Epoch: 128, Test_loss: 1.6291, c_index: 0.5512
+
+
+Epoch: 129, train_loss: 0.4148, train_c_index: 0.7845
+Epoch: 129, validation_loss: 1.7393, validation_c_index: 0.5688
+Epoch: 129, Test_loss: 1.6101, c_index: 0.5514
+
+
+Epoch: 130, train_loss: 0.4111, train_c_index: 0.7829
+Epoch: 130, validation_loss: 1.7591, validation_c_index: 0.5768
+Epoch: 130, Test_loss: 1.6239, c_index: 0.5490
+
+
+Epoch: 131, train_loss: 0.4136, train_c_index: 0.7873
+Epoch: 131, validation_loss: 1.7726, validation_c_index: 0.5776
+Epoch: 131, Test_loss: 1.6454, c_index: 0.5455
+
+
+Epoch: 132, train_loss: 0.4094, train_c_index: 0.7833
+Epoch: 132, validation_loss: 1.7269, validation_c_index: 0.5768
+Epoch: 132, Test_loss: 1.6017, c_index: 0.5463
+
+
+Epoch: 133, train_loss: 0.4081, train_c_index: 0.7860
+Epoch: 133, validation_loss: 1.7387, validation_c_index: 0.5784
+Epoch: 133, Test_loss: 1.6192, c_index: 0.5449
+
+
+Epoch: 134, train_loss: 0.4053, train_c_index: 0.7896
+Epoch: 134, validation_loss: 1.6768, validation_c_index: 0.5784
+Epoch: 134, Test_loss: 1.5650, c_index: 0.5452
+
+
+Epoch: 135, train_loss: 0.3997, train_c_index: 0.7915
+Epoch: 135, validation_loss: 1.7048, validation_c_index: 0.5848
+Epoch: 135, Test_loss: 1.5993, c_index: 0.5452
+
+
+Epoch: 136, train_loss: 0.3956, train_c_index: 0.7961
+Epoch: 136, validation_loss: 1.7704, validation_c_index: 0.5688
+Epoch: 136, Test_loss: 1.6303, c_index: 0.5466
+
+
+Epoch: 137, train_loss: 0.3970, train_c_index: 0.7900
+Epoch: 137, validation_loss: 1.7385, validation_c_index: 0.5736
+Epoch: 137, Test_loss: 1.6110, c_index: 0.5417
+
+
+Epoch: 138, train_loss: 0.3937, train_c_index: 0.7923
+Epoch: 138, validation_loss: 1.7765, validation_c_index: 0.5752
+Epoch: 138, Test_loss: 1.6508, c_index: 0.5398
+
+
+Epoch: 139, train_loss: 0.3931, train_c_index: 0.7926
+Epoch: 139, validation_loss: 1.8087, validation_c_index: 0.5712
+Epoch: 139, Test_loss: 1.6825, c_index: 0.5403
+
+
+Epoch: 140, train_loss: 0.3854, train_c_index: 0.7970
+Epoch: 140, validation_loss: 1.7825, validation_c_index: 0.5672
+Epoch: 140, Test_loss: 1.6451, c_index: 0.5457
+
+
+Epoch: 141, train_loss: 0.3870, train_c_index: 0.7950
+Epoch: 141, validation_loss: 1.7502, validation_c_index: 0.5728
+Epoch: 141, Test_loss: 1.6106, c_index: 0.5436
+
+
+Epoch: 142, train_loss: 0.3871, train_c_index: 0.7914
+Epoch: 142, validation_loss: 1.7477, validation_c_index: 0.5728
+Epoch: 142, Test_loss: 1.6171, c_index: 0.5417
+
+
+Epoch: 143, train_loss: 0.3844, train_c_index: 0.7923
+Epoch: 143, validation_loss: 1.7039, validation_c_index: 0.5712
+Epoch: 143, Test_loss: 1.5814, c_index: 0.5403
+
+
+Epoch: 144, train_loss: 0.3833, train_c_index: 0.7981
+Epoch: 144, validation_loss: 1.7915, validation_c_index: 0.5760
+Epoch: 144, Test_loss: 1.6553, c_index: 0.5449
+
+
+Epoch: 145, train_loss: 0.3762, train_c_index: 0.7947
+Epoch: 145, validation_loss: 1.6788, validation_c_index: 0.5768
+Epoch: 145, Test_loss: 1.5578, c_index: 0.5406
+
+
+Epoch: 146, train_loss: 0.3781, train_c_index: 0.8000
+Epoch: 146, validation_loss: 1.7446, validation_c_index: 0.5752
+Epoch: 146, Test_loss: 1.6010, c_index: 0.5374
+
+
+Epoch: 147, train_loss: 0.3765, train_c_index: 0.7904
+Epoch: 147, validation_loss: 1.7592, validation_c_index: 0.5704
+Epoch: 147, Test_loss: 1.6165, c_index: 0.5403
+
+
+Epoch: 148, train_loss: 0.3710, train_c_index: 0.7953
+Epoch: 148, validation_loss: 1.7404, validation_c_index: 0.5704
+Epoch: 148, Test_loss: 1.6011, c_index: 0.5414
+
+
+Epoch: 149, train_loss: 0.3707, train_c_index: 0.7945
+Epoch: 149, validation_loss: 1.6816, validation_c_index: 0.5744
+Epoch: 149, Test_loss: 1.5428, c_index: 0.5395
+
+
+Epoch: 150, train_loss: 0.3639, train_c_index: 0.8011
+Epoch: 150, validation_loss: 1.7271, validation_c_index: 0.5712
+Epoch: 150, Test_loss: 1.5746, c_index: 0.5384
+
+
+Epoch: 151, train_loss: 0.3638, train_c_index: 0.8005
+Epoch: 151, validation_loss: 1.7870, validation_c_index: 0.5688
+Epoch: 151, Test_loss: 1.6347, c_index: 0.5387
+
+
+Epoch: 152, train_loss: 0.3620, train_c_index: 0.7989
+Epoch: 152, validation_loss: 1.8144, validation_c_index: 0.5688
+Epoch: 152, Test_loss: 1.6646, c_index: 0.5382
+
+
+Epoch: 153, train_loss: 0.3569, train_c_index: 0.7929
+Epoch: 153, validation_loss: 1.8207, validation_c_index: 0.5648
+Epoch: 153, Test_loss: 1.6494, c_index: 0.5460
+
+
+Epoch: 154, train_loss: 0.3566, train_c_index: 0.7963
+Epoch: 154, validation_loss: 1.7636, validation_c_index: 0.5720
+Epoch: 154, Test_loss: 1.6072, c_index: 0.5393
+
+
+Epoch: 155, train_loss: 0.3519, train_c_index: 0.7977
+Epoch: 155, validation_loss: 1.7719, validation_c_index: 0.5736
+Epoch: 155, Test_loss: 1.6171, c_index: 0.5374
+
+
+Epoch: 156, train_loss: 0.3471, train_c_index: 0.8004
+Epoch: 156, validation_loss: 1.7947, validation_c_index: 0.5720
+Epoch: 156, Test_loss: 1.6328, c_index: 0.5390
+
+
+Epoch: 157, train_loss: 0.3483, train_c_index: 0.8018
+Epoch: 157, validation_loss: 1.7529, validation_c_index: 0.5704
+Epoch: 157, Test_loss: 1.5856, c_index: 0.5382
+
+
+Epoch: 158, train_loss: 0.3419, train_c_index: 0.7991
+Epoch: 158, validation_loss: 1.8402, validation_c_index: 0.5672
+Epoch: 158, Test_loss: 1.6586, c_index: 0.5398
+
+
+Epoch: 159, train_loss: 0.3420, train_c_index: 0.8043
+Epoch: 159, validation_loss: 1.7561, validation_c_index: 0.5712
+Epoch: 159, Test_loss: 1.5923, c_index: 0.5379
+
+
+Epoch: 160, train_loss: 0.3425, train_c_index: 0.7978
+Epoch: 160, validation_loss: 1.7865, validation_c_index: 0.5744
+Epoch: 160, Test_loss: 1.6125, c_index: 0.5393
+
+
+Epoch: 161, train_loss: 0.3385, train_c_index: 0.7970
+Epoch: 161, validation_loss: 1.7814, validation_c_index: 0.5680
+Epoch: 161, Test_loss: 1.6086, c_index: 0.5393
+
+
+Epoch: 162, train_loss: 0.3355, train_c_index: 0.8020
+Epoch: 162, validation_loss: 1.8671, validation_c_index: 0.5648
+Epoch: 162, Test_loss: 1.6954, c_index: 0.5349
+
+
+Epoch: 163, train_loss: 0.3422, train_c_index: 0.7945
+Epoch: 163, validation_loss: 1.7643, validation_c_index: 0.5672
+Epoch: 163, Test_loss: 1.6057, c_index: 0.5306
+
+
+Epoch: 164, train_loss: 0.3322, train_c_index: 0.7993
+Epoch: 164, validation_loss: 1.7421, validation_c_index: 0.5704
+Epoch: 164, Test_loss: 1.5751, c_index: 0.5341
+
+
+Epoch: 165, train_loss: 0.3277, train_c_index: 0.8087
+Epoch: 165, validation_loss: 1.7228, validation_c_index: 0.5688
+Epoch: 165, Test_loss: 1.5644, c_index: 0.5357
+
+
+Epoch: 166, train_loss: 0.3296, train_c_index: 0.8069
+Epoch: 166, validation_loss: 1.8036, validation_c_index: 0.5672
+Epoch: 166, Test_loss: 1.6376, c_index: 0.5355
+
+
+Epoch: 167, train_loss: 0.3225, train_c_index: 0.8022
+Epoch: 167, validation_loss: 1.7106, validation_c_index: 0.5728
+Epoch: 167, Test_loss: 1.5465, c_index: 0.5338
+
+
+Epoch: 168, train_loss: 0.3214, train_c_index: 0.8026
+Epoch: 168, validation_loss: 1.7358, validation_c_index: 0.5792
+Epoch: 168, Test_loss: 1.5768, c_index: 0.5352
+
+
+Epoch: 169, train_loss: 0.3233, train_c_index: 0.7960
+Epoch: 169, validation_loss: 1.7375, validation_c_index: 0.5808
+Epoch: 169, Test_loss: 1.5838, c_index: 0.5347
+
+
+Epoch: 170, train_loss: 0.3172, train_c_index: 0.8070
+Epoch: 170, validation_loss: 1.7869, validation_c_index: 0.5656
+Epoch: 170, Test_loss: 1.6279, c_index: 0.5414
+
+
+Epoch: 171, train_loss: 0.3169, train_c_index: 0.8015
+Epoch: 171, validation_loss: 1.7536, validation_c_index: 0.5744
+Epoch: 171, Test_loss: 1.6011, c_index: 0.5352
+
+
+Epoch: 172, train_loss: 0.3162, train_c_index: 0.8029
+Epoch: 172, validation_loss: 1.7802, validation_c_index: 0.5648
+Epoch: 172, Test_loss: 1.6289, c_index: 0.5393
+
+
+Epoch: 173, train_loss: 0.3097, train_c_index: 0.8026
+Epoch: 173, validation_loss: 1.8154, validation_c_index: 0.5656
+Epoch: 173, Test_loss: 1.6573, c_index: 0.5355
+
+
+Epoch: 174, train_loss: 0.3052, train_c_index: 0.8058
+Epoch: 174, validation_loss: 1.7946, validation_c_index: 0.5688
+Epoch: 174, Test_loss: 1.6315, c_index: 0.5336
+
+
+Epoch: 175, train_loss: 0.3071, train_c_index: 0.8056
+Epoch: 175, validation_loss: 1.8585, validation_c_index: 0.5600
+Epoch: 175, Test_loss: 1.6927, c_index: 0.5330
+
+
+Epoch: 176, train_loss: 0.3061, train_c_index: 0.8097
+Epoch: 176, validation_loss: 1.7274, validation_c_index: 0.5688
+Epoch: 176, Test_loss: 1.5532, c_index: 0.5338
+
+
+Epoch: 177, train_loss: 0.3084, train_c_index: 0.8095
+Epoch: 177, validation_loss: 1.7861, validation_c_index: 0.5584
+Epoch: 177, Test_loss: 1.6070, c_index: 0.5344
+
+
+Epoch: 178, train_loss: 0.3009, train_c_index: 0.8032
+Epoch: 178, validation_loss: 1.7200, validation_c_index: 0.5632
+Epoch: 178, Test_loss: 1.5584, c_index: 0.5290
+
+
+Epoch: 179, train_loss: 0.3010, train_c_index: 0.8084
+Epoch: 179, validation_loss: 1.7857, validation_c_index: 0.5600
+Epoch: 179, Test_loss: 1.6050, c_index: 0.5365
+
+
+Epoch: 180, train_loss: 0.2976, train_c_index: 0.8081
+Epoch: 180, validation_loss: 1.7844, validation_c_index: 0.5664
+Epoch: 180, Test_loss: 1.6127, c_index: 0.5306
+
+
+Epoch: 181, train_loss: 0.2917, train_c_index: 0.8082
+Epoch: 181, validation_loss: 1.8436, validation_c_index: 0.5648
+Epoch: 181, Test_loss: 1.6635, c_index: 0.5287
+
+
+Epoch: 182, train_loss: 0.2951, train_c_index: 0.8020
+Epoch: 182, validation_loss: 1.7819, validation_c_index: 0.5632
+Epoch: 182, Test_loss: 1.6055, c_index: 0.5333
+
+
+Epoch: 183, train_loss: 0.2921, train_c_index: 0.8152
+Epoch: 183, validation_loss: 1.8463, validation_c_index: 0.5576
+Epoch: 183, Test_loss: 1.6697, c_index: 0.5365
+
+
+Epoch: 184, train_loss: 0.2875, train_c_index: 0.8099
+Epoch: 184, validation_loss: 1.8021, validation_c_index: 0.5608
+Epoch: 184, Test_loss: 1.6251, c_index: 0.5363
+
+
+Epoch: 185, train_loss: 0.2847, train_c_index: 0.8074
+Epoch: 185, validation_loss: 1.8710, validation_c_index: 0.5584
+Epoch: 185, Test_loss: 1.6912, c_index: 0.5333
+
+
+Epoch: 186, train_loss: 0.2828, train_c_index: 0.8082
+Epoch: 186, validation_loss: 1.8206, validation_c_index: 0.5616
+Epoch: 186, Test_loss: 1.6443, c_index: 0.5344
+
+
+Epoch: 187, train_loss: 0.2817, train_c_index: 0.8065
+Epoch: 187, validation_loss: 1.8307, validation_c_index: 0.5560
+Epoch: 187, Test_loss: 1.6614, c_index: 0.5349
+
+
+Epoch: 188, train_loss: 0.2823, train_c_index: 0.8131
+Epoch: 188, validation_loss: 1.8629, validation_c_index: 0.5592
+Epoch: 188, Test_loss: 1.6709, c_index: 0.5317
+
+
+Epoch: 189, train_loss: 0.2780, train_c_index: 0.8094
+Epoch: 189, validation_loss: 1.8588, validation_c_index: 0.5632
+Epoch: 189, Test_loss: 1.6555, c_index: 0.5347
+
+
+Epoch: 190, train_loss: 0.2752, train_c_index: 0.8064
+Epoch: 190, validation_loss: 1.7555, validation_c_index: 0.5712
+Epoch: 190, Test_loss: 1.5804, c_index: 0.5292
+
+
+Epoch: 191, train_loss: 0.2696, train_c_index: 0.8127
+Epoch: 191, validation_loss: 1.8971, validation_c_index: 0.5664
+Epoch: 191, Test_loss: 1.6843, c_index: 0.5284
+
+
+Epoch: 192, train_loss: 0.2757, train_c_index: 0.8040
+Epoch: 192, validation_loss: 1.8872, validation_c_index: 0.5592
+Epoch: 192, Test_loss: 1.6799, c_index: 0.5322
+
+
+Epoch: 193, train_loss: 0.2666, train_c_index: 0.8071
+Epoch: 193, validation_loss: 1.8870, validation_c_index: 0.5688
+Epoch: 193, Test_loss: 1.6877, c_index: 0.5284
+
+
+Epoch: 194, train_loss: 0.2679, train_c_index: 0.8146
+Epoch: 194, validation_loss: 1.7778, validation_c_index: 0.5608
+Epoch: 194, Test_loss: 1.5905, c_index: 0.5319
+
+
+Epoch: 195, train_loss: 0.2654, train_c_index: 0.8153
+Epoch: 195, validation_loss: 1.9128, validation_c_index: 0.5632
+Epoch: 195, Test_loss: 1.7100, c_index: 0.5273
+
+
+Epoch: 196, train_loss: 0.2648, train_c_index: 0.8083
+Epoch: 196, validation_loss: 1.8278, validation_c_index: 0.5616
+Epoch: 196, Test_loss: 1.6292, c_index: 0.5306
+
+
+Epoch: 197, train_loss: 0.2602, train_c_index: 0.8155
+Epoch: 197, validation_loss: 1.8510, validation_c_index: 0.5592
+Epoch: 197, Test_loss: 1.6599, c_index: 0.5271
+
+
+Epoch: 198, train_loss: 0.2599, train_c_index: 0.8137
+Epoch: 198, validation_loss: 1.8762, validation_c_index: 0.5584
+Epoch: 198, Test_loss: 1.6705, c_index: 0.5295
+
+
+Epoch: 199, train_loss: 0.2619, train_c_index: 0.8086
+Epoch: 199, validation_loss: 1.8552, validation_c_index: 0.5624
+Epoch: 199, Test_loss: 1.6654, c_index: 0.5282
+
+Training Fold 1!
+
+Init train/val/test splits...
+Training on 254 samples
+Validating on 72 samples
+Testing on 111 samples
+/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+
+dropout:  0.25
+
+
+Epoch: 0, train_loss: 1.4995, train_c_index: 0.4985
+Epoch: 0, validation_loss: 1.3326, validation_c_index: 0.5394
+Epoch: 0, Test_loss: 1.0801, c_index: 0.5971
+
+
+Epoch: 1, train_loss: 1.2382, train_c_index: 0.4722
+Epoch: 1, validation_loss: 1.1583, validation_c_index: 0.5490
+Epoch: 1, Test_loss: 1.0139, c_index: 0.6054
+
+
+Epoch: 2, train_loss: 1.1032, train_c_index: 0.5161
+Epoch: 2, validation_loss: 1.0664, validation_c_index: 0.5497
+Epoch: 2, Test_loss: 1.0029, c_index: 0.6060
+
+
+Epoch: 3, train_loss: 1.0348, train_c_index: 0.5209
+Epoch: 3, validation_loss: 1.0164, validation_c_index: 0.5545
+Epoch: 3, Test_loss: 1.0089, c_index: 0.5983
+
+
+Epoch: 4, train_loss: 0.9968, train_c_index: 0.5435
+Epoch: 4, validation_loss: 0.9897, validation_c_index: 0.5538
+Epoch: 4, Test_loss: 1.0194, c_index: 0.5891
+
+
+Epoch: 5, train_loss: 0.9677, train_c_index: 0.5726
+Epoch: 5, validation_loss: 0.9711, validation_c_index: 0.5490
+Epoch: 5, Test_loss: 1.0333, c_index: 0.5764
+
+
+Epoch: 6, train_loss: 0.9507, train_c_index: 0.5401
+Epoch: 6, validation_loss: 0.9603, validation_c_index: 0.5469
+Epoch: 6, Test_loss: 1.0471, c_index: 0.5675
+
+
+Epoch: 7, train_loss: 0.9380, train_c_index: 0.5844
+Epoch: 7, validation_loss: 0.9538, validation_c_index: 0.5476
+Epoch: 7, Test_loss: 1.0590, c_index: 0.5568
+
+
+Epoch: 8, train_loss: 0.9260, train_c_index: 0.5620
+Epoch: 8, validation_loss: 0.9473, validation_c_index: 0.5428
+Epoch: 8, Test_loss: 1.0717, c_index: 0.5426
+
+
+Epoch: 9, train_loss: 0.9196, train_c_index: 0.5749
+Epoch: 9, validation_loss: 0.9450, validation_c_index: 0.5408
+Epoch: 9, Test_loss: 1.0798, c_index: 0.5441
+
+
+Epoch: 10, train_loss: 0.9105, train_c_index: 0.5974
+Epoch: 10, validation_loss: 0.9427, validation_c_index: 0.5408
+Epoch: 10, Test_loss: 1.0884, c_index: 0.5400
+
+
+Epoch: 11, train_loss: 0.9079, train_c_index: 0.5962
+Epoch: 11, validation_loss: 0.9412, validation_c_index: 0.5326
+Epoch: 11, Test_loss: 1.0944, c_index: 0.5414
+
+
+Epoch: 12, train_loss: 0.9048, train_c_index: 0.5999
+Epoch: 12, validation_loss: 0.9393, validation_c_index: 0.5271
+Epoch: 12, Test_loss: 1.1011, c_index: 0.5411
+
+
+Epoch: 13, train_loss: 0.8953, train_c_index: 0.6112
+Epoch: 13, validation_loss: 0.9384, validation_c_index: 0.5271
+Epoch: 13, Test_loss: 1.1045, c_index: 0.5409
+
+
+Epoch: 14, train_loss: 0.8938, train_c_index: 0.6188
+Epoch: 14, validation_loss: 0.9391, validation_c_index: 0.5312
+Epoch: 14, Test_loss: 1.1097, c_index: 0.5429
+
+
+Epoch: 15, train_loss: 0.8905, train_c_index: 0.6084
+Epoch: 15, validation_loss: 0.9420, validation_c_index: 0.5209
+Epoch: 15, Test_loss: 1.1112, c_index: 0.5438
+
+
+Epoch: 16, train_loss: 0.8843, train_c_index: 0.6199
+Epoch: 16, validation_loss: 0.9422, validation_c_index: 0.5093
+Epoch: 16, Test_loss: 1.1156, c_index: 0.5373
+
+
+Epoch: 17, train_loss: 0.8831, train_c_index: 0.6276
+Epoch: 17, validation_loss: 0.9395, validation_c_index: 0.5127
+Epoch: 17, Test_loss: 1.1201, c_index: 0.5364
+
+
+Epoch: 18, train_loss: 0.8780, train_c_index: 0.6456
+Epoch: 18, validation_loss: 0.9392, validation_c_index: 0.5086
+Epoch: 18, Test_loss: 1.1197, c_index: 0.5417
+
+
+Epoch: 19, train_loss: 0.8716, train_c_index: 0.6305
+Epoch: 19, validation_loss: 0.9401, validation_c_index: 0.5099
+Epoch: 19, Test_loss: 1.1225, c_index: 0.5459
+
+
+Epoch: 20, train_loss: 0.8678, train_c_index: 0.6446
+Epoch: 20, validation_loss: 0.9381, validation_c_index: 0.5003
+Epoch: 20, Test_loss: 1.1219, c_index: 0.5465
+
+
+Epoch: 21, train_loss: 0.8637, train_c_index: 0.6406
+Epoch: 21, validation_loss: 0.9371, validation_c_index: 0.5113
+Epoch: 21, Test_loss: 1.1265, c_index: 0.5437
+
+
+Epoch: 22, train_loss: 0.8596, train_c_index: 0.6392
+Epoch: 22, validation_loss: 0.9393, validation_c_index: 0.5079
+Epoch: 22, Test_loss: 1.1306, c_index: 0.5441
+
+
+Epoch: 23, train_loss: 0.8587, train_c_index: 0.6457
+Epoch: 23, validation_loss: 0.9395, validation_c_index: 0.5161
+Epoch: 23, Test_loss: 1.1336, c_index: 0.5414
+
+
+Epoch: 24, train_loss: 0.8555, train_c_index: 0.6430
+Epoch: 24, validation_loss: 0.9410, validation_c_index: 0.5154
+Epoch: 24, Test_loss: 1.1337, c_index: 0.5441
+
+
+Epoch: 25, train_loss: 0.8518, train_c_index: 0.6514
+Epoch: 25, validation_loss: 0.9414, validation_c_index: 0.5250
+Epoch: 25, Test_loss: 1.1337, c_index: 0.5441
+
+
+Epoch: 26, train_loss: 0.8416, train_c_index: 0.6625
+Epoch: 26, validation_loss: 0.9395, validation_c_index: 0.5154
+Epoch: 26, Test_loss: 1.1374, c_index: 0.5462
+
+
+Epoch: 27, train_loss: 0.8427, train_c_index: 0.6592
+Epoch: 27, validation_loss: 0.9400, validation_c_index: 0.5161
+Epoch: 27, Test_loss: 1.1378, c_index: 0.5509
+
+
+Epoch: 28, train_loss: 0.8362, train_c_index: 0.6536
+Epoch: 28, validation_loss: 0.9435, validation_c_index: 0.5065
+Epoch: 28, Test_loss: 1.1384, c_index: 0.5545
+
+
+Epoch: 29, train_loss: 0.8363, train_c_index: 0.6611
+Epoch: 29, validation_loss: 0.9420, validation_c_index: 0.5058
+Epoch: 29, Test_loss: 1.1396, c_index: 0.5568
+
+
+Epoch: 30, train_loss: 0.8308, train_c_index: 0.6567
+Epoch: 30, validation_loss: 0.9412, validation_c_index: 0.5134
+Epoch: 30, Test_loss: 1.1447, c_index: 0.5539
+
+
+Epoch: 31, train_loss: 0.8301, train_c_index: 0.6599
+Epoch: 31, validation_loss: 0.9415, validation_c_index: 0.5079
+Epoch: 31, Test_loss: 1.1424, c_index: 0.5518
+
+
+Epoch: 32, train_loss: 0.8245, train_c_index: 0.6692
+Epoch: 32, validation_loss: 0.9421, validation_c_index: 0.5113
+Epoch: 32, Test_loss: 1.1428, c_index: 0.5497
+
+
+Epoch: 33, train_loss: 0.8202, train_c_index: 0.6645
+Epoch: 33, validation_loss: 0.9428, validation_c_index: 0.5065
+Epoch: 33, Test_loss: 1.1476, c_index: 0.5527
+
+
+Epoch: 34, train_loss: 0.8164, train_c_index: 0.6659
+Epoch: 34, validation_loss: 0.9443, validation_c_index: 0.5010
+Epoch: 34, Test_loss: 1.1499, c_index: 0.5577
+
+
+Epoch: 35, train_loss: 0.8142, train_c_index: 0.6670
+Epoch: 35, validation_loss: 0.9435, validation_c_index: 0.5079
+Epoch: 35, Test_loss: 1.1464, c_index: 0.5598
+
+
+Epoch: 36, train_loss: 0.8090, train_c_index: 0.6727
+Epoch: 36, validation_loss: 0.9445, validation_c_index: 0.5031
+Epoch: 36, Test_loss: 1.1503, c_index: 0.5586
+
+
+Epoch: 37, train_loss: 0.8036, train_c_index: 0.6763
+Epoch: 37, validation_loss: 0.9436, validation_c_index: 0.5058
+Epoch: 37, Test_loss: 1.1478, c_index: 0.5560
+
+
+Epoch: 38, train_loss: 0.7989, train_c_index: 0.6615
+Epoch: 38, validation_loss: 0.9475, validation_c_index: 0.5038
+Epoch: 38, Test_loss: 1.1547, c_index: 0.5560
+
+
+Epoch: 39, train_loss: 0.7984, train_c_index: 0.6768
+Epoch: 39, validation_loss: 0.9524, validation_c_index: 0.4997
+Epoch: 39, Test_loss: 1.1600, c_index: 0.5595
+
+
+Epoch: 40, train_loss: 0.7951, train_c_index: 0.6687
+Epoch: 40, validation_loss: 0.9529, validation_c_index: 0.4962
+Epoch: 40, Test_loss: 1.1593, c_index: 0.5642
+
+
+Epoch: 41, train_loss: 0.7863, train_c_index: 0.6762
+Epoch: 41, validation_loss: 0.9536, validation_c_index: 0.4976
+Epoch: 41, Test_loss: 1.1611, c_index: 0.5616
+
+
+Epoch: 42, train_loss: 0.7868, train_c_index: 0.6738
+Epoch: 42, validation_loss: 0.9562, validation_c_index: 0.4949
+Epoch: 42, Test_loss: 1.1679, c_index: 0.5642
+
+
+Epoch: 43, train_loss: 0.7851, train_c_index: 0.6806
+Epoch: 43, validation_loss: 0.9567, validation_c_index: 0.4853
+Epoch: 43, Test_loss: 1.1625, c_index: 0.5642
+
+
+Epoch: 44, train_loss: 0.7800, train_c_index: 0.6794
+Epoch: 44, validation_loss: 0.9566, validation_c_index: 0.4859
+Epoch: 44, Test_loss: 1.1652, c_index: 0.5672
+
+
+Epoch: 45, train_loss: 0.7728, train_c_index: 0.6739
+Epoch: 45, validation_loss: 0.9587, validation_c_index: 0.4880
+Epoch: 45, Test_loss: 1.1680, c_index: 0.5663
+
+
+Epoch: 46, train_loss: 0.7723, train_c_index: 0.6758
+Epoch: 46, validation_loss: 0.9595, validation_c_index: 0.4880
+Epoch: 46, Test_loss: 1.1742, c_index: 0.5651
+
+
+Epoch: 47, train_loss: 0.7724, train_c_index: 0.6812
+Epoch: 47, validation_loss: 0.9627, validation_c_index: 0.4873
+Epoch: 47, Test_loss: 1.1669, c_index: 0.5675
+
+
+Epoch: 48, train_loss: 0.7659, train_c_index: 0.6844
+Epoch: 48, validation_loss: 0.9631, validation_c_index: 0.4880
+Epoch: 48, Test_loss: 1.1712, c_index: 0.5684
+
+
+Epoch: 49, train_loss: 0.7626, train_c_index: 0.6888
+Epoch: 49, validation_loss: 0.9636, validation_c_index: 0.4846
+Epoch: 49, Test_loss: 1.1741, c_index: 0.5693
+
+
+Epoch: 50, train_loss: 0.7570, train_c_index: 0.6804
+Epoch: 50, validation_loss: 0.9633, validation_c_index: 0.4859
+Epoch: 50, Test_loss: 1.1770, c_index: 0.5728
+
+
+Epoch: 51, train_loss: 0.7541, train_c_index: 0.6783
+Epoch: 51, validation_loss: 0.9661, validation_c_index: 0.4798
+Epoch: 51, Test_loss: 1.1795, c_index: 0.5716
+
+
+Epoch: 52, train_loss: 0.7535, train_c_index: 0.6767
+Epoch: 52, validation_loss: 0.9680, validation_c_index: 0.4812
+Epoch: 52, Test_loss: 1.1855, c_index: 0.5690
+
+
+Epoch: 53, train_loss: 0.7522, train_c_index: 0.6813
+Epoch: 53, validation_loss: 0.9679, validation_c_index: 0.4784
+Epoch: 53, Test_loss: 1.1803, c_index: 0.5737
+
+
+Epoch: 54, train_loss: 0.7460, train_c_index: 0.6916
+Epoch: 54, validation_loss: 0.9705, validation_c_index: 0.4784
+Epoch: 54, Test_loss: 1.1859, c_index: 0.5713
+
+
+Epoch: 55, train_loss: 0.7398, train_c_index: 0.6860
+Epoch: 55, validation_loss: 0.9708, validation_c_index: 0.4729
+Epoch: 55, Test_loss: 1.1828, c_index: 0.5681
+
+
+Epoch: 56, train_loss: 0.7371, train_c_index: 0.6820
+Epoch: 56, validation_loss: 0.9729, validation_c_index: 0.4750
+Epoch: 56, Test_loss: 1.1835, c_index: 0.5645
+
+
+Epoch: 57, train_loss: 0.7349, train_c_index: 0.6859
+Epoch: 57, validation_loss: 0.9765, validation_c_index: 0.4791
+Epoch: 57, Test_loss: 1.1908, c_index: 0.5693
+
+
+Epoch: 58, train_loss: 0.7284, train_c_index: 0.6817
+Epoch: 58, validation_loss: 0.9818, validation_c_index: 0.4750
+Epoch: 58, Test_loss: 1.2007, c_index: 0.5716
+
+
+Epoch: 59, train_loss: 0.7321, train_c_index: 0.6817
+Epoch: 59, validation_loss: 0.9813, validation_c_index: 0.4777
+Epoch: 59, Test_loss: 1.2023, c_index: 0.5740
+
+
+Epoch: 60, train_loss: 0.7269, train_c_index: 0.6856
+Epoch: 60, validation_loss: 0.9812, validation_c_index: 0.4757
+Epoch: 60, Test_loss: 1.1982, c_index: 0.5755
+
+
+Epoch: 61, train_loss: 0.7208, train_c_index: 0.6963
+Epoch: 61, validation_loss: 0.9832, validation_c_index: 0.4812
+Epoch: 61, Test_loss: 1.2085, c_index: 0.5710
+
+
+Epoch: 62, train_loss: 0.7200, train_c_index: 0.6805
+Epoch: 62, validation_loss: 0.9846, validation_c_index: 0.4812
+Epoch: 62, Test_loss: 1.2066, c_index: 0.5755
+
+
+Epoch: 63, train_loss: 0.7174, train_c_index: 0.6921
+Epoch: 63, validation_loss: 0.9894, validation_c_index: 0.4770
+Epoch: 63, Test_loss: 1.2133, c_index: 0.5808
+
+
+Epoch: 64, train_loss: 0.7127, train_c_index: 0.6835
+Epoch: 64, validation_loss: 0.9891, validation_c_index: 0.4784
+Epoch: 64, Test_loss: 1.2051, c_index: 0.5743
+
+
+Epoch: 65, train_loss: 0.7130, train_c_index: 0.6871
+Epoch: 65, validation_loss: 0.9916, validation_c_index: 0.4770
+Epoch: 65, Test_loss: 1.2146, c_index: 0.5737
+
+
+Epoch: 66, train_loss: 0.7073, train_c_index: 0.6864
+Epoch: 66, validation_loss: 0.9928, validation_c_index: 0.4736
+Epoch: 66, Test_loss: 1.2205, c_index: 0.5793
+
+
+Epoch: 67, train_loss: 0.7069, train_c_index: 0.6826
+Epoch: 67, validation_loss: 0.9942, validation_c_index: 0.4764
+Epoch: 67, Test_loss: 1.2177, c_index: 0.5749
+
+
+Epoch: 68, train_loss: 0.7003, train_c_index: 0.6832
+Epoch: 68, validation_loss: 0.9978, validation_c_index: 0.4791
+Epoch: 68, Test_loss: 1.2282, c_index: 0.5746
+
+
+Epoch: 69, train_loss: 0.6981, train_c_index: 0.6901
+Epoch: 69, validation_loss: 0.9958, validation_c_index: 0.4839
+Epoch: 69, Test_loss: 1.2186, c_index: 0.5708
+
+
+Epoch: 70, train_loss: 0.6947, train_c_index: 0.6834
+Epoch: 70, validation_loss: 0.9985, validation_c_index: 0.4791
+Epoch: 70, Test_loss: 1.2124, c_index: 0.5675
+
+
+Epoch: 71, train_loss: 0.6923, train_c_index: 0.6821
+Epoch: 71, validation_loss: 1.0037, validation_c_index: 0.4777
+Epoch: 71, Test_loss: 1.2284, c_index: 0.5761
+
+
+Epoch: 72, train_loss: 0.6889, train_c_index: 0.6955
+Epoch: 72, validation_loss: 1.0036, validation_c_index: 0.4818
+Epoch: 72, Test_loss: 1.2241, c_index: 0.5725
+
+
+Epoch: 73, train_loss: 0.6824, train_c_index: 0.6861
+Epoch: 73, validation_loss: 1.0053, validation_c_index: 0.4777
+Epoch: 73, Test_loss: 1.2285, c_index: 0.5687
+
+
+Epoch: 74, train_loss: 0.6794, train_c_index: 0.6894
+Epoch: 74, validation_loss: 1.0079, validation_c_index: 0.4757
+Epoch: 74, Test_loss: 1.2324, c_index: 0.5710
+
+
+Epoch: 75, train_loss: 0.6757, train_c_index: 0.6888
+Epoch: 75, validation_loss: 1.0098, validation_c_index: 0.4668
+Epoch: 75, Test_loss: 1.2388, c_index: 0.5752
+
+
+Epoch: 76, train_loss: 0.6749, train_c_index: 0.6859
+Epoch: 76, validation_loss: 1.0094, validation_c_index: 0.4674
+Epoch: 76, Test_loss: 1.2313, c_index: 0.5746
+
+
+Epoch: 77, train_loss: 0.6714, train_c_index: 0.6905
+Epoch: 77, validation_loss: 1.0135, validation_c_index: 0.4640
+Epoch: 77, Test_loss: 1.2350, c_index: 0.5716
+
+
+Epoch: 78, train_loss: 0.6764, train_c_index: 0.6821
+Epoch: 78, validation_loss: 1.0158, validation_c_index: 0.4750
+Epoch: 78, Test_loss: 1.2381, c_index: 0.5636
+
+
+Epoch: 79, train_loss: 0.6649, train_c_index: 0.6837
+Epoch: 79, validation_loss: 1.0200, validation_c_index: 0.4743
+Epoch: 79, Test_loss: 1.2464, c_index: 0.5752
+
+
+Epoch: 80, train_loss: 0.6614, train_c_index: 0.6865
+Epoch: 80, validation_loss: 1.0211, validation_c_index: 0.4633
+Epoch: 80, Test_loss: 1.2547, c_index: 0.5764
+
+
+Epoch: 81, train_loss: 0.6597, train_c_index: 0.6853
+Epoch: 81, validation_loss: 1.0225, validation_c_index: 0.4620
+Epoch: 81, Test_loss: 1.2592, c_index: 0.5728
+
+
+Epoch: 82, train_loss: 0.6605, train_c_index: 0.6749
+Epoch: 82, validation_loss: 1.0274, validation_c_index: 0.4613
+Epoch: 82, Test_loss: 1.2638, c_index: 0.5752
+
+
+Epoch: 83, train_loss: 0.6546, train_c_index: 0.6867
+Epoch: 83, validation_loss: 1.0273, validation_c_index: 0.4606
+Epoch: 83, Test_loss: 1.2593, c_index: 0.5716
+
+
+Epoch: 84, train_loss: 0.6481, train_c_index: 0.6820
+Epoch: 84, validation_loss: 1.0294, validation_c_index: 0.4613
+Epoch: 84, Test_loss: 1.2614, c_index: 0.5705
+
+
+Epoch: 85, train_loss: 0.6467, train_c_index: 0.6803
+Epoch: 85, validation_loss: 1.0337, validation_c_index: 0.4592
+Epoch: 85, Test_loss: 1.2704, c_index: 0.5716
+
+
+Epoch: 86, train_loss: 0.6450, train_c_index: 0.6846
+Epoch: 86, validation_loss: 1.0366, validation_c_index: 0.4503
+Epoch: 86, Test_loss: 1.2704, c_index: 0.5776
+
+
+Epoch: 87, train_loss: 0.6443, train_c_index: 0.6867
+Epoch: 87, validation_loss: 1.0281, validation_c_index: 0.4565
+Epoch: 87, Test_loss: 1.2578, c_index: 0.5708
+
+
+Epoch: 88, train_loss: 0.6345, train_c_index: 0.6912
+Epoch: 88, validation_loss: 1.0316, validation_c_index: 0.4462
+Epoch: 88, Test_loss: 1.2637, c_index: 0.5749
+
+
+Epoch: 89, train_loss: 0.6413, train_c_index: 0.6865
+Epoch: 89, validation_loss: 1.0401, validation_c_index: 0.4496
+Epoch: 89, Test_loss: 1.2765, c_index: 0.5725
+
+
+Epoch: 90, train_loss: 0.6316, train_c_index: 0.6908
+Epoch: 90, validation_loss: 1.0427, validation_c_index: 0.4448
+Epoch: 90, Test_loss: 1.2667, c_index: 0.5708
+
+
+Epoch: 91, train_loss: 0.6323, train_c_index: 0.6842
+Epoch: 91, validation_loss: 1.0468, validation_c_index: 0.4441
+Epoch: 91, Test_loss: 1.2779, c_index: 0.5731
+
+
+Epoch: 92, train_loss: 0.6279, train_c_index: 0.6885
+Epoch: 92, validation_loss: 1.0533, validation_c_index: 0.4524
+Epoch: 92, Test_loss: 1.2875, c_index: 0.5755
+
+
+Epoch: 93, train_loss: 0.6219, train_c_index: 0.6907
+Epoch: 93, validation_loss: 1.0549, validation_c_index: 0.4503
+Epoch: 93, Test_loss: 1.2945, c_index: 0.5799
+
+
+Epoch: 94, train_loss: 0.6228, train_c_index: 0.6856
+Epoch: 94, validation_loss: 1.0558, validation_c_index: 0.4544
+Epoch: 94, Test_loss: 1.2885, c_index: 0.5746
+
+
+Epoch: 95, train_loss: 0.6178, train_c_index: 0.6823
+Epoch: 95, validation_loss: 1.0664, validation_c_index: 0.4524
+Epoch: 95, Test_loss: 1.3139, c_index: 0.5858
+
+
+Epoch: 96, train_loss: 0.6168, train_c_index: 0.6940
+Epoch: 96, validation_loss: 1.0584, validation_c_index: 0.4572
+Epoch: 96, Test_loss: 1.3004, c_index: 0.5790
+
+
+Epoch: 97, train_loss: 0.6159, train_c_index: 0.6925
+Epoch: 97, validation_loss: 1.0588, validation_c_index: 0.4517
+Epoch: 97, Test_loss: 1.2902, c_index: 0.5749
+
+
+Epoch: 98, train_loss: 0.6135, train_c_index: 0.6906
+Epoch: 98, validation_loss: 1.0571, validation_c_index: 0.4544
+Epoch: 98, Test_loss: 1.2861, c_index: 0.5699
+
+
+Epoch: 99, train_loss: 0.6075, train_c_index: 0.6820
+Epoch: 99, validation_loss: 1.0634, validation_c_index: 0.4476
+Epoch: 99, Test_loss: 1.3031, c_index: 0.5767
+
+
+Epoch: 100, train_loss: 0.6059, train_c_index: 0.6857
+Epoch: 100, validation_loss: 1.0669, validation_c_index: 0.4517
+Epoch: 100, Test_loss: 1.3058, c_index: 0.5820
+
+
+Epoch: 101, train_loss: 0.6029, train_c_index: 0.6851
+Epoch: 101, validation_loss: 1.0623, validation_c_index: 0.4524
+Epoch: 101, Test_loss: 1.3025, c_index: 0.5767
+
+
+Epoch: 102, train_loss: 0.6016, train_c_index: 0.6823
+Epoch: 102, validation_loss: 1.0661, validation_c_index: 0.4469
+Epoch: 102, Test_loss: 1.3016, c_index: 0.5758
+
+
+Epoch: 103, train_loss: 0.5988, train_c_index: 0.6925
+Epoch: 103, validation_loss: 1.0626, validation_c_index: 0.4489
+Epoch: 103, Test_loss: 1.2984, c_index: 0.5779
+
+
+Epoch: 104, train_loss: 0.5997, train_c_index: 0.6937
+Epoch: 104, validation_loss: 1.0610, validation_c_index: 0.4544
+Epoch: 104, Test_loss: 1.2932, c_index: 0.5705
+
+
+Epoch: 105, train_loss: 0.5903, train_c_index: 0.6911
+Epoch: 105, validation_loss: 1.0709, validation_c_index: 0.4483
+Epoch: 105, Test_loss: 1.3052, c_index: 0.5773
+
+
+Epoch: 106, train_loss: 0.5924, train_c_index: 0.6814
+Epoch: 106, validation_loss: 1.0704, validation_c_index: 0.4517
+Epoch: 106, Test_loss: 1.3061, c_index: 0.5743
+
+
+Epoch: 107, train_loss: 0.5832, train_c_index: 0.6854
+Epoch: 107, validation_loss: 1.0748, validation_c_index: 0.4592
+Epoch: 107, Test_loss: 1.3093, c_index: 0.5740
+
+
+Epoch: 108, train_loss: 0.5795, train_c_index: 0.6917
+Epoch: 108, validation_loss: 1.0858, validation_c_index: 0.4510
+Epoch: 108, Test_loss: 1.3227, c_index: 0.5755
+
+
+Epoch: 109, train_loss: 0.5801, train_c_index: 0.6900
+Epoch: 109, validation_loss: 1.0845, validation_c_index: 0.4510
+Epoch: 109, Test_loss: 1.3257, c_index: 0.5832
+
+
+Epoch: 110, train_loss: 0.5755, train_c_index: 0.6885
+Epoch: 110, validation_loss: 1.0813, validation_c_index: 0.4544
+Epoch: 110, Test_loss: 1.3268, c_index: 0.5758
+
+
+Epoch: 111, train_loss: 0.5754, train_c_index: 0.6931
+Epoch: 111, validation_loss: 1.0749, validation_c_index: 0.4483
+Epoch: 111, Test_loss: 1.3116, c_index: 0.5737
+
+
+Epoch: 112, train_loss: 0.5723, train_c_index: 0.6862
+Epoch: 112, validation_loss: 1.0797, validation_c_index: 0.4476
+Epoch: 112, Test_loss: 1.3171, c_index: 0.5787
+
+
+Epoch: 113, train_loss: 0.5677, train_c_index: 0.6905
+Epoch: 113, validation_loss: 1.0893, validation_c_index: 0.4483
+Epoch: 113, Test_loss: 1.3394, c_index: 0.5787
+
+
+Epoch: 114, train_loss: 0.5654, train_c_index: 0.6934
+Epoch: 114, validation_loss: 1.0791, validation_c_index: 0.4489
+Epoch: 114, Test_loss: 1.3270, c_index: 0.5829
+
+
+Epoch: 115, train_loss: 0.5647, train_c_index: 0.6812
+Epoch: 115, validation_loss: 1.0891, validation_c_index: 0.4455
+Epoch: 115, Test_loss: 1.3310, c_index: 0.5731
+
+
+Epoch: 116, train_loss: 0.5642, train_c_index: 0.6874
+Epoch: 116, validation_loss: 1.0900, validation_c_index: 0.4455
+Epoch: 116, Test_loss: 1.3311, c_index: 0.5743
+
+
+Epoch: 117, train_loss: 0.5542, train_c_index: 0.6913
+Epoch: 117, validation_loss: 1.0898, validation_c_index: 0.4455
+Epoch: 117, Test_loss: 1.3364, c_index: 0.5755
+
+
+Epoch: 118, train_loss: 0.5568, train_c_index: 0.6891
+Epoch: 118, validation_loss: 1.0946, validation_c_index: 0.4476
+Epoch: 118, Test_loss: 1.3509, c_index: 0.5728
+
+
+Epoch: 119, train_loss: 0.5531, train_c_index: 0.6889
+Epoch: 119, validation_loss: 1.1034, validation_c_index: 0.4441
+Epoch: 119, Test_loss: 1.3521, c_index: 0.5805
+
+
+Epoch: 120, train_loss: 0.5530, train_c_index: 0.6912
+Epoch: 120, validation_loss: 1.1049, validation_c_index: 0.4483
+Epoch: 120, Test_loss: 1.3571, c_index: 0.5776
+
+
+Epoch: 121, train_loss: 0.5438, train_c_index: 0.6900
+Epoch: 121, validation_loss: 1.1051, validation_c_index: 0.4448
+Epoch: 121, Test_loss: 1.3578, c_index: 0.5817
+
+
+Epoch: 122, train_loss: 0.5510, train_c_index: 0.6924
+Epoch: 122, validation_loss: 1.1006, validation_c_index: 0.4476
+Epoch: 122, Test_loss: 1.3472, c_index: 0.5764
+
+
+Epoch: 123, train_loss: 0.5440, train_c_index: 0.6921
+Epoch: 123, validation_loss: 1.1043, validation_c_index: 0.4510
+Epoch: 123, Test_loss: 1.3616, c_index: 0.5799
+
+
+Epoch: 124, train_loss: 0.5393, train_c_index: 0.6860
+Epoch: 124, validation_loss: 1.1099, validation_c_index: 0.4489
+Epoch: 124, Test_loss: 1.3533, c_index: 0.5811
+
+
+Epoch: 125, train_loss: 0.5395, train_c_index: 0.6923
+Epoch: 125, validation_loss: 1.1124, validation_c_index: 0.4496
+Epoch: 125, Test_loss: 1.3530, c_index: 0.5799
+
+
+Epoch: 126, train_loss: 0.5356, train_c_index: 0.6860
+Epoch: 126, validation_loss: 1.1220, validation_c_index: 0.4400
+Epoch: 126, Test_loss: 1.3734, c_index: 0.5823
+
+
+Epoch: 127, train_loss: 0.5311, train_c_index: 0.6953
+Epoch: 127, validation_loss: 1.1121, validation_c_index: 0.4414
+Epoch: 127, Test_loss: 1.3640, c_index: 0.5841
+
+
+Epoch: 128, train_loss: 0.5291, train_c_index: 0.6888
+Epoch: 128, validation_loss: 1.1136, validation_c_index: 0.4414
+Epoch: 128, Test_loss: 1.3599, c_index: 0.5832
+
+
+Epoch: 129, train_loss: 0.5294, train_c_index: 0.6950
+Epoch: 129, validation_loss: 1.1242, validation_c_index: 0.4428
+Epoch: 129, Test_loss: 1.3750, c_index: 0.5808
+
+
+Epoch: 130, train_loss: 0.5236, train_c_index: 0.7002
+Epoch: 130, validation_loss: 1.1210, validation_c_index: 0.4462
+Epoch: 130, Test_loss: 1.3597, c_index: 0.5817
+
+
+Epoch: 131, train_loss: 0.5202, train_c_index: 0.6979
+Epoch: 131, validation_loss: 1.1218, validation_c_index: 0.4435
+Epoch: 131, Test_loss: 1.3633, c_index: 0.5832
+
+
+Epoch: 132, train_loss: 0.5209, train_c_index: 0.6899
+Epoch: 132, validation_loss: 1.1268, validation_c_index: 0.4483
+Epoch: 132, Test_loss: 1.3688, c_index: 0.5770
+
+
+Epoch: 133, train_loss: 0.5154, train_c_index: 0.6925
+Epoch: 133, validation_loss: 1.1357, validation_c_index: 0.4393
+Epoch: 133, Test_loss: 1.3904, c_index: 0.5820
+
+
+Epoch: 134, train_loss: 0.5121, train_c_index: 0.6981
+Epoch: 134, validation_loss: 1.1351, validation_c_index: 0.4407
+Epoch: 134, Test_loss: 1.3844, c_index: 0.5743
+
+
+Epoch: 135, train_loss: 0.5098, train_c_index: 0.6869
+Epoch: 135, validation_loss: 1.1392, validation_c_index: 0.4373
+Epoch: 135, Test_loss: 1.3985, c_index: 0.5853
+
+
+Epoch: 136, train_loss: 0.5094, train_c_index: 0.6967
+Epoch: 136, validation_loss: 1.1298, validation_c_index: 0.4407
+Epoch: 136, Test_loss: 1.3778, c_index: 0.5808
+
+
+Epoch: 137, train_loss: 0.5082, train_c_index: 0.6881
+Epoch: 137, validation_loss: 1.1331, validation_c_index: 0.4421
+Epoch: 137, Test_loss: 1.3870, c_index: 0.5787
+
+
+Epoch: 138, train_loss: 0.5034, train_c_index: 0.6939
+Epoch: 138, validation_loss: 1.1409, validation_c_index: 0.4414
+Epoch: 138, Test_loss: 1.4008, c_index: 0.5826
+
+
+Epoch: 139, train_loss: 0.5002, train_c_index: 0.6930
+Epoch: 139, validation_loss: 1.1449, validation_c_index: 0.4400
+Epoch: 139, Test_loss: 1.3984, c_index: 0.5787
+
+
+Epoch: 140, train_loss: 0.5018, train_c_index: 0.6959
+Epoch: 140, validation_loss: 1.1418, validation_c_index: 0.4387
+Epoch: 140, Test_loss: 1.3902, c_index: 0.5764
+
+
+Epoch: 141, train_loss: 0.4948, train_c_index: 0.6943
+Epoch: 141, validation_loss: 1.1413, validation_c_index: 0.4407
+Epoch: 141, Test_loss: 1.3840, c_index: 0.5867
+
+
+Epoch: 142, train_loss: 0.4985, train_c_index: 0.6941
+Epoch: 142, validation_loss: 1.1502, validation_c_index: 0.4380
+Epoch: 142, Test_loss: 1.3966, c_index: 0.5882
+
+
+Epoch: 143, train_loss: 0.4879, train_c_index: 0.6972
+Epoch: 143, validation_loss: 1.1525, validation_c_index: 0.4380
+Epoch: 143, Test_loss: 1.4062, c_index: 0.5838
+
+
+Epoch: 144, train_loss: 0.4884, train_c_index: 0.7013
+Epoch: 144, validation_loss: 1.1516, validation_c_index: 0.4345
+Epoch: 144, Test_loss: 1.4051, c_index: 0.5858
+
+
+Epoch: 145, train_loss: 0.4855, train_c_index: 0.6948
+Epoch: 145, validation_loss: 1.1541, validation_c_index: 0.4345
+Epoch: 145, Test_loss: 1.4121, c_index: 0.5802
+
+
+Epoch: 146, train_loss: 0.4826, train_c_index: 0.6997
+Epoch: 146, validation_loss: 1.1639, validation_c_index: 0.4359
+Epoch: 146, Test_loss: 1.4251, c_index: 0.5873
+
+
+Epoch: 147, train_loss: 0.4813, train_c_index: 0.7001
+Epoch: 147, validation_loss: 1.1618, validation_c_index: 0.4325
+Epoch: 147, Test_loss: 1.4171, c_index: 0.5814
+
+
+Epoch: 148, train_loss: 0.4769, train_c_index: 0.7029
+Epoch: 148, validation_loss: 1.1486, validation_c_index: 0.4428
+Epoch: 148, Test_loss: 1.3923, c_index: 0.5767
+
+
+Epoch: 149, train_loss: 0.4712, train_c_index: 0.6986
+Epoch: 149, validation_loss: 1.1551, validation_c_index: 0.4380
+Epoch: 149, Test_loss: 1.3914, c_index: 0.5817
+
+
+Epoch: 150, train_loss: 0.4747, train_c_index: 0.6942
+Epoch: 150, validation_loss: 1.1573, validation_c_index: 0.4380
+Epoch: 150, Test_loss: 1.4089, c_index: 0.5832
+
+
+Epoch: 151, train_loss: 0.4726, train_c_index: 0.6998
+Epoch: 151, validation_loss: 1.1707, validation_c_index: 0.4332
+Epoch: 151, Test_loss: 1.4307, c_index: 0.5823
+
+
+Epoch: 152, train_loss: 0.4661, train_c_index: 0.6972
+Epoch: 152, validation_loss: 1.1722, validation_c_index: 0.4325
+Epoch: 152, Test_loss: 1.4132, c_index: 0.5864
+
+
+Epoch: 153, train_loss: 0.4689, train_c_index: 0.6927
+Epoch: 153, validation_loss: 1.1726, validation_c_index: 0.4352
+Epoch: 153, Test_loss: 1.4194, c_index: 0.5867
+
+
+Epoch: 154, train_loss: 0.4635, train_c_index: 0.6956
+Epoch: 154, validation_loss: 1.1707, validation_c_index: 0.4352
+Epoch: 154, Test_loss: 1.4121, c_index: 0.5841
+
+
+Epoch: 155, train_loss: 0.4588, train_c_index: 0.7041
+Epoch: 155, validation_loss: 1.1735, validation_c_index: 0.4345
+Epoch: 155, Test_loss: 1.4257, c_index: 0.5873
+
+
+Epoch: 156, train_loss: 0.4610, train_c_index: 0.7048
+Epoch: 156, validation_loss: 1.1761, validation_c_index: 0.4332
+Epoch: 156, Test_loss: 1.4214, c_index: 0.5858
+
+
+Epoch: 157, train_loss: 0.4560, train_c_index: 0.6974
+Epoch: 157, validation_loss: 1.1723, validation_c_index: 0.4359
+Epoch: 157, Test_loss: 1.4407, c_index: 0.5856
+
+
+Epoch: 158, train_loss: 0.4515, train_c_index: 0.7021
+Epoch: 158, validation_loss: 1.1667, validation_c_index: 0.4441
+Epoch: 158, Test_loss: 1.4105, c_index: 0.5805
+
+
+Epoch: 159, train_loss: 0.4529, train_c_index: 0.7026
+Epoch: 159, validation_loss: 1.1792, validation_c_index: 0.4366
+Epoch: 159, Test_loss: 1.4204, c_index: 0.5853
+
+
+Epoch: 160, train_loss: 0.4456, train_c_index: 0.7015
+Epoch: 160, validation_loss: 1.1934, validation_c_index: 0.4284
+Epoch: 160, Test_loss: 1.4449, c_index: 0.5915
+
+
+Epoch: 161, train_loss: 0.4480, train_c_index: 0.7046
+Epoch: 161, validation_loss: 1.1860, validation_c_index: 0.4359
+Epoch: 161, Test_loss: 1.4380, c_index: 0.5823
+
+
+Epoch: 162, train_loss: 0.4429, train_c_index: 0.7118
+Epoch: 162, validation_loss: 1.2011, validation_c_index: 0.4284
+Epoch: 162, Test_loss: 1.4528, c_index: 0.5980
+
+
+Epoch: 163, train_loss: 0.4394, train_c_index: 0.7089
+Epoch: 163, validation_loss: 1.1925, validation_c_index: 0.4345
+Epoch: 163, Test_loss: 1.4523, c_index: 0.5906
+
+
+Epoch: 164, train_loss: 0.4434, train_c_index: 0.6999
+Epoch: 164, validation_loss: 1.2053, validation_c_index: 0.4236
+Epoch: 164, Test_loss: 1.4683, c_index: 0.6030
+
+
+Epoch: 165, train_loss: 0.4346, train_c_index: 0.7060
+Epoch: 165, validation_loss: 1.1884, validation_c_index: 0.4366
+Epoch: 165, Test_loss: 1.4282, c_index: 0.5924
+
+
+Epoch: 166, train_loss: 0.4382, train_c_index: 0.7006
+Epoch: 166, validation_loss: 1.2013, validation_c_index: 0.4339
+Epoch: 166, Test_loss: 1.4390, c_index: 0.5903
+
+
+Epoch: 167, train_loss: 0.4275, train_c_index: 0.7058
+Epoch: 167, validation_loss: 1.2108, validation_c_index: 0.4291
+Epoch: 167, Test_loss: 1.4540, c_index: 0.5897
+
+
+Epoch: 168, train_loss: 0.4299, train_c_index: 0.7019
+Epoch: 168, validation_loss: 1.2110, validation_c_index: 0.4304
+Epoch: 168, Test_loss: 1.4561, c_index: 0.5882
+
+
+Epoch: 169, train_loss: 0.4304, train_c_index: 0.6999
+Epoch: 169, validation_loss: 1.2154, validation_c_index: 0.4229
+Epoch: 169, Test_loss: 1.4527, c_index: 0.5906
+
+
+Epoch: 170, train_loss: 0.4226, train_c_index: 0.7121
+Epoch: 170, validation_loss: 1.2137, validation_c_index: 0.4263
+Epoch: 170, Test_loss: 1.4646, c_index: 0.5956
+
+
+Epoch: 171, train_loss: 0.4262, train_c_index: 0.7092
+Epoch: 171, validation_loss: 1.2132, validation_c_index: 0.4332
+Epoch: 171, Test_loss: 1.4764, c_index: 0.5870
+
+
+Epoch: 172, train_loss: 0.4224, train_c_index: 0.7037
+Epoch: 172, validation_loss: 1.2192, validation_c_index: 0.4297
+Epoch: 172, Test_loss: 1.4892, c_index: 0.5933
+
+
+Epoch: 173, train_loss: 0.4223, train_c_index: 0.7096
+Epoch: 173, validation_loss: 1.2198, validation_c_index: 0.4222
+Epoch: 173, Test_loss: 1.4715, c_index: 0.5930
+
+
+Epoch: 174, train_loss: 0.4137, train_c_index: 0.7088
+Epoch: 174, validation_loss: 1.2216, validation_c_index: 0.4291
+Epoch: 174, Test_loss: 1.4922, c_index: 0.5930
+
+
+Epoch: 175, train_loss: 0.4164, train_c_index: 0.7054
+Epoch: 175, validation_loss: 1.2204, validation_c_index: 0.4284
+Epoch: 175, Test_loss: 1.4726, c_index: 0.5912
+
+
+Epoch: 176, train_loss: 0.4067, train_c_index: 0.7086
+Epoch: 176, validation_loss: 1.2324, validation_c_index: 0.4304
+Epoch: 176, Test_loss: 1.4864, c_index: 0.5930
+
+
+Epoch: 177, train_loss: 0.4121, train_c_index: 0.7126
+Epoch: 177, validation_loss: 1.2271, validation_c_index: 0.4366
+Epoch: 177, Test_loss: 1.4795, c_index: 0.5912
+
+
+Epoch: 178, train_loss: 0.4062, train_c_index: 0.7097
+Epoch: 178, validation_loss: 1.2397, validation_c_index: 0.4263
+Epoch: 178, Test_loss: 1.5000, c_index: 0.5959
+
+
+Epoch: 179, train_loss: 0.4060, train_c_index: 0.7107
+Epoch: 179, validation_loss: 1.2239, validation_c_index: 0.4435
+Epoch: 179, Test_loss: 1.4642, c_index: 0.5879
+
+
+Epoch: 180, train_loss: 0.4070, train_c_index: 0.7024
+Epoch: 180, validation_loss: 1.2374, validation_c_index: 0.4421
+Epoch: 180, Test_loss: 1.4637, c_index: 0.5867
+
+
+Epoch: 181, train_loss: 0.3997, train_c_index: 0.7055
+Epoch: 181, validation_loss: 1.2636, validation_c_index: 0.4229
+Epoch: 181, Test_loss: 1.5247, c_index: 0.5965
+
+
+Epoch: 182, train_loss: 0.3983, train_c_index: 0.7103
+Epoch: 182, validation_loss: 1.2510, validation_c_index: 0.4277
+Epoch: 182, Test_loss: 1.5085, c_index: 0.5950
+
+
+Epoch: 183, train_loss: 0.3959, train_c_index: 0.7097
+Epoch: 183, validation_loss: 1.2433, validation_c_index: 0.4380
+Epoch: 183, Test_loss: 1.4877, c_index: 0.5921
+
+
+Epoch: 184, train_loss: 0.3905, train_c_index: 0.7043
+Epoch: 184, validation_loss: 1.2560, validation_c_index: 0.4202
+Epoch: 184, Test_loss: 1.5135, c_index: 0.6004
+
+
+Epoch: 185, train_loss: 0.3909, train_c_index: 0.7181
+Epoch: 185, validation_loss: 1.2576, validation_c_index: 0.4366
+Epoch: 185, Test_loss: 1.5247, c_index: 0.5938
+
+
+Epoch: 186, train_loss: 0.3884, train_c_index: 0.7036
+Epoch: 186, validation_loss: 1.2712, validation_c_index: 0.4181
+Epoch: 186, Test_loss: 1.5125, c_index: 0.6007
+
+
+Epoch: 187, train_loss: 0.3866, train_c_index: 0.7153
+Epoch: 187, validation_loss: 1.2384, validation_c_index: 0.4400
+Epoch: 187, Test_loss: 1.4670, c_index: 0.5924
+
+
+Epoch: 188, train_loss: 0.3804, train_c_index: 0.7139
+Epoch: 188, validation_loss: 1.2652, validation_c_index: 0.4291
+Epoch: 188, Test_loss: 1.5021, c_index: 0.5927
+
+
+Epoch: 189, train_loss: 0.3850, train_c_index: 0.7112
+Epoch: 189, validation_loss: 1.2729, validation_c_index: 0.4297
+Epoch: 189, Test_loss: 1.5282, c_index: 0.5959
+
+
+Epoch: 190, train_loss: 0.3756, train_c_index: 0.7191
+Epoch: 190, validation_loss: 1.2714, validation_c_index: 0.4229
+Epoch: 190, Test_loss: 1.5175, c_index: 0.6012
+
+
+Epoch: 191, train_loss: 0.3804, train_c_index: 0.7077
+Epoch: 191, validation_loss: 1.2805, validation_c_index: 0.4291
+Epoch: 191, Test_loss: 1.5231, c_index: 0.5930
+
+
+Epoch: 192, train_loss: 0.3782, train_c_index: 0.7109
+Epoch: 192, validation_loss: 1.2791, validation_c_index: 0.4236
+Epoch: 192, Test_loss: 1.5279, c_index: 0.5927
+
+
+Epoch: 193, train_loss: 0.3758, train_c_index: 0.7086
+Epoch: 193, validation_loss: 1.2884, validation_c_index: 0.4174
+Epoch: 193, Test_loss: 1.5273, c_index: 0.5965
+
+
+Epoch: 194, train_loss: 0.3648, train_c_index: 0.7117
+Epoch: 194, validation_loss: 1.2841, validation_c_index: 0.4332
+Epoch: 194, Test_loss: 1.5173, c_index: 0.5953
+
+
+Epoch: 195, train_loss: 0.3687, train_c_index: 0.7090
+Epoch: 195, validation_loss: 1.2956, validation_c_index: 0.4174
+Epoch: 195, Test_loss: 1.5296, c_index: 0.5935
+
+
+Epoch: 196, train_loss: 0.3678, train_c_index: 0.7202
+Epoch: 196, validation_loss: 1.2788, validation_c_index: 0.4380
+Epoch: 196, Test_loss: 1.5112, c_index: 0.5891
+
+
+Epoch: 197, train_loss: 0.3614, train_c_index: 0.7160
+Epoch: 197, validation_loss: 1.2930, validation_c_index: 0.4325
+Epoch: 197, Test_loss: 1.5402, c_index: 0.5864
+
+
+Epoch: 198, train_loss: 0.3623, train_c_index: 0.7193
+Epoch: 198, validation_loss: 1.2935, validation_c_index: 0.4215
+Epoch: 198, Test_loss: 1.5248, c_index: 0.5882
+
+
+Epoch: 199, train_loss: 0.3583, train_c_index: 0.7187
+Epoch: 199, validation_loss: 1.2893, validation_c_index: 0.4291
+Epoch: 199, Test_loss: 1.5037, c_index: 0.5856
+
+Training Fold 2!
+
+Init train/val/test splits...
+Training on 272 samples
+Validating on 59 samples
+Testing on 106 samples
+/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+
+dropout:  0.25
+
+
+Epoch: 0, train_loss: 1.4686, train_c_index: 0.4922
+Epoch: 0, validation_loss: 1.2913, validation_c_index: 0.5994
+Epoch: 0, Test_loss: 1.0873, c_index: 0.5324
+
+
+Epoch: 1, train_loss: 1.2352, train_c_index: 0.5241
+Epoch: 1, validation_loss: 1.1407, validation_c_index: 0.6025
+Epoch: 1, Test_loss: 0.9924, c_index: 0.5514
+
+
+Epoch: 2, train_loss: 1.1155, train_c_index: 0.5319
+Epoch: 2, validation_loss: 1.0686, validation_c_index: 0.6015
+Epoch: 2, Test_loss: 0.9590, c_index: 0.5694
+
+
+Epoch: 3, train_loss: 1.0525, train_c_index: 0.5377
+Epoch: 3, validation_loss: 1.0326, validation_c_index: 0.5994
+Epoch: 3, Test_loss: 0.9495, c_index: 0.5720
+
+
+Epoch: 4, train_loss: 1.0145, train_c_index: 0.5472
+Epoch: 4, validation_loss: 1.0104, validation_c_index: 0.5879
+Epoch: 4, Test_loss: 0.9497, c_index: 0.5764
+
+
+Epoch: 5, train_loss: 0.9944, train_c_index: 0.5637
+Epoch: 5, validation_loss: 0.9986, validation_c_index: 0.5868
+Epoch: 5, Test_loss: 0.9518, c_index: 0.5744
+
+
+Epoch: 6, train_loss: 0.9791, train_c_index: 0.5411
+Epoch: 6, validation_loss: 0.9877, validation_c_index: 0.5816
+Epoch: 6, Test_loss: 0.9590, c_index: 0.5667
+
+
+Epoch: 7, train_loss: 0.9665, train_c_index: 0.5436
+Epoch: 7, validation_loss: 0.9860, validation_c_index: 0.5879
+Epoch: 7, Test_loss: 0.9648, c_index: 0.5664
+
+
+Epoch: 8, train_loss: 0.9591, train_c_index: 0.5559
+Epoch: 8, validation_loss: 0.9822, validation_c_index: 0.5858
+Epoch: 8, Test_loss: 0.9702, c_index: 0.5674
+
+
+Epoch: 9, train_loss: 0.9522, train_c_index: 0.5546
+Epoch: 9, validation_loss: 0.9810, validation_c_index: 0.5795
+Epoch: 9, Test_loss: 0.9754, c_index: 0.5657
+
+
+Epoch: 10, train_loss: 0.9504, train_c_index: 0.5545
+Epoch: 10, validation_loss: 0.9795, validation_c_index: 0.5753
+Epoch: 10, Test_loss: 0.9783, c_index: 0.5654
+
+
+Epoch: 11, train_loss: 0.9446, train_c_index: 0.5655
+Epoch: 11, validation_loss: 0.9761, validation_c_index: 0.5701
+Epoch: 11, Test_loss: 0.9808, c_index: 0.5644
+
+
+Epoch: 12, train_loss: 0.9371, train_c_index: 0.5659
+Epoch: 12, validation_loss: 0.9783, validation_c_index: 0.5659
+Epoch: 12, Test_loss: 0.9829, c_index: 0.5621
+
+
+Epoch: 13, train_loss: 0.9340, train_c_index: 0.5624
+Epoch: 13, validation_loss: 0.9787, validation_c_index: 0.5669
+Epoch: 13, Test_loss: 0.9817, c_index: 0.5651
+
+
+Epoch: 14, train_loss: 0.9314, train_c_index: 0.5851
+Epoch: 14, validation_loss: 0.9789, validation_c_index: 0.5628
+Epoch: 14, Test_loss: 0.9823, c_index: 0.5681
+
+
+Epoch: 15, train_loss: 0.9286, train_c_index: 0.5674
+Epoch: 15, validation_loss: 0.9788, validation_c_index: 0.5659
+Epoch: 15, Test_loss: 0.9828, c_index: 0.5661
+
+
+Epoch: 16, train_loss: 0.9176, train_c_index: 0.5776
+Epoch: 16, validation_loss: 0.9771, validation_c_index: 0.5659
+Epoch: 16, Test_loss: 0.9833, c_index: 0.5667
+
+
+Epoch: 17, train_loss: 0.9187, train_c_index: 0.5774
+Epoch: 17, validation_loss: 0.9775, validation_c_index: 0.5533
+Epoch: 17, Test_loss: 0.9818, c_index: 0.5667
+
+
+Epoch: 18, train_loss: 0.9139, train_c_index: 0.5961
+Epoch: 18, validation_loss: 0.9788, validation_c_index: 0.5523
+Epoch: 18, Test_loss: 0.9828, c_index: 0.5681
+
+
+Epoch: 19, train_loss: 0.9111, train_c_index: 0.5875
+Epoch: 19, validation_loss: 0.9783, validation_c_index: 0.5596
+Epoch: 19, Test_loss: 0.9823, c_index: 0.5671
+
+
+Epoch: 20, train_loss: 0.9079, train_c_index: 0.5821
+Epoch: 20, validation_loss: 0.9786, validation_c_index: 0.5680
+Epoch: 20, Test_loss: 0.9831, c_index: 0.5684
+
+
+Epoch: 21, train_loss: 0.9038, train_c_index: 0.5894
+Epoch: 21, validation_loss: 0.9777, validation_c_index: 0.5680
+Epoch: 21, Test_loss: 0.9835, c_index: 0.5704
+
+
+Epoch: 22, train_loss: 0.8984, train_c_index: 0.6118
+Epoch: 22, validation_loss: 0.9785, validation_c_index: 0.5575
+Epoch: 22, Test_loss: 0.9822, c_index: 0.5714
+
+
+Epoch: 23, train_loss: 0.8969, train_c_index: 0.5962
+Epoch: 23, validation_loss: 0.9805, validation_c_index: 0.5460
+Epoch: 23, Test_loss: 0.9808, c_index: 0.5657
+
+
+Epoch: 24, train_loss: 0.8922, train_c_index: 0.5791
+Epoch: 24, validation_loss: 0.9807, validation_c_index: 0.5471
+Epoch: 24, Test_loss: 0.9779, c_index: 0.5687
+
+
+Epoch: 25, train_loss: 0.8868, train_c_index: 0.6228
+Epoch: 25, validation_loss: 0.9797, validation_c_index: 0.5450
+Epoch: 25, Test_loss: 0.9792, c_index: 0.5727
+
+
+Epoch: 26, train_loss: 0.8824, train_c_index: 0.6124
+Epoch: 26, validation_loss: 0.9771, validation_c_index: 0.5481
+Epoch: 26, Test_loss: 0.9786, c_index: 0.5787
+
+
+Epoch: 27, train_loss: 0.8788, train_c_index: 0.6023
+Epoch: 27, validation_loss: 0.9785, validation_c_index: 0.5439
+Epoch: 27, Test_loss: 0.9793, c_index: 0.5767
+
+
+Epoch: 28, train_loss: 0.8747, train_c_index: 0.5982
+Epoch: 28, validation_loss: 0.9790, validation_c_index: 0.5408
+Epoch: 28, Test_loss: 0.9802, c_index: 0.5784
+
+
+Epoch: 29, train_loss: 0.8790, train_c_index: 0.6170
+Epoch: 29, validation_loss: 0.9782, validation_c_index: 0.5408
+Epoch: 29, Test_loss: 0.9761, c_index: 0.5787
+
+
+Epoch: 30, train_loss: 0.8697, train_c_index: 0.6171
+Epoch: 30, validation_loss: 0.9778, validation_c_index: 0.5439
+Epoch: 30, Test_loss: 0.9776, c_index: 0.5817
+
+
+Epoch: 31, train_loss: 0.8677, train_c_index: 0.6161
+Epoch: 31, validation_loss: 0.9770, validation_c_index: 0.5429
+Epoch: 31, Test_loss: 0.9771, c_index: 0.5894
+
+
+Epoch: 32, train_loss: 0.8614, train_c_index: 0.6246
+Epoch: 32, validation_loss: 0.9765, validation_c_index: 0.5397
+Epoch: 32, Test_loss: 0.9718, c_index: 0.5880
+
+
+Epoch: 33, train_loss: 0.8576, train_c_index: 0.6216
+Epoch: 33, validation_loss: 0.9743, validation_c_index: 0.5293
+Epoch: 33, Test_loss: 0.9721, c_index: 0.5887
+
+
+Epoch: 34, train_loss: 0.8573, train_c_index: 0.6402
+Epoch: 34, validation_loss: 0.9762, validation_c_index: 0.5220
+Epoch: 34, Test_loss: 0.9673, c_index: 0.5887
+
+
+Epoch: 35, train_loss: 0.8511, train_c_index: 0.6339
+Epoch: 35, validation_loss: 0.9770, validation_c_index: 0.5303
+Epoch: 35, Test_loss: 0.9698, c_index: 0.5910
+
+
+Epoch: 36, train_loss: 0.8521, train_c_index: 0.6270
+Epoch: 36, validation_loss: 0.9758, validation_c_index: 0.5167
+Epoch: 36, Test_loss: 0.9663, c_index: 0.5837
+
+
+Epoch: 37, train_loss: 0.8453, train_c_index: 0.6236
+Epoch: 37, validation_loss: 0.9778, validation_c_index: 0.5167
+Epoch: 37, Test_loss: 0.9625, c_index: 0.5837
+
+
+Epoch: 38, train_loss: 0.8445, train_c_index: 0.6417
+Epoch: 38, validation_loss: 0.9776, validation_c_index: 0.5167
+Epoch: 38, Test_loss: 0.9654, c_index: 0.5767
+
+
+Epoch: 39, train_loss: 0.8369, train_c_index: 0.6367
+Epoch: 39, validation_loss: 0.9802, validation_c_index: 0.5136
+Epoch: 39, Test_loss: 0.9670, c_index: 0.5797
+
+
+Epoch: 40, train_loss: 0.8383, train_c_index: 0.6347
+Epoch: 40, validation_loss: 0.9827, validation_c_index: 0.5105
+Epoch: 40, Test_loss: 0.9718, c_index: 0.5767
+
+
+Epoch: 41, train_loss: 0.8344, train_c_index: 0.6419
+Epoch: 41, validation_loss: 0.9808, validation_c_index: 0.5042
+Epoch: 41, Test_loss: 0.9648, c_index: 0.5844
+
+
+Epoch: 42, train_loss: 0.8279, train_c_index: 0.6457
+Epoch: 42, validation_loss: 0.9810, validation_c_index: 0.5073
+Epoch: 42, Test_loss: 0.9645, c_index: 0.5850
+
+
+Epoch: 43, train_loss: 0.8201, train_c_index: 0.6497
+Epoch: 43, validation_loss: 0.9830, validation_c_index: 0.5010
+Epoch: 43, Test_loss: 0.9616, c_index: 0.5894
+
+
+Epoch: 44, train_loss: 0.8247, train_c_index: 0.6449
+Epoch: 44, validation_loss: 0.9818, validation_c_index: 0.4969
+Epoch: 44, Test_loss: 0.9601, c_index: 0.5884
+
+
+Epoch: 45, train_loss: 0.8181, train_c_index: 0.6485
+Epoch: 45, validation_loss: 0.9792, validation_c_index: 0.5010
+Epoch: 45, Test_loss: 0.9620, c_index: 0.5910
+
+
+Epoch: 46, train_loss: 0.8169, train_c_index: 0.6553
+Epoch: 46, validation_loss: 0.9829, validation_c_index: 0.5010
+Epoch: 46, Test_loss: 0.9588, c_index: 0.5910
+
+
+Epoch: 47, train_loss: 0.8112, train_c_index: 0.6498
+Epoch: 47, validation_loss: 0.9824, validation_c_index: 0.5042
+Epoch: 47, Test_loss: 0.9577, c_index: 0.5903
+
+
+Epoch: 48, train_loss: 0.8086, train_c_index: 0.6568
+Epoch: 48, validation_loss: 0.9809, validation_c_index: 0.5115
+Epoch: 48, Test_loss: 0.9576, c_index: 0.5903
+
+
+Epoch: 49, train_loss: 0.8084, train_c_index: 0.6556
+Epoch: 49, validation_loss: 0.9821, validation_c_index: 0.5094
+Epoch: 49, Test_loss: 0.9569, c_index: 0.5900
+
+
+Epoch: 50, train_loss: 0.8047, train_c_index: 0.6606
+Epoch: 50, validation_loss: 0.9831, validation_c_index: 0.5084
+Epoch: 50, Test_loss: 0.9582, c_index: 0.5844
+
+
+Epoch: 51, train_loss: 0.8038, train_c_index: 0.6341
+Epoch: 51, validation_loss: 0.9804, validation_c_index: 0.5115
+Epoch: 51, Test_loss: 0.9593, c_index: 0.5817
+
+
+Epoch: 52, train_loss: 0.7952, train_c_index: 0.6580
+Epoch: 52, validation_loss: 0.9821, validation_c_index: 0.5115
+Epoch: 52, Test_loss: 0.9512, c_index: 0.5860
+
+
+Epoch: 53, train_loss: 0.7904, train_c_index: 0.6552
+Epoch: 53, validation_loss: 0.9855, validation_c_index: 0.5042
+Epoch: 53, Test_loss: 0.9545, c_index: 0.5857
+
+
+Epoch: 54, train_loss: 0.7923, train_c_index: 0.6467
+Epoch: 54, validation_loss: 0.9830, validation_c_index: 0.5084
+Epoch: 54, Test_loss: 0.9541, c_index: 0.5874
+
+
+Epoch: 55, train_loss: 0.7918, train_c_index: 0.6515
+Epoch: 55, validation_loss: 0.9814, validation_c_index: 0.5031
+Epoch: 55, Test_loss: 0.9593, c_index: 0.5844
+
+
+Epoch: 56, train_loss: 0.7832, train_c_index: 0.6613
+Epoch: 56, validation_loss: 0.9804, validation_c_index: 0.5063
+Epoch: 56, Test_loss: 0.9582, c_index: 0.5874
+
+
+Epoch: 57, train_loss: 0.7808, train_c_index: 0.6739
+Epoch: 57, validation_loss: 0.9795, validation_c_index: 0.5084
+Epoch: 57, Test_loss: 0.9607, c_index: 0.5867
+
+
+Epoch: 58, train_loss: 0.7797, train_c_index: 0.6689
+Epoch: 58, validation_loss: 0.9815, validation_c_index: 0.5094
+Epoch: 58, Test_loss: 0.9562, c_index: 0.5877
+
+
+Epoch: 59, train_loss: 0.7729, train_c_index: 0.6542
+Epoch: 59, validation_loss: 0.9802, validation_c_index: 0.5136
+Epoch: 59, Test_loss: 0.9522, c_index: 0.5870
+
+
+Epoch: 60, train_loss: 0.7735, train_c_index: 0.6701
+Epoch: 60, validation_loss: 0.9840, validation_c_index: 0.5063
+Epoch: 60, Test_loss: 0.9547, c_index: 0.5884
+
+
+Epoch: 61, train_loss: 0.7659, train_c_index: 0.6676
+Epoch: 61, validation_loss: 0.9852, validation_c_index: 0.5115
+Epoch: 61, Test_loss: 0.9585, c_index: 0.5837
+
+
+Epoch: 62, train_loss: 0.7683, train_c_index: 0.6666
+Epoch: 62, validation_loss: 0.9845, validation_c_index: 0.5052
+Epoch: 62, Test_loss: 0.9549, c_index: 0.5880
+
+
+Epoch: 63, train_loss: 0.7716, train_c_index: 0.6634
+Epoch: 63, validation_loss: 0.9844, validation_c_index: 0.5115
+Epoch: 63, Test_loss: 0.9551, c_index: 0.5884
+
+
+Epoch: 64, train_loss: 0.7596, train_c_index: 0.6661
+Epoch: 64, validation_loss: 0.9842, validation_c_index: 0.5042
+Epoch: 64, Test_loss: 0.9543, c_index: 0.5870
+
+
+Epoch: 65, train_loss: 0.7563, train_c_index: 0.6664
+Epoch: 65, validation_loss: 0.9852, validation_c_index: 0.5052
+Epoch: 65, Test_loss: 0.9590, c_index: 0.5877
+
+
+Epoch: 66, train_loss: 0.7554, train_c_index: 0.6783
+Epoch: 66, validation_loss: 0.9859, validation_c_index: 0.5042
+Epoch: 66, Test_loss: 0.9529, c_index: 0.5903
+
+
+Epoch: 67, train_loss: 0.7576, train_c_index: 0.6661
+Epoch: 67, validation_loss: 0.9873, validation_c_index: 0.5073
+Epoch: 67, Test_loss: 0.9513, c_index: 0.5907
+
+
+Epoch: 68, train_loss: 0.7491, train_c_index: 0.6636
+Epoch: 68, validation_loss: 0.9832, validation_c_index: 0.5063
+Epoch: 68, Test_loss: 0.9496, c_index: 0.5930
+
+
+Epoch: 69, train_loss: 0.7439, train_c_index: 0.6713
+Epoch: 69, validation_loss: 0.9839, validation_c_index: 0.5146
+Epoch: 69, Test_loss: 0.9492, c_index: 0.5920
+
+
+Epoch: 70, train_loss: 0.7433, train_c_index: 0.6764
+Epoch: 70, validation_loss: 0.9825, validation_c_index: 0.5094
+Epoch: 70, Test_loss: 0.9551, c_index: 0.5940
+
+
+Epoch: 71, train_loss: 0.7444, train_c_index: 0.6808
+Epoch: 71, validation_loss: 0.9863, validation_c_index: 0.5073
+Epoch: 71, Test_loss: 0.9558, c_index: 0.5937
+
+
+Epoch: 72, train_loss: 0.7340, train_c_index: 0.6911
+Epoch: 72, validation_loss: 0.9849, validation_c_index: 0.5126
+Epoch: 72, Test_loss: 0.9558, c_index: 0.5970
+
+
+Epoch: 73, train_loss: 0.7359, train_c_index: 0.6815
+Epoch: 73, validation_loss: 0.9877, validation_c_index: 0.5230
+Epoch: 73, Test_loss: 0.9478, c_index: 0.5977
+
+
+Epoch: 74, train_loss: 0.7344, train_c_index: 0.6885
+Epoch: 74, validation_loss: 0.9836, validation_c_index: 0.5251
+Epoch: 74, Test_loss: 0.9441, c_index: 0.5983
+
+
+Epoch: 75, train_loss: 0.7332, train_c_index: 0.6797
+Epoch: 75, validation_loss: 0.9855, validation_c_index: 0.5241
+Epoch: 75, Test_loss: 0.9454, c_index: 0.6023
+
+
+Epoch: 76, train_loss: 0.7264, train_c_index: 0.6743
+Epoch: 76, validation_loss: 0.9864, validation_c_index: 0.5167
+Epoch: 76, Test_loss: 0.9451, c_index: 0.6003
+
+
+Epoch: 77, train_loss: 0.7270, train_c_index: 0.6818
+Epoch: 77, validation_loss: 0.9838, validation_c_index: 0.5209
+Epoch: 77, Test_loss: 0.9430, c_index: 0.6033
+
+
+Epoch: 78, train_loss: 0.7234, train_c_index: 0.6762
+Epoch: 78, validation_loss: 0.9856, validation_c_index: 0.5199
+Epoch: 78, Test_loss: 0.9466, c_index: 0.6010
+
+
+Epoch: 79, train_loss: 0.7177, train_c_index: 0.6870
+Epoch: 79, validation_loss: 0.9807, validation_c_index: 0.5167
+Epoch: 79, Test_loss: 0.9414, c_index: 0.6003
+
+
+Epoch: 80, train_loss: 0.7167, train_c_index: 0.6811
+Epoch: 80, validation_loss: 0.9825, validation_c_index: 0.5209
+Epoch: 80, Test_loss: 0.9413, c_index: 0.6040
+
+
+Epoch: 81, train_loss: 0.7116, train_c_index: 0.6828
+Epoch: 81, validation_loss: 0.9848, validation_c_index: 0.5188
+Epoch: 81, Test_loss: 0.9452, c_index: 0.6047
+
+
+Epoch: 82, train_loss: 0.7090, train_c_index: 0.6868
+Epoch: 82, validation_loss: 0.9850, validation_c_index: 0.5157
+Epoch: 82, Test_loss: 0.9494, c_index: 0.6037
+
+
+Epoch: 83, train_loss: 0.7086, train_c_index: 0.6750
+Epoch: 83, validation_loss: 0.9845, validation_c_index: 0.5136
+Epoch: 83, Test_loss: 0.9464, c_index: 0.6077
+
+
+Epoch: 84, train_loss: 0.7064, train_c_index: 0.6845
+Epoch: 84, validation_loss: 0.9862, validation_c_index: 0.5084
+Epoch: 84, Test_loss: 0.9532, c_index: 0.6073
+
+
+Epoch: 85, train_loss: 0.7048, train_c_index: 0.6797
+Epoch: 85, validation_loss: 0.9894, validation_c_index: 0.5209
+Epoch: 85, Test_loss: 0.9581, c_index: 0.6050
+
+
+Epoch: 86, train_loss: 0.6990, train_c_index: 0.6814
+Epoch: 86, validation_loss: 0.9877, validation_c_index: 0.5178
+Epoch: 86, Test_loss: 0.9492, c_index: 0.6067
+
+
+Epoch: 87, train_loss: 0.6950, train_c_index: 0.6783
+Epoch: 87, validation_loss: 0.9885, validation_c_index: 0.5251
+Epoch: 87, Test_loss: 0.9482, c_index: 0.6093
+
+
+Epoch: 88, train_loss: 0.6954, train_c_index: 0.6911
+Epoch: 88, validation_loss: 0.9879, validation_c_index: 0.5220
+Epoch: 88, Test_loss: 0.9424, c_index: 0.6130
+
+
+Epoch: 89, train_loss: 0.6936, train_c_index: 0.6924
+Epoch: 89, validation_loss: 0.9887, validation_c_index: 0.5136
+Epoch: 89, Test_loss: 0.9364, c_index: 0.6136
+
+
+Epoch: 90, train_loss: 0.6885, train_c_index: 0.6874
+Epoch: 90, validation_loss: 0.9904, validation_c_index: 0.5146
+Epoch: 90, Test_loss: 0.9480, c_index: 0.6113
+
+
+Epoch: 91, train_loss: 0.6874, train_c_index: 0.6880
+Epoch: 91, validation_loss: 0.9932, validation_c_index: 0.5115
+Epoch: 91, Test_loss: 0.9538, c_index: 0.6070
+
+
+Epoch: 92, train_loss: 0.6864, train_c_index: 0.6939
+Epoch: 92, validation_loss: 0.9924, validation_c_index: 0.5178
+Epoch: 92, Test_loss: 0.9484, c_index: 0.6100
+
+
+Epoch: 93, train_loss: 0.6812, train_c_index: 0.6861
+Epoch: 93, validation_loss: 0.9932, validation_c_index: 0.5105
+Epoch: 93, Test_loss: 0.9404, c_index: 0.6146
+
+
+Epoch: 94, train_loss: 0.6800, train_c_index: 0.6782
+Epoch: 94, validation_loss: 0.9919, validation_c_index: 0.5126
+Epoch: 94, Test_loss: 0.9445, c_index: 0.6123
+
+
+Epoch: 95, train_loss: 0.6745, train_c_index: 0.6945
+Epoch: 95, validation_loss: 0.9974, validation_c_index: 0.5105
+Epoch: 95, Test_loss: 0.9440, c_index: 0.6163
+
+
+Epoch: 96, train_loss: 0.6745, train_c_index: 0.6910
+Epoch: 96, validation_loss: 0.9975, validation_c_index: 0.5084
+Epoch: 96, Test_loss: 0.9430, c_index: 0.6120
+
+
+Epoch: 97, train_loss: 0.6726, train_c_index: 0.6825
+Epoch: 97, validation_loss: 0.9953, validation_c_index: 0.5073
+Epoch: 97, Test_loss: 0.9477, c_index: 0.6133
+
+
+Epoch: 98, train_loss: 0.6741, train_c_index: 0.6924
+Epoch: 98, validation_loss: 0.9947, validation_c_index: 0.5146
+Epoch: 98, Test_loss: 0.9444, c_index: 0.6156
+
+
+Epoch: 99, train_loss: 0.6680, train_c_index: 0.6898
+Epoch: 99, validation_loss: 0.9968, validation_c_index: 0.5157
+Epoch: 99, Test_loss: 0.9379, c_index: 0.6176
+
+
+Epoch: 100, train_loss: 0.6611, train_c_index: 0.7036
+Epoch: 100, validation_loss: 0.9958, validation_c_index: 0.5146
+Epoch: 100, Test_loss: 0.9396, c_index: 0.6186
+
+
+Epoch: 101, train_loss: 0.6595, train_c_index: 0.6929
+Epoch: 101, validation_loss: 1.0004, validation_c_index: 0.5241
+Epoch: 101, Test_loss: 0.9373, c_index: 0.6183
+
+
+Epoch: 102, train_loss: 0.6586, train_c_index: 0.6947
+Epoch: 102, validation_loss: 1.0042, validation_c_index: 0.5146
+Epoch: 102, Test_loss: 0.9411, c_index: 0.6170
+
+
+Epoch: 103, train_loss: 0.6616, train_c_index: 0.6923
+Epoch: 103, validation_loss: 1.0001, validation_c_index: 0.5272
+Epoch: 103, Test_loss: 0.9333, c_index: 0.6190
+
+
+Epoch: 104, train_loss: 0.6508, train_c_index: 0.6840
+Epoch: 104, validation_loss: 0.9981, validation_c_index: 0.5136
+Epoch: 104, Test_loss: 0.9359, c_index: 0.6190
+
+
+Epoch: 105, train_loss: 0.6504, train_c_index: 0.7017
+Epoch: 105, validation_loss: 0.9994, validation_c_index: 0.5084
+Epoch: 105, Test_loss: 0.9433, c_index: 0.6143
+
+
+Epoch: 106, train_loss: 0.6516, train_c_index: 0.6948
+Epoch: 106, validation_loss: 1.0059, validation_c_index: 0.5146
+Epoch: 106, Test_loss: 0.9455, c_index: 0.6183
+
+
+Epoch: 107, train_loss: 0.6476, train_c_index: 0.6935
+Epoch: 107, validation_loss: 0.9969, validation_c_index: 0.5136
+Epoch: 107, Test_loss: 0.9432, c_index: 0.6236
+
+
+Epoch: 108, train_loss: 0.6437, train_c_index: 0.6928
+Epoch: 108, validation_loss: 0.9950, validation_c_index: 0.5188
+Epoch: 108, Test_loss: 0.9426, c_index: 0.6220
+
+
+Epoch: 109, train_loss: 0.6409, train_c_index: 0.6980
+Epoch: 109, validation_loss: 0.9971, validation_c_index: 0.5084
+Epoch: 109, Test_loss: 0.9394, c_index: 0.6230
+
+
+Epoch: 110, train_loss: 0.6436, train_c_index: 0.6953
+Epoch: 110, validation_loss: 1.0021, validation_c_index: 0.5084
+Epoch: 110, Test_loss: 0.9388, c_index: 0.6200
+
+
+Epoch: 111, train_loss: 0.6348, train_c_index: 0.6961
+Epoch: 111, validation_loss: 1.0059, validation_c_index: 0.5167
+Epoch: 111, Test_loss: 0.9352, c_index: 0.6216
+
+
+Epoch: 112, train_loss: 0.6350, train_c_index: 0.6918
+Epoch: 112, validation_loss: 1.0089, validation_c_index: 0.5094
+Epoch: 112, Test_loss: 0.9295, c_index: 0.6253
+
+
+Epoch: 113, train_loss: 0.6335, train_c_index: 0.6929
+Epoch: 113, validation_loss: 1.0034, validation_c_index: 0.5136
+Epoch: 113, Test_loss: 0.9486, c_index: 0.6216
+
+
+Epoch: 114, train_loss: 0.6285, train_c_index: 0.6926
+Epoch: 114, validation_loss: 1.0028, validation_c_index: 0.5167
+Epoch: 114, Test_loss: 0.9443, c_index: 0.6246
+
+
+Epoch: 115, train_loss: 0.6269, train_c_index: 0.6988
+Epoch: 115, validation_loss: 1.0099, validation_c_index: 0.5157
+Epoch: 115, Test_loss: 0.9355, c_index: 0.6206
+
+
+Epoch: 116, train_loss: 0.6237, train_c_index: 0.6927
+Epoch: 116, validation_loss: 1.0138, validation_c_index: 0.5105
+Epoch: 116, Test_loss: 0.9432, c_index: 0.6226
+
+
+Epoch: 117, train_loss: 0.6234, train_c_index: 0.6941
+Epoch: 117, validation_loss: 1.0076, validation_c_index: 0.5146
+Epoch: 117, Test_loss: 0.9317, c_index: 0.6250
+
+
+Epoch: 118, train_loss: 0.6194, train_c_index: 0.6982
+Epoch: 118, validation_loss: 1.0107, validation_c_index: 0.5073
+Epoch: 118, Test_loss: 0.9410, c_index: 0.6243
+
+
+Epoch: 119, train_loss: 0.6150, train_c_index: 0.6938
+Epoch: 119, validation_loss: 1.0110, validation_c_index: 0.5136
+Epoch: 119, Test_loss: 0.9345, c_index: 0.6286
+
+
+Epoch: 120, train_loss: 0.6137, train_c_index: 0.6962
+Epoch: 120, validation_loss: 1.0142, validation_c_index: 0.5042
+Epoch: 120, Test_loss: 0.9316, c_index: 0.6273
+
+
+Epoch: 121, train_loss: 0.6081, train_c_index: 0.7015
+Epoch: 121, validation_loss: 1.0210, validation_c_index: 0.5136
+Epoch: 121, Test_loss: 0.9387, c_index: 0.6276
+
+
+Epoch: 122, train_loss: 0.6093, train_c_index: 0.7050
+Epoch: 122, validation_loss: 1.0199, validation_c_index: 0.5126
+Epoch: 122, Test_loss: 0.9381, c_index: 0.6303
+
+
+Epoch: 123, train_loss: 0.6046, train_c_index: 0.7001
+Epoch: 123, validation_loss: 1.0224, validation_c_index: 0.5063
+Epoch: 123, Test_loss: 0.9398, c_index: 0.6293
+
+
+Epoch: 124, train_loss: 0.6033, train_c_index: 0.7076
+Epoch: 124, validation_loss: 1.0171, validation_c_index: 0.5115
+Epoch: 124, Test_loss: 0.9377, c_index: 0.6270
+
+
+Epoch: 125, train_loss: 0.6032, train_c_index: 0.6996
+Epoch: 125, validation_loss: 1.0171, validation_c_index: 0.5146
+Epoch: 125, Test_loss: 0.9310, c_index: 0.6316
+
+
+Epoch: 126, train_loss: 0.5961, train_c_index: 0.6953
+Epoch: 126, validation_loss: 1.0210, validation_c_index: 0.5094
+Epoch: 126, Test_loss: 0.9380, c_index: 0.6270
+
+
+Epoch: 127, train_loss: 0.5987, train_c_index: 0.7010
+Epoch: 127, validation_loss: 1.0153, validation_c_index: 0.5031
+Epoch: 127, Test_loss: 0.9339, c_index: 0.6283
+
+
+Epoch: 128, train_loss: 0.5930, train_c_index: 0.7073
+Epoch: 128, validation_loss: 1.0146, validation_c_index: 0.5084
+Epoch: 128, Test_loss: 0.9365, c_index: 0.6280
+
+
+Epoch: 129, train_loss: 0.5936, train_c_index: 0.6973
+Epoch: 129, validation_loss: 1.0201, validation_c_index: 0.5073
+Epoch: 129, Test_loss: 0.9387, c_index: 0.6266
+
+
+Epoch: 130, train_loss: 0.5906, train_c_index: 0.6954
+Epoch: 130, validation_loss: 1.0236, validation_c_index: 0.5052
+Epoch: 130, Test_loss: 0.9569, c_index: 0.6276
+
+
+Epoch: 131, train_loss: 0.5908, train_c_index: 0.6993
+Epoch: 131, validation_loss: 1.0262, validation_c_index: 0.5094
+Epoch: 131, Test_loss: 0.9375, c_index: 0.6273
+
+
+Epoch: 132, train_loss: 0.5818, train_c_index: 0.7010
+Epoch: 132, validation_loss: 1.0247, validation_c_index: 0.5063
+Epoch: 132, Test_loss: 0.9341, c_index: 0.6290
+
+
+Epoch: 133, train_loss: 0.5793, train_c_index: 0.7120
+Epoch: 133, validation_loss: 1.0250, validation_c_index: 0.5084
+Epoch: 133, Test_loss: 0.9233, c_index: 0.6273
+
+
+Epoch: 134, train_loss: 0.5748, train_c_index: 0.7089
+Epoch: 134, validation_loss: 1.0351, validation_c_index: 0.5063
+Epoch: 134, Test_loss: 0.9324, c_index: 0.6266
+
+
+Epoch: 135, train_loss: 0.5769, train_c_index: 0.7024
+Epoch: 135, validation_loss: 1.0298, validation_c_index: 0.5126
+Epoch: 135, Test_loss: 0.9230, c_index: 0.6303
+
+
+Epoch: 136, train_loss: 0.5764, train_c_index: 0.6956
+Epoch: 136, validation_loss: 1.0347, validation_c_index: 0.5084
+Epoch: 136, Test_loss: 0.9390, c_index: 0.6276
+
+
+Epoch: 137, train_loss: 0.5720, train_c_index: 0.7028
+Epoch: 137, validation_loss: 1.0224, validation_c_index: 0.5126
+Epoch: 137, Test_loss: 0.9331, c_index: 0.6260
+
+
+Epoch: 138, train_loss: 0.5727, train_c_index: 0.6970
+Epoch: 138, validation_loss: 1.0301, validation_c_index: 0.5052
+Epoch: 138, Test_loss: 0.9269, c_index: 0.6329
+
+
+Epoch: 139, train_loss: 0.5687, train_c_index: 0.7064
+Epoch: 139, validation_loss: 1.0301, validation_c_index: 0.5167
+Epoch: 139, Test_loss: 0.9355, c_index: 0.6280
+
+
+Epoch: 140, train_loss: 0.5611, train_c_index: 0.6945
+Epoch: 140, validation_loss: 1.0329, validation_c_index: 0.5073
+Epoch: 140, Test_loss: 0.9506, c_index: 0.6273
+
+
+Epoch: 141, train_loss: 0.5607, train_c_index: 0.7037
+Epoch: 141, validation_loss: 1.0326, validation_c_index: 0.5126
+Epoch: 141, Test_loss: 0.9343, c_index: 0.6379
+
+
+Epoch: 142, train_loss: 0.5632, train_c_index: 0.7002
+Epoch: 142, validation_loss: 1.0354, validation_c_index: 0.5073
+Epoch: 142, Test_loss: 0.9286, c_index: 0.6363
+
+
+Epoch: 143, train_loss: 0.5585, train_c_index: 0.7049
+Epoch: 143, validation_loss: 1.0416, validation_c_index: 0.5073
+Epoch: 143, Test_loss: 0.9289, c_index: 0.6333
+
+
+Epoch: 144, train_loss: 0.5513, train_c_index: 0.7039
+Epoch: 144, validation_loss: 1.0426, validation_c_index: 0.5052
+Epoch: 144, Test_loss: 0.9355, c_index: 0.6333
+
+
+Epoch: 145, train_loss: 0.5506, train_c_index: 0.7155
+Epoch: 145, validation_loss: 1.0463, validation_c_index: 0.5042
+Epoch: 145, Test_loss: 0.9394, c_index: 0.6303
+
+
+Epoch: 146, train_loss: 0.5510, train_c_index: 0.7036
+Epoch: 146, validation_loss: 1.0450, validation_c_index: 0.5105
+Epoch: 146, Test_loss: 0.9403, c_index: 0.6300
+
+
+Epoch: 147, train_loss: 0.5436, train_c_index: 0.7034
+Epoch: 147, validation_loss: 1.0395, validation_c_index: 0.5115
+Epoch: 147, Test_loss: 0.9285, c_index: 0.6336
+
+
+Epoch: 148, train_loss: 0.5433, train_c_index: 0.7064
+Epoch: 148, validation_loss: 1.0458, validation_c_index: 0.5084
+Epoch: 148, Test_loss: 0.9299, c_index: 0.6333
+
+
+Epoch: 149, train_loss: 0.5383, train_c_index: 0.7129
+Epoch: 149, validation_loss: 1.0487, validation_c_index: 0.5031
+Epoch: 149, Test_loss: 0.9294, c_index: 0.6326
+
+
+Epoch: 150, train_loss: 0.5367, train_c_index: 0.7046
+Epoch: 150, validation_loss: 1.0393, validation_c_index: 0.5073
+Epoch: 150, Test_loss: 0.9350, c_index: 0.6306
+
+
+Epoch: 151, train_loss: 0.5394, train_c_index: 0.6991
+Epoch: 151, validation_loss: 1.0445, validation_c_index: 0.5063
+Epoch: 151, Test_loss: 0.9344, c_index: 0.6309
+
+
+Epoch: 152, train_loss: 0.5322, train_c_index: 0.7147
+Epoch: 152, validation_loss: 1.0480, validation_c_index: 0.5105
+Epoch: 152, Test_loss: 0.9264, c_index: 0.6413
+
+
+Epoch: 153, train_loss: 0.5304, train_c_index: 0.7067
+Epoch: 153, validation_loss: 1.0511, validation_c_index: 0.5094
+Epoch: 153, Test_loss: 0.9364, c_index: 0.6303
+
+
+Epoch: 154, train_loss: 0.5276, train_c_index: 0.7100
+Epoch: 154, validation_loss: 1.0429, validation_c_index: 0.5094
+Epoch: 154, Test_loss: 0.9193, c_index: 0.6363
+
+
+Epoch: 155, train_loss: 0.5259, train_c_index: 0.7125
+Epoch: 155, validation_loss: 1.0510, validation_c_index: 0.5031
+Epoch: 155, Test_loss: 0.9256, c_index: 0.6373
+
+
+Epoch: 156, train_loss: 0.5265, train_c_index: 0.7106
+Epoch: 156, validation_loss: 1.0518, validation_c_index: 0.5042
+Epoch: 156, Test_loss: 0.9314, c_index: 0.6349
+
+
+Epoch: 157, train_loss: 0.5238, train_c_index: 0.7100
+Epoch: 157, validation_loss: 1.0574, validation_c_index: 0.5042
+Epoch: 157, Test_loss: 0.9249, c_index: 0.6363
+
+
+Epoch: 158, train_loss: 0.5206, train_c_index: 0.7018
+Epoch: 158, validation_loss: 1.0537, validation_c_index: 0.5021
+Epoch: 158, Test_loss: 0.9157, c_index: 0.6409
+
+
+Epoch: 159, train_loss: 0.5153, train_c_index: 0.7092
+Epoch: 159, validation_loss: 1.0630, validation_c_index: 0.5042
+Epoch: 159, Test_loss: 0.9270, c_index: 0.6356
+
+
+Epoch: 160, train_loss: 0.5164, train_c_index: 0.7039
+Epoch: 160, validation_loss: 1.0631, validation_c_index: 0.5073
+Epoch: 160, Test_loss: 0.9160, c_index: 0.6373
+
+
+Epoch: 161, train_loss: 0.5103, train_c_index: 0.7080
+Epoch: 161, validation_loss: 1.0601, validation_c_index: 0.5031
+Epoch: 161, Test_loss: 0.9296, c_index: 0.6363
+
+
+Epoch: 162, train_loss: 0.5110, train_c_index: 0.7088
+Epoch: 162, validation_loss: 1.0648, validation_c_index: 0.5052
+Epoch: 162, Test_loss: 0.9344, c_index: 0.6379
+
+
+Epoch: 163, train_loss: 0.5053, train_c_index: 0.7092
+Epoch: 163, validation_loss: 1.0702, validation_c_index: 0.5052
+Epoch: 163, Test_loss: 0.9374, c_index: 0.6379
+
+
+Epoch: 164, train_loss: 0.5106, train_c_index: 0.7080
+Epoch: 164, validation_loss: 1.0746, validation_c_index: 0.4979
+Epoch: 164, Test_loss: 0.9440, c_index: 0.6369
+
+
+Epoch: 165, train_loss: 0.5059, train_c_index: 0.7167
+Epoch: 165, validation_loss: 1.0696, validation_c_index: 0.5031
+Epoch: 165, Test_loss: 0.9327, c_index: 0.6343
+
+
+Epoch: 166, train_loss: 0.4962, train_c_index: 0.7212
+Epoch: 166, validation_loss: 1.0773, validation_c_index: 0.5052
+Epoch: 166, Test_loss: 0.9109, c_index: 0.6423
+
+
+Epoch: 167, train_loss: 0.4936, train_c_index: 0.7095
+Epoch: 167, validation_loss: 1.0714, validation_c_index: 0.4990
+Epoch: 167, Test_loss: 0.9413, c_index: 0.6373
+
+
+Epoch: 168, train_loss: 0.4916, train_c_index: 0.7135
+Epoch: 168, validation_loss: 1.0738, validation_c_index: 0.5010
+Epoch: 168, Test_loss: 0.9316, c_index: 0.6323
+
+
+Epoch: 169, train_loss: 0.4941, train_c_index: 0.7127
+Epoch: 169, validation_loss: 1.0724, validation_c_index: 0.5010
+Epoch: 169, Test_loss: 0.9446, c_index: 0.6363
+
+
+Epoch: 170, train_loss: 0.4859, train_c_index: 0.7174
+Epoch: 170, validation_loss: 1.0802, validation_c_index: 0.5010
+Epoch: 170, Test_loss: 0.9205, c_index: 0.6343
+
+
+Epoch: 171, train_loss: 0.4905, train_c_index: 0.7103
+Epoch: 171, validation_loss: 1.0877, validation_c_index: 0.5031
+Epoch: 171, Test_loss: 0.9146, c_index: 0.6386
+
+
+Epoch: 172, train_loss: 0.4844, train_c_index: 0.7126
+Epoch: 172, validation_loss: 1.0898, validation_c_index: 0.5052
+Epoch: 172, Test_loss: 0.9288, c_index: 0.6306
+
+
+Epoch: 173, train_loss: 0.4779, train_c_index: 0.7142
+Epoch: 173, validation_loss: 1.0830, validation_c_index: 0.5031
+Epoch: 173, Test_loss: 0.9274, c_index: 0.6339
+
+
+Epoch: 174, train_loss: 0.4810, train_c_index: 0.7163
+Epoch: 174, validation_loss: 1.0863, validation_c_index: 0.5063
+Epoch: 174, Test_loss: 0.9245, c_index: 0.6333
+
+
+Epoch: 175, train_loss: 0.4709, train_c_index: 0.7199
+Epoch: 175, validation_loss: 1.0904, validation_c_index: 0.5021
+Epoch: 175, Test_loss: 0.9563, c_index: 0.6363
+
+
+Epoch: 176, train_loss: 0.4767, train_c_index: 0.7109
+Epoch: 176, validation_loss: 1.0899, validation_c_index: 0.5021
+Epoch: 176, Test_loss: 0.9397, c_index: 0.6329
+
+
+Epoch: 177, train_loss: 0.4743, train_c_index: 0.7226
+Epoch: 177, validation_loss: 1.0861, validation_c_index: 0.4948
+Epoch: 177, Test_loss: 0.9386, c_index: 0.6333
+
+
+Epoch: 178, train_loss: 0.4696, train_c_index: 0.7128
+Epoch: 178, validation_loss: 1.0914, validation_c_index: 0.5063
+Epoch: 178, Test_loss: 0.9362, c_index: 0.6326
+
+
+Epoch: 179, train_loss: 0.4671, train_c_index: 0.7092
+Epoch: 179, validation_loss: 1.0951, validation_c_index: 0.4979
+Epoch: 179, Test_loss: 0.9507, c_index: 0.6333
+
+
+Epoch: 180, train_loss: 0.4581, train_c_index: 0.7131
+Epoch: 180, validation_loss: 1.0965, validation_c_index: 0.5000
+Epoch: 180, Test_loss: 0.9332, c_index: 0.6326
+
+
+Epoch: 181, train_loss: 0.4633, train_c_index: 0.7189
+Epoch: 181, validation_loss: 1.0919, validation_c_index: 0.5000
+Epoch: 181, Test_loss: 0.9376, c_index: 0.6329
+
+
+Epoch: 182, train_loss: 0.4603, train_c_index: 0.7196
+Epoch: 182, validation_loss: 1.1044, validation_c_index: 0.4958
+Epoch: 182, Test_loss: 0.9500, c_index: 0.6280
+
+
+Epoch: 183, train_loss: 0.4625, train_c_index: 0.7162
+Epoch: 183, validation_loss: 1.0956, validation_c_index: 0.4958
+Epoch: 183, Test_loss: 0.9491, c_index: 0.6343
+
+
+Epoch: 184, train_loss: 0.4518, train_c_index: 0.7191
+Epoch: 184, validation_loss: 1.1091, validation_c_index: 0.4948
+Epoch: 184, Test_loss: 0.9398, c_index: 0.6326
+
+
+Epoch: 185, train_loss: 0.4504, train_c_index: 0.7188
+Epoch: 185, validation_loss: 1.1019, validation_c_index: 0.5052
+Epoch: 185, Test_loss: 0.9353, c_index: 0.6363
+
+
+Epoch: 186, train_loss: 0.4477, train_c_index: 0.7087
+Epoch: 186, validation_loss: 1.1184, validation_c_index: 0.5010
+Epoch: 186, Test_loss: 0.9490, c_index: 0.6323
+
+
+Epoch: 187, train_loss: 0.4512, train_c_index: 0.7142
+Epoch: 187, validation_loss: 1.1190, validation_c_index: 0.4990
+Epoch: 187, Test_loss: 0.9355, c_index: 0.6349
+
+
+Epoch: 188, train_loss: 0.4466, train_c_index: 0.7148
+Epoch: 188, validation_loss: 1.1120, validation_c_index: 0.4895
+Epoch: 188, Test_loss: 0.9544, c_index: 0.6336
+
+
+Epoch: 189, train_loss: 0.4416, train_c_index: 0.7185
+Epoch: 189, validation_loss: 1.1214, validation_c_index: 0.4969
+Epoch: 189, Test_loss: 0.9382, c_index: 0.6336
+
+
+Epoch: 190, train_loss: 0.4439, train_c_index: 0.7190
+Epoch: 190, validation_loss: 1.1138, validation_c_index: 0.4990
+Epoch: 190, Test_loss: 0.9491, c_index: 0.6326
+
+
+Epoch: 191, train_loss: 0.4377, train_c_index: 0.7129
+Epoch: 191, validation_loss: 1.1220, validation_c_index: 0.4885
+Epoch: 191, Test_loss: 0.9254, c_index: 0.6343
+
+
+Epoch: 192, train_loss: 0.4345, train_c_index: 0.7121
+Epoch: 192, validation_loss: 1.1060, validation_c_index: 0.5052
+Epoch: 192, Test_loss: 0.9229, c_index: 0.6339
+
+
+Epoch: 193, train_loss: 0.4355, train_c_index: 0.7195
+Epoch: 193, validation_loss: 1.1216, validation_c_index: 0.4895
+Epoch: 193, Test_loss: 0.9602, c_index: 0.6339
+
+
+Epoch: 194, train_loss: 0.4273, train_c_index: 0.7248
+Epoch: 194, validation_loss: 1.1252, validation_c_index: 0.4937
+Epoch: 194, Test_loss: 0.9438, c_index: 0.6359
+
+
+Epoch: 195, train_loss: 0.4277, train_c_index: 0.7183
+Epoch: 195, validation_loss: 1.1220, validation_c_index: 0.4990
+Epoch: 195, Test_loss: 0.9544, c_index: 0.6366
+
+
+Epoch: 196, train_loss: 0.4247, train_c_index: 0.7276
+Epoch: 196, validation_loss: 1.1230, validation_c_index: 0.4990
+Epoch: 196, Test_loss: 0.9296, c_index: 0.6333
+
+
+Epoch: 197, train_loss: 0.4254, train_c_index: 0.7193
+Epoch: 197, validation_loss: 1.1321, validation_c_index: 0.4874
+Epoch: 197, Test_loss: 0.9447, c_index: 0.6363
+
+
+Epoch: 198, train_loss: 0.4192, train_c_index: 0.7193
+Epoch: 198, validation_loss: 1.1419, validation_c_index: 0.4906
+Epoch: 198, Test_loss: 0.9532, c_index: 0.6349
+
+
+Epoch: 199, train_loss: 0.4171, train_c_index: 0.7206
+Epoch: 199, validation_loss: 1.1298, validation_c_index: 0.4916
+Epoch: 199, Test_loss: 0.9618, c_index: 0.6353
+
+Training Fold 3!
+
+Init train/val/test splits...
+Training on 270 samples
+Validating on 62 samples
+Testing on 105 samples
+/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+
+dropout:  0.25
+
+
+Epoch: 0, train_loss: 1.4256, train_c_index: 0.5190
+Epoch: 0, validation_loss: 1.4597, validation_c_index: 0.5868
+Epoch: 0, Test_loss: 1.1573, c_index: 0.3934
+
+
+Epoch: 1, train_loss: 1.2095, train_c_index: 0.5388
+Epoch: 1, validation_loss: 1.2607, validation_c_index: 0.5761
+Epoch: 1, Test_loss: 1.0466, c_index: 0.4249
+
+
+Epoch: 2, train_loss: 1.1039, train_c_index: 0.5372
+Epoch: 2, validation_loss: 1.1559, validation_c_index: 0.5934
+Epoch: 2, Test_loss: 1.0002, c_index: 0.4430
+
+
+Epoch: 3, train_loss: 1.0449, train_c_index: 0.5883
+Epoch: 3, validation_loss: 1.0909, validation_c_index: 0.6058
+Epoch: 3, Test_loss: 0.9823, c_index: 0.4444
+
+
+Epoch: 4, train_loss: 1.0161, train_c_index: 0.5808
+Epoch: 4, validation_loss: 1.0519, validation_c_index: 0.6099
+Epoch: 4, Test_loss: 0.9789, c_index: 0.4416
+
+
+Epoch: 5, train_loss: 0.9957, train_c_index: 0.5979
+Epoch: 5, validation_loss: 1.0280, validation_c_index: 0.6091
+Epoch: 5, Test_loss: 0.9812, c_index: 0.4413
+
+
+Epoch: 6, train_loss: 0.9836, train_c_index: 0.5812
+Epoch: 6, validation_loss: 1.0068, validation_c_index: 0.6140
+Epoch: 6, Test_loss: 0.9794, c_index: 0.4472
+
+
+Epoch: 7, train_loss: 0.9708, train_c_index: 0.5947
+Epoch: 7, validation_loss: 0.9905, validation_c_index: 0.6173
+Epoch: 7, Test_loss: 0.9824, c_index: 0.4497
+
+
+Epoch: 8, train_loss: 0.9657, train_c_index: 0.5794
+Epoch: 8, validation_loss: 0.9841, validation_c_index: 0.6206
+Epoch: 8, Test_loss: 0.9889, c_index: 0.4490
+
+
+Epoch: 9, train_loss: 0.9555, train_c_index: 0.5897
+Epoch: 9, validation_loss: 0.9770, validation_c_index: 0.6198
+Epoch: 9, Test_loss: 0.9911, c_index: 0.4486
+
+
+Epoch: 10, train_loss: 0.9519, train_c_index: 0.5734
+Epoch: 10, validation_loss: 0.9688, validation_c_index: 0.6263
+Epoch: 10, Test_loss: 0.9933, c_index: 0.4476
+
+
+Epoch: 11, train_loss: 0.9480, train_c_index: 0.5716
+Epoch: 11, validation_loss: 0.9696, validation_c_index: 0.6305
+Epoch: 11, Test_loss: 0.9999, c_index: 0.4368
+
+
+Epoch: 12, train_loss: 0.9360, train_c_index: 0.5785
+Epoch: 12, validation_loss: 0.9627, validation_c_index: 0.6337
+Epoch: 12, Test_loss: 0.9974, c_index: 0.4448
+
+
+Epoch: 13, train_loss: 0.9355, train_c_index: 0.5772
+Epoch: 13, validation_loss: 0.9598, validation_c_index: 0.6329
+Epoch: 13, Test_loss: 0.9990, c_index: 0.4507
+
+
+Epoch: 14, train_loss: 0.9280, train_c_index: 0.5759
+Epoch: 14, validation_loss: 0.9603, validation_c_index: 0.6305
+Epoch: 14, Test_loss: 1.0035, c_index: 0.4581
+
+
+Epoch: 15, train_loss: 0.9241, train_c_index: 0.5759
+Epoch: 15, validation_loss: 0.9545, validation_c_index: 0.6362
+Epoch: 15, Test_loss: 1.0006, c_index: 0.4605
+
+
+Epoch: 16, train_loss: 0.9215, train_c_index: 0.5854
+Epoch: 16, validation_loss: 0.9597, validation_c_index: 0.6354
+Epoch: 16, Test_loss: 1.0045, c_index: 0.4577
+
+
+Epoch: 17, train_loss: 0.9126, train_c_index: 0.5869
+Epoch: 17, validation_loss: 0.9567, validation_c_index: 0.6362
+Epoch: 17, Test_loss: 1.0025, c_index: 0.4647
+
+
+Epoch: 18, train_loss: 0.9089, train_c_index: 0.5938
+Epoch: 18, validation_loss: 0.9582, validation_c_index: 0.6337
+Epoch: 18, Test_loss: 1.0061, c_index: 0.4752
+
+
+Epoch: 19, train_loss: 0.9039, train_c_index: 0.5902
+Epoch: 19, validation_loss: 0.9621, validation_c_index: 0.6288
+Epoch: 19, Test_loss: 1.0087, c_index: 0.4710
+
+
+Epoch: 20, train_loss: 0.8997, train_c_index: 0.5913
+Epoch: 20, validation_loss: 0.9588, validation_c_index: 0.6296
+Epoch: 20, Test_loss: 1.0067, c_index: 0.4839
+
+
+Epoch: 21, train_loss: 0.8950, train_c_index: 0.6012
+Epoch: 21, validation_loss: 0.9569, validation_c_index: 0.6214
+Epoch: 21, Test_loss: 1.0073, c_index: 0.4948
+
+
+Epoch: 22, train_loss: 0.8920, train_c_index: 0.6036
+Epoch: 22, validation_loss: 0.9590, validation_c_index: 0.6272
+Epoch: 22, Test_loss: 1.0128, c_index: 0.4955
+
+
+Epoch: 23, train_loss: 0.8877, train_c_index: 0.6076
+Epoch: 23, validation_loss: 0.9583, validation_c_index: 0.6198
+Epoch: 23, Test_loss: 1.0117, c_index: 0.4951
+
+
+Epoch: 24, train_loss: 0.8893, train_c_index: 0.5969
+Epoch: 24, validation_loss: 0.9551, validation_c_index: 0.6280
+Epoch: 24, Test_loss: 1.0107, c_index: 0.5007
+
+
+Epoch: 25, train_loss: 0.8825, train_c_index: 0.6103
+Epoch: 25, validation_loss: 0.9583, validation_c_index: 0.6313
+Epoch: 25, Test_loss: 1.0117, c_index: 0.5101
+
+
+Epoch: 26, train_loss: 0.8739, train_c_index: 0.6207
+Epoch: 26, validation_loss: 0.9557, validation_c_index: 0.6321
+Epoch: 26, Test_loss: 1.0084, c_index: 0.5087
+
+
+Epoch: 27, train_loss: 0.8726, train_c_index: 0.6161
+Epoch: 27, validation_loss: 0.9534, validation_c_index: 0.6313
+Epoch: 27, Test_loss: 1.0071, c_index: 0.5168
+
+
+Epoch: 28, train_loss: 0.8658, train_c_index: 0.6148
+Epoch: 28, validation_loss: 0.9548, validation_c_index: 0.6329
+Epoch: 28, Test_loss: 1.0101, c_index: 0.5164
+
+
+Epoch: 29, train_loss: 0.8654, train_c_index: 0.6212
+Epoch: 29, validation_loss: 0.9561, validation_c_index: 0.6337
+Epoch: 29, Test_loss: 1.0084, c_index: 0.5283
+
+
+Epoch: 30, train_loss: 0.8583, train_c_index: 0.6321
+Epoch: 30, validation_loss: 0.9572, validation_c_index: 0.6280
+Epoch: 30, Test_loss: 1.0092, c_index: 0.5231
+
+
+Epoch: 31, train_loss: 0.8598, train_c_index: 0.6175
+Epoch: 31, validation_loss: 0.9567, validation_c_index: 0.6313
+Epoch: 31, Test_loss: 1.0117, c_index: 0.5377
+
+
+Epoch: 32, train_loss: 0.8531, train_c_index: 0.6238
+Epoch: 32, validation_loss: 0.9576, validation_c_index: 0.6313
+Epoch: 32, Test_loss: 1.0117, c_index: 0.5433
+
+
+Epoch: 33, train_loss: 0.8481, train_c_index: 0.6403
+Epoch: 33, validation_loss: 0.9599, validation_c_index: 0.6305
+Epoch: 33, Test_loss: 1.0113, c_index: 0.5496
+
+
+Epoch: 34, train_loss: 0.8453, train_c_index: 0.6450
+Epoch: 34, validation_loss: 0.9517, validation_c_index: 0.6321
+Epoch: 34, Test_loss: 1.0027, c_index: 0.5608
+
+
+Epoch: 35, train_loss: 0.8473, train_c_index: 0.6441
+Epoch: 35, validation_loss: 0.9498, validation_c_index: 0.6337
+Epoch: 35, Test_loss: 1.0099, c_index: 0.5528
+
+
+Epoch: 36, train_loss: 0.8393, train_c_index: 0.6442
+Epoch: 36, validation_loss: 0.9563, validation_c_index: 0.6321
+Epoch: 36, Test_loss: 1.0141, c_index: 0.5524
+
+
+Epoch: 37, train_loss: 0.8355, train_c_index: 0.6370
+Epoch: 37, validation_loss: 0.9543, validation_c_index: 0.6337
+Epoch: 37, Test_loss: 1.0154, c_index: 0.5538
+
+
+Epoch: 38, train_loss: 0.8342, train_c_index: 0.6390
+Epoch: 38, validation_loss: 0.9522, validation_c_index: 0.6313
+Epoch: 38, Test_loss: 1.0118, c_index: 0.5577
+
+
+Epoch: 39, train_loss: 0.8311, train_c_index: 0.6418
+Epoch: 39, validation_loss: 0.9544, validation_c_index: 0.6346
+Epoch: 39, Test_loss: 1.0112, c_index: 0.5625
+
+
+Epoch: 40, train_loss: 0.8258, train_c_index: 0.6538
+Epoch: 40, validation_loss: 0.9507, validation_c_index: 0.6362
+Epoch: 40, Test_loss: 1.0085, c_index: 0.5646
+
+
+Epoch: 41, train_loss: 0.8205, train_c_index: 0.6424
+Epoch: 41, validation_loss: 0.9559, validation_c_index: 0.6354
+Epoch: 41, Test_loss: 1.0158, c_index: 0.5604
+
+
+Epoch: 42, train_loss: 0.8211, train_c_index: 0.6408
+Epoch: 42, validation_loss: 0.9535, validation_c_index: 0.6329
+Epoch: 42, Test_loss: 1.0115, c_index: 0.5584
+
+
+Epoch: 43, train_loss: 0.8147, train_c_index: 0.6675
+Epoch: 43, validation_loss: 0.9503, validation_c_index: 0.6288
+Epoch: 43, Test_loss: 1.0029, c_index: 0.5748
+
+
+Epoch: 44, train_loss: 0.8094, train_c_index: 0.6587
+Epoch: 44, validation_loss: 0.9530, validation_c_index: 0.6296
+Epoch: 44, Test_loss: 1.0074, c_index: 0.5762
+
+
+Epoch: 45, train_loss: 0.8082, train_c_index: 0.6549
+Epoch: 45, validation_loss: 0.9514, validation_c_index: 0.6247
+Epoch: 45, Test_loss: 1.0032, c_index: 0.5723
+
+
+Epoch: 46, train_loss: 0.8060, train_c_index: 0.6615
+Epoch: 46, validation_loss: 0.9559, validation_c_index: 0.6214
+Epoch: 46, Test_loss: 1.0089, c_index: 0.5734
+
+
+Epoch: 47, train_loss: 0.8034, train_c_index: 0.6541
+Epoch: 47, validation_loss: 0.9554, validation_c_index: 0.6255
+Epoch: 47, Test_loss: 1.0110, c_index: 0.5741
+
+
+Epoch: 48, train_loss: 0.7978, train_c_index: 0.6679
+Epoch: 48, validation_loss: 0.9471, validation_c_index: 0.6255
+Epoch: 48, Test_loss: 1.0074, c_index: 0.5685
+
+
+Epoch: 49, train_loss: 0.7937, train_c_index: 0.6670
+Epoch: 49, validation_loss: 0.9481, validation_c_index: 0.6247
+Epoch: 49, Test_loss: 1.0097, c_index: 0.5755
+
+
+Epoch: 50, train_loss: 0.7891, train_c_index: 0.6700
+Epoch: 50, validation_loss: 0.9449, validation_c_index: 0.6247
+Epoch: 50, Test_loss: 1.0091, c_index: 0.5706
+
+
+Epoch: 51, train_loss: 0.7891, train_c_index: 0.6713
+Epoch: 51, validation_loss: 0.9465, validation_c_index: 0.6296
+Epoch: 51, Test_loss: 1.0093, c_index: 0.5723
+
+
+Epoch: 52, train_loss: 0.7827, train_c_index: 0.6704
+Epoch: 52, validation_loss: 0.9493, validation_c_index: 0.6280
+Epoch: 52, Test_loss: 1.0079, c_index: 0.5818
+
+
+Epoch: 53, train_loss: 0.7809, train_c_index: 0.6741
+Epoch: 53, validation_loss: 0.9507, validation_c_index: 0.6329
+Epoch: 53, Test_loss: 1.0153, c_index: 0.5765
+
+
+Epoch: 54, train_loss: 0.7804, train_c_index: 0.6705
+Epoch: 54, validation_loss: 0.9486, validation_c_index: 0.6239
+Epoch: 54, Test_loss: 1.0120, c_index: 0.5769
+
+
+Epoch: 55, train_loss: 0.7701, train_c_index: 0.6805
+Epoch: 55, validation_loss: 0.9543, validation_c_index: 0.6280
+Epoch: 55, Test_loss: 1.0190, c_index: 0.5797
+
+
+Epoch: 56, train_loss: 0.7653, train_c_index: 0.6754
+Epoch: 56, validation_loss: 0.9499, validation_c_index: 0.6239
+Epoch: 56, Test_loss: 1.0105, c_index: 0.5846
+
+
+Epoch: 57, train_loss: 0.7663, train_c_index: 0.6792
+Epoch: 57, validation_loss: 0.9519, validation_c_index: 0.6296
+Epoch: 57, Test_loss: 1.0194, c_index: 0.5839
+
+
+Epoch: 58, train_loss: 0.7578, train_c_index: 0.6708
+Epoch: 58, validation_loss: 0.9423, validation_c_index: 0.6272
+Epoch: 58, Test_loss: 1.0130, c_index: 0.5832
+
+
+Epoch: 59, train_loss: 0.7588, train_c_index: 0.6794
+Epoch: 59, validation_loss: 0.9466, validation_c_index: 0.6280
+Epoch: 59, Test_loss: 1.0205, c_index: 0.5835
+
+
+Epoch: 60, train_loss: 0.7536, train_c_index: 0.6837
+Epoch: 60, validation_loss: 0.9517, validation_c_index: 0.6247
+Epoch: 60, Test_loss: 1.0184, c_index: 0.5797
+
+
+Epoch: 61, train_loss: 0.7524, train_c_index: 0.6840
+Epoch: 61, validation_loss: 0.9451, validation_c_index: 0.6255
+Epoch: 61, Test_loss: 1.0120, c_index: 0.5856
+
+
+Epoch: 62, train_loss: 0.7454, train_c_index: 0.6808
+Epoch: 62, validation_loss: 0.9465, validation_c_index: 0.6247
+Epoch: 62, Test_loss: 1.0186, c_index: 0.5818
+
+
+Epoch: 63, train_loss: 0.7407, train_c_index: 0.6964
+Epoch: 63, validation_loss: 0.9539, validation_c_index: 0.6263
+Epoch: 63, Test_loss: 1.0206, c_index: 0.5811
+
+
+Epoch: 64, train_loss: 0.7402, train_c_index: 0.6819
+Epoch: 64, validation_loss: 0.9520, validation_c_index: 0.6313
+Epoch: 64, Test_loss: 1.0231, c_index: 0.5839
+
+
+Epoch: 65, train_loss: 0.7392, train_c_index: 0.6887
+Epoch: 65, validation_loss: 0.9552, validation_c_index: 0.6305
+Epoch: 65, Test_loss: 1.0244, c_index: 0.5825
+
+
+Epoch: 66, train_loss: 0.7330, train_c_index: 0.6904
+Epoch: 66, validation_loss: 0.9474, validation_c_index: 0.6280
+Epoch: 66, Test_loss: 1.0132, c_index: 0.5919
+
+
+Epoch: 67, train_loss: 0.7346, train_c_index: 0.6842
+Epoch: 67, validation_loss: 0.9565, validation_c_index: 0.6189
+Epoch: 67, Test_loss: 1.0148, c_index: 0.5968
+
+
+Epoch: 68, train_loss: 0.7266, train_c_index: 0.6860
+Epoch: 68, validation_loss: 0.9614, validation_c_index: 0.6165
+Epoch: 68, Test_loss: 1.0206, c_index: 0.5947
+
+
+Epoch: 69, train_loss: 0.7256, train_c_index: 0.6925
+Epoch: 69, validation_loss: 0.9493, validation_c_index: 0.6230
+Epoch: 69, Test_loss: 1.0189, c_index: 0.5881
+
+
+Epoch: 70, train_loss: 0.7204, train_c_index: 0.6928
+Epoch: 70, validation_loss: 0.9466, validation_c_index: 0.6239
+Epoch: 70, Test_loss: 1.0139, c_index: 0.5933
+
+
+Epoch: 71, train_loss: 0.7182, train_c_index: 0.6928
+Epoch: 71, validation_loss: 0.9520, validation_c_index: 0.6296
+Epoch: 71, Test_loss: 1.0201, c_index: 0.5908
+
+
+Epoch: 72, train_loss: 0.7187, train_c_index: 0.6847
+Epoch: 72, validation_loss: 0.9539, validation_c_index: 0.6272
+Epoch: 72, Test_loss: 1.0158, c_index: 0.5926
+
+
+Epoch: 73, train_loss: 0.7108, train_c_index: 0.6888
+Epoch: 73, validation_loss: 0.9619, validation_c_index: 0.6198
+Epoch: 73, Test_loss: 1.0242, c_index: 0.5971
+
+
+Epoch: 74, train_loss: 0.7073, train_c_index: 0.6877
+Epoch: 74, validation_loss: 0.9506, validation_c_index: 0.6239
+Epoch: 74, Test_loss: 1.0257, c_index: 0.5950
+
+
+Epoch: 75, train_loss: 0.7023, train_c_index: 0.6947
+Epoch: 75, validation_loss: 0.9436, validation_c_index: 0.6337
+Epoch: 75, Test_loss: 1.0218, c_index: 0.5877
+
+
+Epoch: 76, train_loss: 0.7018, train_c_index: 0.6990
+Epoch: 76, validation_loss: 0.9479, validation_c_index: 0.6255
+Epoch: 76, Test_loss: 1.0223, c_index: 0.5926
+
+
+Epoch: 77, train_loss: 0.7008, train_c_index: 0.6944
+Epoch: 77, validation_loss: 0.9547, validation_c_index: 0.6198
+Epoch: 77, Test_loss: 1.0352, c_index: 0.5894
+
+
+Epoch: 78, train_loss: 0.6969, train_c_index: 0.6997
+Epoch: 78, validation_loss: 0.9537, validation_c_index: 0.6173
+Epoch: 78, Test_loss: 1.0293, c_index: 0.5922
+
+
+Epoch: 79, train_loss: 0.6929, train_c_index: 0.6994
+Epoch: 79, validation_loss: 0.9485, validation_c_index: 0.6230
+Epoch: 79, Test_loss: 1.0261, c_index: 0.5954
+
+
+Epoch: 80, train_loss: 0.6901, train_c_index: 0.6963
+Epoch: 80, validation_loss: 0.9472, validation_c_index: 0.6198
+Epoch: 80, Test_loss: 1.0209, c_index: 0.5915
+
+
+Epoch: 81, train_loss: 0.6867, train_c_index: 0.7041
+Epoch: 81, validation_loss: 0.9543, validation_c_index: 0.6222
+Epoch: 81, Test_loss: 1.0256, c_index: 0.5954
+
+
+Epoch: 82, train_loss: 0.6866, train_c_index: 0.7064
+Epoch: 82, validation_loss: 0.9479, validation_c_index: 0.6173
+Epoch: 82, Test_loss: 1.0184, c_index: 0.5929
+
+
+Epoch: 83, train_loss: 0.6748, train_c_index: 0.7133
+Epoch: 83, validation_loss: 0.9546, validation_c_index: 0.6173
+Epoch: 83, Test_loss: 1.0229, c_index: 0.5940
+
+
+Epoch: 84, train_loss: 0.6759, train_c_index: 0.6982
+Epoch: 84, validation_loss: 0.9494, validation_c_index: 0.6189
+Epoch: 84, Test_loss: 1.0195, c_index: 0.5999
+
+
+Epoch: 85, train_loss: 0.6707, train_c_index: 0.7095
+Epoch: 85, validation_loss: 0.9571, validation_c_index: 0.6181
+Epoch: 85, Test_loss: 1.0242, c_index: 0.5957
+
+
+Epoch: 86, train_loss: 0.6732, train_c_index: 0.7070
+Epoch: 86, validation_loss: 0.9615, validation_c_index: 0.6165
+Epoch: 86, Test_loss: 1.0337, c_index: 0.5936
+
+
+Epoch: 87, train_loss: 0.6699, train_c_index: 0.7039
+Epoch: 87, validation_loss: 0.9636, validation_c_index: 0.6198
+Epoch: 87, Test_loss: 1.0342, c_index: 0.5985
+
+
+Epoch: 88, train_loss: 0.6658, train_c_index: 0.7108
+Epoch: 88, validation_loss: 0.9492, validation_c_index: 0.6206
+Epoch: 88, Test_loss: 1.0281, c_index: 0.5996
+
+
+Epoch: 89, train_loss: 0.6591, train_c_index: 0.7088
+Epoch: 89, validation_loss: 0.9585, validation_c_index: 0.6181
+Epoch: 89, Test_loss: 1.0349, c_index: 0.5992
+
+
+Epoch: 90, train_loss: 0.6588, train_c_index: 0.7161
+Epoch: 90, validation_loss: 0.9609, validation_c_index: 0.6115
+Epoch: 90, Test_loss: 1.0291, c_index: 0.5978
+
+
+Epoch: 91, train_loss: 0.6530, train_c_index: 0.6970
+Epoch: 91, validation_loss: 0.9505, validation_c_index: 0.6156
+Epoch: 91, Test_loss: 1.0316, c_index: 0.5992
+
+
+Epoch: 92, train_loss: 0.6528, train_c_index: 0.7059
+Epoch: 92, validation_loss: 0.9562, validation_c_index: 0.6140
+Epoch: 92, Test_loss: 1.0350, c_index: 0.5971
+
+
+Epoch: 93, train_loss: 0.6496, train_c_index: 0.7115
+Epoch: 93, validation_loss: 0.9672, validation_c_index: 0.6173
+Epoch: 93, Test_loss: 1.0501, c_index: 0.5978
+
+
+Epoch: 94, train_loss: 0.6480, train_c_index: 0.7060
+Epoch: 94, validation_loss: 0.9635, validation_c_index: 0.6214
+Epoch: 94, Test_loss: 1.0447, c_index: 0.5915
+
+
+Epoch: 95, train_loss: 0.6445, train_c_index: 0.7122
+Epoch: 95, validation_loss: 0.9622, validation_c_index: 0.6165
+Epoch: 95, Test_loss: 1.0412, c_index: 0.5926
+
+
+Epoch: 96, train_loss: 0.6352, train_c_index: 0.7223
+Epoch: 96, validation_loss: 0.9717, validation_c_index: 0.6156
+Epoch: 96, Test_loss: 1.0444, c_index: 0.5926
+
+
+Epoch: 97, train_loss: 0.6380, train_c_index: 0.7106
+Epoch: 97, validation_loss: 0.9761, validation_c_index: 0.6148
+Epoch: 97, Test_loss: 1.0470, c_index: 0.5957
+
+
+Epoch: 98, train_loss: 0.6304, train_c_index: 0.7082
+Epoch: 98, validation_loss: 0.9712, validation_c_index: 0.6173
+Epoch: 98, Test_loss: 1.0423, c_index: 0.6024
+
+
+Epoch: 99, train_loss: 0.6310, train_c_index: 0.7073
+Epoch: 99, validation_loss: 0.9707, validation_c_index: 0.6123
+Epoch: 99, Test_loss: 1.0403, c_index: 0.6108
+
+
+Epoch: 100, train_loss: 0.6272, train_c_index: 0.7172
+Epoch: 100, validation_loss: 0.9700, validation_c_index: 0.6074
+Epoch: 100, Test_loss: 1.0426, c_index: 0.6017
+
+
+Epoch: 101, train_loss: 0.6253, train_c_index: 0.7083
+Epoch: 101, validation_loss: 0.9687, validation_c_index: 0.6181
+Epoch: 101, Test_loss: 1.0423, c_index: 0.6055
+
+
+Epoch: 102, train_loss: 0.6191, train_c_index: 0.7132
+Epoch: 102, validation_loss: 0.9650, validation_c_index: 0.6156
+Epoch: 102, Test_loss: 1.0483, c_index: 0.5989
+
+
+Epoch: 103, train_loss: 0.6163, train_c_index: 0.7114
+Epoch: 103, validation_loss: 0.9626, validation_c_index: 0.6123
+Epoch: 103, Test_loss: 1.0420, c_index: 0.6010
+
+
+Epoch: 104, train_loss: 0.6116, train_c_index: 0.7235
+Epoch: 104, validation_loss: 0.9732, validation_c_index: 0.6140
+Epoch: 104, Test_loss: 1.0493, c_index: 0.5964
+
+
+Epoch: 105, train_loss: 0.6109, train_c_index: 0.7211
+Epoch: 105, validation_loss: 0.9738, validation_c_index: 0.6156
+Epoch: 105, Test_loss: 1.0493, c_index: 0.5947
+
+
+Epoch: 106, train_loss: 0.6108, train_c_index: 0.7228
+Epoch: 106, validation_loss: 0.9764, validation_c_index: 0.6074
+Epoch: 106, Test_loss: 1.0618, c_index: 0.5996
+
+
+Epoch: 107, train_loss: 0.6059, train_c_index: 0.7183
+Epoch: 107, validation_loss: 0.9618, validation_c_index: 0.6049
+Epoch: 107, Test_loss: 1.0485, c_index: 0.6013
+
+
+Epoch: 108, train_loss: 0.6049, train_c_index: 0.7212
+Epoch: 108, validation_loss: 0.9724, validation_c_index: 0.6148
+Epoch: 108, Test_loss: 1.0584, c_index: 0.5999
+
+
+Epoch: 109, train_loss: 0.6032, train_c_index: 0.7237
+Epoch: 109, validation_loss: 0.9722, validation_c_index: 0.6132
+Epoch: 109, Test_loss: 1.0582, c_index: 0.6048
+
+
+Epoch: 110, train_loss: 0.6001, train_c_index: 0.7168
+Epoch: 110, validation_loss: 0.9738, validation_c_index: 0.6115
+Epoch: 110, Test_loss: 1.0649, c_index: 0.6069
+
+
+Epoch: 111, train_loss: 0.5942, train_c_index: 0.7176
+Epoch: 111, validation_loss: 0.9686, validation_c_index: 0.6181
+Epoch: 111, Test_loss: 1.0614, c_index: 0.6013
+
+
+Epoch: 112, train_loss: 0.5953, train_c_index: 0.7197
+Epoch: 112, validation_loss: 0.9748, validation_c_index: 0.6074
+Epoch: 112, Test_loss: 1.0604, c_index: 0.6038
+
+
+Epoch: 113, train_loss: 0.5939, train_c_index: 0.7199
+Epoch: 113, validation_loss: 0.9804, validation_c_index: 0.6107
+Epoch: 113, Test_loss: 1.0630, c_index: 0.6045
+
+
+Epoch: 114, train_loss: 0.5899, train_c_index: 0.7187
+Epoch: 114, validation_loss: 0.9773, validation_c_index: 0.6198
+Epoch: 114, Test_loss: 1.0682, c_index: 0.5968
+
+
+Epoch: 115, train_loss: 0.5848, train_c_index: 0.7154
+Epoch: 115, validation_loss: 0.9778, validation_c_index: 0.6082
+Epoch: 115, Test_loss: 1.0620, c_index: 0.6024
+
+
+Epoch: 116, train_loss: 0.5835, train_c_index: 0.7181
+Epoch: 116, validation_loss: 0.9805, validation_c_index: 0.6140
+Epoch: 116, Test_loss: 1.0691, c_index: 0.5954
+
+
+Epoch: 117, train_loss: 0.5773, train_c_index: 0.7268
+Epoch: 117, validation_loss: 0.9777, validation_c_index: 0.6082
+Epoch: 117, Test_loss: 1.0645, c_index: 0.5989
+
+
+Epoch: 118, train_loss: 0.5744, train_c_index: 0.7207
+Epoch: 118, validation_loss: 0.9717, validation_c_index: 0.5967
+Epoch: 118, Test_loss: 1.0647, c_index: 0.6034
+
+
+Epoch: 119, train_loss: 0.5727, train_c_index: 0.7173
+Epoch: 119, validation_loss: 0.9809, validation_c_index: 0.5959
+Epoch: 119, Test_loss: 1.0628, c_index: 0.6055
+
+
+Epoch: 120, train_loss: 0.5667, train_c_index: 0.7256
+Epoch: 120, validation_loss: 0.9828, validation_c_index: 0.6041
+Epoch: 120, Test_loss: 1.0774, c_index: 0.6020
+
+
+Epoch: 121, train_loss: 0.5630, train_c_index: 0.7329
+Epoch: 121, validation_loss: 0.9876, validation_c_index: 0.6000
+Epoch: 121, Test_loss: 1.0758, c_index: 0.6034
+
+
+Epoch: 122, train_loss: 0.5705, train_c_index: 0.7204
+Epoch: 122, validation_loss: 0.9889, validation_c_index: 0.5975
+Epoch: 122, Test_loss: 1.0760, c_index: 0.6062
+
+
+Epoch: 123, train_loss: 0.5595, train_c_index: 0.7265
+Epoch: 123, validation_loss: 0.9675, validation_c_index: 0.5959
+Epoch: 123, Test_loss: 1.0626, c_index: 0.6062
+
+
+Epoch: 124, train_loss: 0.5616, train_c_index: 0.7256
+Epoch: 124, validation_loss: 0.9806, validation_c_index: 0.6066
+Epoch: 124, Test_loss: 1.0785, c_index: 0.6045
+
+
+Epoch: 125, train_loss: 0.5625, train_c_index: 0.7202
+Epoch: 125, validation_loss: 0.9819, validation_c_index: 0.6025
+Epoch: 125, Test_loss: 1.0664, c_index: 0.6059
+
+
+Epoch: 126, train_loss: 0.5530, train_c_index: 0.7255
+Epoch: 126, validation_loss: 0.9698, validation_c_index: 0.5975
+Epoch: 126, Test_loss: 1.0628, c_index: 0.6013
+
+
+Epoch: 127, train_loss: 0.5533, train_c_index: 0.7298
+Epoch: 127, validation_loss: 0.9878, validation_c_index: 0.5918
+Epoch: 127, Test_loss: 1.0789, c_index: 0.5992
+
+
+Epoch: 128, train_loss: 0.5447, train_c_index: 0.7295
+Epoch: 128, validation_loss: 0.9824, validation_c_index: 0.6049
+Epoch: 128, Test_loss: 1.0820, c_index: 0.5943
+
+
+Epoch: 129, train_loss: 0.5446, train_c_index: 0.7339
+Epoch: 129, validation_loss: 0.9828, validation_c_index: 0.6008
+Epoch: 129, Test_loss: 1.0758, c_index: 0.5985
+
+
+Epoch: 130, train_loss: 0.5422, train_c_index: 0.7288
+Epoch: 130, validation_loss: 0.9878, validation_c_index: 0.5975
+Epoch: 130, Test_loss: 1.0896, c_index: 0.6024
+
+
+Epoch: 131, train_loss: 0.5378, train_c_index: 0.7258
+Epoch: 131, validation_loss: 0.9819, validation_c_index: 0.6091
+Epoch: 131, Test_loss: 1.0847, c_index: 0.6066
+
+
+Epoch: 132, train_loss: 0.5370, train_c_index: 0.7313
+Epoch: 132, validation_loss: 0.9771, validation_c_index: 0.6033
+Epoch: 132, Test_loss: 1.0803, c_index: 0.6066
+
+
+Epoch: 133, train_loss: 0.5316, train_c_index: 0.7335
+Epoch: 133, validation_loss: 0.9667, validation_c_index: 0.6033
+Epoch: 133, Test_loss: 1.0675, c_index: 0.6090
+
+
+Epoch: 134, train_loss: 0.5291, train_c_index: 0.7306
+Epoch: 134, validation_loss: 0.9913, validation_c_index: 0.6008
+Epoch: 134, Test_loss: 1.0866, c_index: 0.6034
+
+
+Epoch: 135, train_loss: 0.5271, train_c_index: 0.7279
+Epoch: 135, validation_loss: 0.9875, validation_c_index: 0.6025
+Epoch: 135, Test_loss: 1.0872, c_index: 0.6080
+
+
+Epoch: 136, train_loss: 0.5295, train_c_index: 0.7262
+Epoch: 136, validation_loss: 0.9828, validation_c_index: 0.6008
+Epoch: 136, Test_loss: 1.0898, c_index: 0.6052
+
+
+Epoch: 137, train_loss: 0.5267, train_c_index: 0.7266
+Epoch: 137, validation_loss: 0.9832, validation_c_index: 0.5967
+Epoch: 137, Test_loss: 1.0890, c_index: 0.6062
+
+
+Epoch: 138, train_loss: 0.5200, train_c_index: 0.7354
+Epoch: 138, validation_loss: 1.0087, validation_c_index: 0.6025
+Epoch: 138, Test_loss: 1.1086, c_index: 0.6038
+
+
+Epoch: 139, train_loss: 0.5207, train_c_index: 0.7241
+Epoch: 139, validation_loss: 0.9738, validation_c_index: 0.5967
+Epoch: 139, Test_loss: 1.0847, c_index: 0.6031
+
+
+Epoch: 140, train_loss: 0.5161, train_c_index: 0.7347
+Epoch: 140, validation_loss: 0.9846, validation_c_index: 0.5984
+Epoch: 140, Test_loss: 1.1022, c_index: 0.5989
+
+
+Epoch: 141, train_loss: 0.5125, train_c_index: 0.7399
+Epoch: 141, validation_loss: 0.9788, validation_c_index: 0.5942
+Epoch: 141, Test_loss: 1.0890, c_index: 0.6076
+
+
+Epoch: 142, train_loss: 0.5121, train_c_index: 0.7321
+Epoch: 142, validation_loss: 0.9786, validation_c_index: 0.5909
+Epoch: 142, Test_loss: 1.0849, c_index: 0.6017
+
+
+Epoch: 143, train_loss: 0.5049, train_c_index: 0.7329
+Epoch: 143, validation_loss: 0.9797, validation_c_index: 0.5877
+Epoch: 143, Test_loss: 1.0859, c_index: 0.6094
+
+
+Epoch: 144, train_loss: 0.5023, train_c_index: 0.7368
+Epoch: 144, validation_loss: 0.9887, validation_c_index: 0.5868
+Epoch: 144, Test_loss: 1.1018, c_index: 0.6101
+
+
+Epoch: 145, train_loss: 0.5022, train_c_index: 0.7383
+Epoch: 145, validation_loss: 0.9849, validation_c_index: 0.5868
+Epoch: 145, Test_loss: 1.0943, c_index: 0.6115
+
+
+Epoch: 146, train_loss: 0.4981, train_c_index: 0.7289
+Epoch: 146, validation_loss: 0.9790, validation_c_index: 0.5868
+Epoch: 146, Test_loss: 1.0976, c_index: 0.6136
+
+
+Epoch: 147, train_loss: 0.4963, train_c_index: 0.7393
+Epoch: 147, validation_loss: 0.9910, validation_c_index: 0.5819
+Epoch: 147, Test_loss: 1.1026, c_index: 0.6118
+
+
+Epoch: 148, train_loss: 0.4985, train_c_index: 0.7286
+Epoch: 148, validation_loss: 0.9817, validation_c_index: 0.5852
+Epoch: 148, Test_loss: 1.0948, c_index: 0.6122
+
+
+Epoch: 149, train_loss: 0.4906, train_c_index: 0.7378
+Epoch: 149, validation_loss: 0.9889, validation_c_index: 0.5885
+Epoch: 149, Test_loss: 1.0955, c_index: 0.6122
+
+
+Epoch: 150, train_loss: 0.4897, train_c_index: 0.7321
+Epoch: 150, validation_loss: 0.9853, validation_c_index: 0.5877
+Epoch: 150, Test_loss: 1.0921, c_index: 0.6034
+
+
+Epoch: 151, train_loss: 0.4813, train_c_index: 0.7387
+Epoch: 151, validation_loss: 0.9935, validation_c_index: 0.5984
+Epoch: 151, Test_loss: 1.1075, c_index: 0.6048
+
+
+Epoch: 152, train_loss: 0.4819, train_c_index: 0.7406
+Epoch: 152, validation_loss: 0.9942, validation_c_index: 0.5827
+Epoch: 152, Test_loss: 1.0969, c_index: 0.6059
+
+
+Epoch: 153, train_loss: 0.4811, train_c_index: 0.7354
+Epoch: 153, validation_loss: 1.0120, validation_c_index: 0.5819
+Epoch: 153, Test_loss: 1.1169, c_index: 0.6034
+
+
+Epoch: 154, train_loss: 0.4785, train_c_index: 0.7271
+Epoch: 154, validation_loss: 0.9931, validation_c_index: 0.5835
+Epoch: 154, Test_loss: 1.1182, c_index: 0.6006
+
+
+Epoch: 155, train_loss: 0.4720, train_c_index: 0.7386
+Epoch: 155, validation_loss: 0.9887, validation_c_index: 0.5844
+Epoch: 155, Test_loss: 1.1119, c_index: 0.6048
+
+
+Epoch: 156, train_loss: 0.4723, train_c_index: 0.7334
+Epoch: 156, validation_loss: 1.0013, validation_c_index: 0.5802
+Epoch: 156, Test_loss: 1.1083, c_index: 0.6020
+
+
+Epoch: 157, train_loss: 0.4700, train_c_index: 0.7370
+Epoch: 157, validation_loss: 1.0004, validation_c_index: 0.5885
+Epoch: 157, Test_loss: 1.1209, c_index: 0.6034
+
+
+Epoch: 158, train_loss: 0.4712, train_c_index: 0.7429
+Epoch: 158, validation_loss: 0.9995, validation_c_index: 0.5794
+Epoch: 158, Test_loss: 1.1149, c_index: 0.6073
+
+
+Epoch: 159, train_loss: 0.4665, train_c_index: 0.7392
+Epoch: 159, validation_loss: 1.0003, validation_c_index: 0.5778
+Epoch: 159, Test_loss: 1.1091, c_index: 0.6094
+
+
+Epoch: 160, train_loss: 0.4671, train_c_index: 0.7346
+Epoch: 160, validation_loss: 0.9944, validation_c_index: 0.5794
+Epoch: 160, Test_loss: 1.1182, c_index: 0.6104
+
+
+Epoch: 161, train_loss: 0.4589, train_c_index: 0.7395
+Epoch: 161, validation_loss: 0.9976, validation_c_index: 0.5827
+Epoch: 161, Test_loss: 1.1232, c_index: 0.6087
+
+
+Epoch: 162, train_loss: 0.4627, train_c_index: 0.7401
+Epoch: 162, validation_loss: 1.0067, validation_c_index: 0.5745
+Epoch: 162, Test_loss: 1.1180, c_index: 0.6108
+
+
+Epoch: 163, train_loss: 0.4540, train_c_index: 0.7412
+Epoch: 163, validation_loss: 1.0020, validation_c_index: 0.5687
+Epoch: 163, Test_loss: 1.1136, c_index: 0.6097
+
+
+Epoch: 164, train_loss: 0.4516, train_c_index: 0.7404
+Epoch: 164, validation_loss: 1.0149, validation_c_index: 0.5761
+Epoch: 164, Test_loss: 1.1513, c_index: 0.6066
+
+
+Epoch: 165, train_loss: 0.4511, train_c_index: 0.7370
+Epoch: 165, validation_loss: 1.0068, validation_c_index: 0.5786
+Epoch: 165, Test_loss: 1.1387, c_index: 0.6027
+
+
+Epoch: 166, train_loss: 0.4433, train_c_index: 0.7417
+Epoch: 166, validation_loss: 1.0132, validation_c_index: 0.5761
+Epoch: 166, Test_loss: 1.1391, c_index: 0.6024
+
+
+Epoch: 167, train_loss: 0.4455, train_c_index: 0.7401
+Epoch: 167, validation_loss: 1.0068, validation_c_index: 0.5794
+Epoch: 167, Test_loss: 1.1245, c_index: 0.6013
+
+
+Epoch: 168, train_loss: 0.4393, train_c_index: 0.7363
+Epoch: 168, validation_loss: 1.0089, validation_c_index: 0.5860
+Epoch: 168, Test_loss: 1.1376, c_index: 0.6031
+
+
+Epoch: 169, train_loss: 0.4414, train_c_index: 0.7345
+Epoch: 169, validation_loss: 0.9967, validation_c_index: 0.5811
+Epoch: 169, Test_loss: 1.1409, c_index: 0.6027
+
+
+Epoch: 170, train_loss: 0.4365, train_c_index: 0.7499
+Epoch: 170, validation_loss: 1.0105, validation_c_index: 0.5753
+Epoch: 170, Test_loss: 1.1341, c_index: 0.5992
+
+
+Epoch: 171, train_loss: 0.4339, train_c_index: 0.7340
+Epoch: 171, validation_loss: 1.0009, validation_c_index: 0.5802
+Epoch: 171, Test_loss: 1.1334, c_index: 0.5985
+
+
+Epoch: 172, train_loss: 0.4350, train_c_index: 0.7399
+Epoch: 172, validation_loss: 1.0046, validation_c_index: 0.5720
+Epoch: 172, Test_loss: 1.1340, c_index: 0.6003
+
+
+Epoch: 173, train_loss: 0.4302, train_c_index: 0.7456
+Epoch: 173, validation_loss: 1.0093, validation_c_index: 0.5663
+Epoch: 173, Test_loss: 1.1288, c_index: 0.5957
+
+
+Epoch: 174, train_loss: 0.4306, train_c_index: 0.7331
+Epoch: 174, validation_loss: 1.0273, validation_c_index: 0.5728
+Epoch: 174, Test_loss: 1.1653, c_index: 0.5971
+
+
+Epoch: 175, train_loss: 0.4224, train_c_index: 0.7413
+Epoch: 175, validation_loss: 1.0103, validation_c_index: 0.5786
+Epoch: 175, Test_loss: 1.1481, c_index: 0.5999
+
+
+Epoch: 176, train_loss: 0.4196, train_c_index: 0.7394
+Epoch: 176, validation_loss: 1.0144, validation_c_index: 0.5679
+Epoch: 176, Test_loss: 1.1609, c_index: 0.6010
+
+
+Epoch: 177, train_loss: 0.4213, train_c_index: 0.7447
+Epoch: 177, validation_loss: 1.0123, validation_c_index: 0.5761
+Epoch: 177, Test_loss: 1.1361, c_index: 0.5985
+
+
+Epoch: 178, train_loss: 0.4145, train_c_index: 0.7392
+Epoch: 178, validation_loss: 1.0181, validation_c_index: 0.5720
+Epoch: 178, Test_loss: 1.1492, c_index: 0.5961
+
+
+Epoch: 179, train_loss: 0.4146, train_c_index: 0.7439
+Epoch: 179, validation_loss: 1.0041, validation_c_index: 0.5778
+Epoch: 179, Test_loss: 1.1562, c_index: 0.5989
+
+
+Epoch: 180, train_loss: 0.4131, train_c_index: 0.7409
+Epoch: 180, validation_loss: 1.0015, validation_c_index: 0.5761
+Epoch: 180, Test_loss: 1.1405, c_index: 0.5954
+
+
+Epoch: 181, train_loss: 0.4105, train_c_index: 0.7417
+Epoch: 181, validation_loss: 1.0078, validation_c_index: 0.5630
+Epoch: 181, Test_loss: 1.1523, c_index: 0.6013
+
+
+Epoch: 182, train_loss: 0.4032, train_c_index: 0.7515
+Epoch: 182, validation_loss: 1.0412, validation_c_index: 0.5654
+Epoch: 182, Test_loss: 1.1764, c_index: 0.5978
+
+
+Epoch: 183, train_loss: 0.4066, train_c_index: 0.7423
+Epoch: 183, validation_loss: 1.0140, validation_c_index: 0.5654
+Epoch: 183, Test_loss: 1.1593, c_index: 0.5992
+
+
+Epoch: 184, train_loss: 0.4047, train_c_index: 0.7432
+Epoch: 184, validation_loss: 1.0300, validation_c_index: 0.5646
+Epoch: 184, Test_loss: 1.1550, c_index: 0.5999
+
+
+Epoch: 185, train_loss: 0.4019, train_c_index: 0.7483
+Epoch: 185, validation_loss: 1.0226, validation_c_index: 0.5613
+Epoch: 185, Test_loss: 1.1638, c_index: 0.5968
+
+
+Epoch: 186, train_loss: 0.4002, train_c_index: 0.7401
+Epoch: 186, validation_loss: 1.0104, validation_c_index: 0.5704
+Epoch: 186, Test_loss: 1.1675, c_index: 0.6020
+
+
+Epoch: 187, train_loss: 0.3950, train_c_index: 0.7463
+Epoch: 187, validation_loss: 1.0324, validation_c_index: 0.5605
+Epoch: 187, Test_loss: 1.1737, c_index: 0.5989
+
+
+Epoch: 188, train_loss: 0.3988, train_c_index: 0.7424
+Epoch: 188, validation_loss: 1.0080, validation_c_index: 0.5654
+Epoch: 188, Test_loss: 1.1616, c_index: 0.6020
+
+
+Epoch: 189, train_loss: 0.3889, train_c_index: 0.7424
+Epoch: 189, validation_loss: 1.0179, validation_c_index: 0.5679
+Epoch: 189, Test_loss: 1.1744, c_index: 0.6020
+
+
+Epoch: 190, train_loss: 0.3907, train_c_index: 0.7463
+Epoch: 190, validation_loss: 1.0359, validation_c_index: 0.5630
+Epoch: 190, Test_loss: 1.2044, c_index: 0.5950
+
+
+Epoch: 191, train_loss: 0.3918, train_c_index: 0.7435
+Epoch: 191, validation_loss: 1.0213, validation_c_index: 0.5687
+Epoch: 191, Test_loss: 1.1843, c_index: 0.5926
+
+
+Epoch: 192, train_loss: 0.3812, train_c_index: 0.7510
+Epoch: 192, validation_loss: 1.0162, validation_c_index: 0.5671
+Epoch: 192, Test_loss: 1.1902, c_index: 0.5982
+
+
+Epoch: 193, train_loss: 0.3854, train_c_index: 0.7455
+Epoch: 193, validation_loss: 1.0125, validation_c_index: 0.5720
+Epoch: 193, Test_loss: 1.2005, c_index: 0.5943
+
+
+Epoch: 194, train_loss: 0.3771, train_c_index: 0.7465
+Epoch: 194, validation_loss: 1.0393, validation_c_index: 0.5630
+Epoch: 194, Test_loss: 1.2049, c_index: 0.5908
+
+
+Epoch: 195, train_loss: 0.3773, train_c_index: 0.7489
+Epoch: 195, validation_loss: 1.0043, validation_c_index: 0.5720
+Epoch: 195, Test_loss: 1.1754, c_index: 0.5971
+
+
+Epoch: 196, train_loss: 0.3755, train_c_index: 0.7455
+Epoch: 196, validation_loss: 1.0344, validation_c_index: 0.5630
+Epoch: 196, Test_loss: 1.2089, c_index: 0.5968
+
+
+Epoch: 197, train_loss: 0.3730, train_c_index: 0.7493
+Epoch: 197, validation_loss: 1.0121, validation_c_index: 0.5687
+Epoch: 197, Test_loss: 1.1973, c_index: 0.5996
+
+
+Epoch: 198, train_loss: 0.3658, train_c_index: 0.7501
+Epoch: 198, validation_loss: 1.0048, validation_c_index: 0.5630
+Epoch: 198, Test_loss: 1.1914, c_index: 0.5957
+
+
+Epoch: 199, train_loss: 0.3712, train_c_index: 0.7502
+Epoch: 199, validation_loss: 1.0322, validation_c_index: 0.5621
+Epoch: 199, Test_loss: 1.2048, c_index: 0.5982
+the training cindex of 0 fold as follows:[0.4927081517634071, 0.5017140201034223, 0.5281506013595956, 0.5051420603102666, 0.5413398407994887, 0.5624891058044273, 0.5691127767125675, 0.5594096798559061, 0.5949683342048689, 0.5995003195630701, 0.6057172738364999, 0.6146650398001279, 0.6193713322874905, 0.6531288129684504, 0.6385451164952647, 0.6396490616466214, 0.6544070652489686, 0.6657951310208587, 0.6666085642902795, 0.6756725350066818, 0.6722444947998373, 0.6804369298704317, 0.6757306373830689, 0.6779966300621696, 0.6732322351984196, 0.6847946080994712, 0.6802045203648829, 0.6899657195979315, 0.6801464179884957, 0.7051304398349892, 0.6905467433618035, 0.7075707396432515, 0.6997850212073674, 0.701469990122596, 0.7152402533263611, 0.7050142350822148, 0.7076288420196386, 0.7033292661669862, 0.711637905990355, 0.7086165824182209, 0.7129161582708733, 0.7129161582708733, 0.7112892917320318, 0.7080936610307361, 0.7147754343152635, 0.7197722386845622, 0.718842600662367, 0.7270931381093487, 0.7212829004706293, 0.726570216721864, 0.7245366335483121, 0.729010516530126, 0.7173900412526872, 0.7244204287955377, 0.7275579571204462, 0.7222706408692116, 0.727499854744059, 0.7249433501830225, 0.7263959095927024, 0.7349950612980071, 0.7397013537853698, 0.7372610539771076, 0.734355935157748, 0.731392713962001, 0.7438266225088606, 0.7464993318226716, 0.7342978327813607, 0.7319156353494858, 0.7423159607227936, 0.7387136133867875, 0.7417930393353088, 0.7487072221253849, 0.739759456161757, 0.7391203300214979, 0.7503340886642264, 0.7369705420951717, 0.7524257742141653, 0.7532392074835861, 0.7487653245017721, 0.7392946371506595, 0.7517866480739063, 0.7524257742141653, 0.747835686479577, 0.7617802568125036, 0.7520771599558422, 0.7525419789669398, 0.7476613793504154, 0.7558538144210099, 0.7536459241182965, 0.7545174597641043, 0.7604439021555982, 0.7649177851374122, 0.7593980593806287, 0.7620707686944396, 0.7680553134623206, 0.7656150136540585, 0.761605949683342, 0.7651501946429609, 0.7657312184068329, 0.7646853756318633, 0.7689268491081285, 0.7653245017721225, 0.7679972110859334, 0.7674742896984487, 0.7666608564290279, 0.7713090465400035, 0.7703794085178084, 0.7703213061414211, 0.7766544651676254, 0.7740398582302016, 0.7745046772412991, 0.7790947649758875, 0.7824066004299576, 0.7770611818023357, 0.7766544651676254, 0.7755505200162687, 0.7849050026146069, 0.7827552146882808, 0.7750275986287839, 0.7872290976700947, 0.7778746150717565, 0.7800244029980826, 0.7768287722967869, 0.7853698216257045, 0.7851374121201558, 0.784614490732671, 0.7876939166811923, 0.7835105455813143, 0.78525361687293, 0.7844982859798966, 0.7828714194410551, 0.7872872000464819, 0.7832781360757655, 0.7860089477659636, 0.7895531927255824, 0.791528673522747, 0.7960606588809482, 0.7900180117366801, 0.7923421067921678, 0.7925745162977166, 0.7970483992795305, 0.7950148161059787, 0.7914124687699727, 0.7922840044157806, 0.7980942420545001, 0.7947243042240427, 0.8000116204752774, 0.7904247283713904, 0.7953053279879148, 0.7945499970948812, 0.801057463250247, 0.800476439486375, 0.7989076753239207, 0.7928650281796525, 0.796293068386497, 0.7976875254197897, 0.8003602347336006, 0.8017546917668933, 0.7991400848294695, 0.8043111963279298, 0.797803730172564, 0.7970483992795305, 0.801987101272442, 0.7945499970948812, 0.7992562895822439, 0.8086688745569693, 0.8069258032653536, 0.8022195107779908, 0.8026262274127012, 0.7960025565045611, 0.8069839056417407, 0.8014641798849573, 0.80285863691825, 0.8026262274127012, 0.8058218581139969, 0.805589448608448, 0.8096566149555516, 0.8094823078263901, 0.8032072511765731, 0.8084364650514206, 0.8080878507930974, 0.8082040555458718, 0.801987101272442, 0.8152344430887223, 0.8099471268374877, 0.8073906222764511, 0.8082040555458718, 0.806460984254256, 0.8131427575387833, 0.8094242054500029, 0.8064028818778688, 0.8126779385276858, 0.8039625820696067, 0.8071001103945151, 0.8145953169484632, 0.8152925454651095, 0.8083202602986462, 0.8155249549706582, 0.8136656789262681, 0.808552669804195]
+the training cindex of 1 fold as follows:[0.4984825058695528, 0.4721983622516177, 0.5161197961404111, 0.5208727022848307, 0.5434919544179122, 0.5725820305789383, 0.5401133825803126, 0.584435663975262, 0.562045467559984, 0.5748725877569719, 0.5974345759606025, 0.596174769512684, 0.5998969249269885, 0.6112351829582546, 0.6187940216457654, 0.6083719864857127, 0.6199393002347822, 0.6276126667811945, 0.645593540628758, 0.6305331271831873, 0.6446200538280937, 0.640611578766535, 0.6392372444597149, 0.6456794365229342, 0.6429593998740194, 0.6513771975032927, 0.6625436637462062, 0.6592223558380577, 0.6536104907518754, 0.6610548015804845, 0.6567027429422206, 0.6599095229914677, 0.6691862795625035, 0.6645479012769856, 0.6658649716543549, 0.6669529863139209, 0.6727366431884556, 0.6763442707438584, 0.6614556490866403, 0.6768023821794652, 0.668670904197446, 0.6761724789555059, 0.6738246578480215, 0.6806390654526714, 0.6793792590047529, 0.6738819217774724, 0.67577163144935, 0.6811544408177289, 0.6844184847964268, 0.6887705434346905, 0.680410009734868, 0.678291244345187, 0.6767451182500143, 0.6813262326060814, 0.6916337399072324, 0.6859646108915994, 0.6819561358300407, 0.6858500830326977, 0.6817270801122373, 0.6817270801122373, 0.6856210273148944, 0.6963293821222012, 0.6805245375937696, 0.6920918513428391, 0.6835022619252134, 0.6870526255511653, 0.6863654583977552, 0.6826433029834508, 0.6832159422779591, 0.6900876138120597, 0.6834449979957624, 0.6820706636889423, 0.6954704231804386, 0.6861364026799519, 0.6894004466586497, 0.6888278073641413, 0.6859073469621485, 0.6905457252476664, 0.6820706636889423, 0.6837313176430166, 0.686479986256657, 0.6853347076676402, 0.6749126725075875, 0.6866517780450094, 0.6819561358300407, 0.6803241138406918, 0.68464754051423, 0.6867090419744603, 0.6911756284716257, 0.686479986256657, 0.6907747809654698, 0.6842466930080742, 0.6884842237874363, 0.6906602531065682, 0.6856210273148944, 0.6822997194067457, 0.6939815610147169, 0.6925499627784458, 0.6906029891771174, 0.6819561358300407, 0.6856782912443452, 0.6851056519498367, 0.6822997194067457, 0.6925499627784458, 0.6936952413674626, 0.6911183645421749, 0.6814407604649831, 0.685391971597091, 0.6916910038366832, 0.6899730859531581, 0.6884842237874363, 0.6930653381435035, 0.6862222985741282, 0.6904884613182156, 0.6934089217202084, 0.6811544408177289, 0.6873962091278704, 0.6913474202599782, 0.6891141270113955, 0.688942335223043, 0.6912328924010765, 0.6900303498826089, 0.6924354349195442, 0.6920918513428391, 0.6859646108915994, 0.6922636431311917, 0.6859646108915994, 0.6952986313920861, 0.6888278073641413, 0.6949550478153811, 0.7001660653954074, 0.6978755082173739, 0.6898585580942564, 0.6925499627784458, 0.6981045639351773, 0.6868808337628128, 0.6966729656989062, 0.6881406402107313, 0.6938670331558151, 0.6929508102846017, 0.6958712706865945, 0.694267880661971, 0.6940960888736185, 0.6972456049934147, 0.7012540800549734, 0.6947832560270286, 0.6997079539598007, 0.7000515375365057, 0.7029147340090477, 0.698562675370784, 0.6941533528030693, 0.6998224818187024, 0.6972456049934147, 0.6927217545667984, 0.6955849510393404, 0.7040600125980645, 0.7048044436809254, 0.6974173967817672, 0.7020557750672851, 0.7026284143617935, 0.7015403997022276, 0.704575387963122, 0.7118479070033785, 0.7088701826719349, 0.6998797457481533, 0.706006986199393, 0.7005669129015633, 0.7057779304815897, 0.7018839832789326, 0.6998797457481533, 0.7121342266506328, 0.7091565023191891, 0.7036591650919086, 0.7096146137547958, 0.7088129187424841, 0.7054343469048846, 0.7085838630246808, 0.7126496020156903, 0.7097291416136975, 0.7107026284143618, 0.7023993586439902, 0.7054916108343354, 0.710301780908206, 0.7096718776842467, 0.7042890683158678, 0.71808967531352, 0.7036019011624578, 0.7152837427704289, 0.7138521445341579, 0.7112180037794193, 0.7191204260436351, 0.7076676401534673, 0.7109316841321651, 0.7085838630246808, 0.7117333791444769, 0.7090419744602875, 0.720208440703201, 0.7159709099238389, 0.7193494817614384, 0.7186623146080284]
+the training cindex of 2 fold as follows:[0.4921682592847995, 0.5241355531474732, 0.5319180376317604, 0.5377302728795192, 0.5471874692148557, 0.5637375628016944, 0.5411289528125308, 0.5436410205891046, 0.5558565658555807, 0.5546251600827504, 0.5545266476209241, 0.5654615308836568, 0.5658555807309624, 0.5624076445670377, 0.5850655107871146, 0.5674317801201852, 0.5776278199192197, 0.5774307949955669, 0.596148162742587, 0.5874790661018618, 0.5821101369323219, 0.5894000591074771, 0.6117623879420747, 0.5961974189735001, 0.5791055068466161, 0.6227957836666338, 0.6123534627130331, 0.602255935375825, 0.5982169244409418, 0.616983548418875, 0.6170820608807014, 0.6161461924933505, 0.6246182642104227, 0.6216136341247168, 0.6401832331789972, 0.6339276918530194, 0.62703181952517, 0.6235838833612452, 0.6417101763373066, 0.6366860407841592, 0.6347157915476308, 0.6419072012609595, 0.6456999310412768, 0.64973894197616, 0.6449118313466653, 0.6485075362033297, 0.6553048960693528, 0.6498374544379864, 0.6567825829967491, 0.6556496896857452, 0.6605753127770663, 0.634075460545759, 0.6579647325386662, 0.6552063836075264, 0.6467343118904542, 0.6515121662890355, 0.6613141562407645, 0.6739237513545463, 0.6689488720323121, 0.6542212589892621, 0.6701310215742291, 0.6675696975667422, 0.6666338291793912, 0.6633829179391193, 0.6661412668702591, 0.6664368042557384, 0.6782582996749089, 0.6661412668702591, 0.6635799428627721, 0.671263914885233, 0.67643581913112, 0.6807703674514826, 0.6911141759432569, 0.6814599546842676, 0.6885035957048566, 0.6797359866023052, 0.6742685449709388, 0.6818047483006601, 0.676189537976554, 0.6870259087774604, 0.6810659048369618, 0.6828391291498375, 0.6868288838538075, 0.6749581322037238, 0.6845138410008866, 0.6796867303713919, 0.6814106984533543, 0.678307555905822, 0.6911141759432569, 0.6924194660624569, 0.6873707023938528, 0.6880110333957246, 0.6938725248743967, 0.6861392966210226, 0.6782090434439957, 0.6944635996453551, 0.6909664072505172, 0.682494335533445, 0.6924440941779135, 0.6898335139395133, 0.7036252585952123, 0.6928874002561324, 0.694660624569008, 0.6922963254851738, 0.6840212786917546, 0.7017042655895971, 0.6948083932617476, 0.6934784750270909, 0.692788887794306, 0.6980100482711062, 0.6953009555708797, 0.696089055265491, 0.6917545069451285, 0.6928874002561324, 0.6925918628706531, 0.6988474041966308, 0.6926903753324796, 0.6941188060289627, 0.6981578169638459, 0.6938232686434834, 0.6961875677273175, 0.701457984435031, 0.7050044330607822, 0.7001280662003744, 0.7075657570682692, 0.6996355038912423, 0.6953009555708797, 0.7010146783568121, 0.707319475913703, 0.6972712048074081, 0.6954487242636194, 0.6992907102748498, 0.700965422125899, 0.7120480740813713, 0.7088956753029259, 0.702393852822382, 0.6956457491872722, 0.7027879026696877, 0.6969756674219288, 0.7063836075263521, 0.6945128558762683, 0.7037237710570388, 0.7002265786622007, 0.7049059205989557, 0.7039207959806916, 0.7154960102452961, 0.7036252585952123, 0.7034282336715595, 0.7063836075263521, 0.7128854300068959, 0.7045611269825633, 0.6991429415821101, 0.7146586543197715, 0.7067284011427446, 0.7100285686139297, 0.7124913801595902, 0.710570387153975, 0.7100285686139297, 0.7018027780514235, 0.7091912126884051, 0.7039207959806916, 0.708009063146488, 0.7088464190720126, 0.7091912126884051, 0.708009063146488, 0.716678159787213, 0.7212097330312285, 0.7095360063047975, 0.7135257610087676, 0.7127376613141563, 0.7173677470199981, 0.7102748497684958, 0.7125898926214166, 0.7142153482415525, 0.7162841099399074, 0.7199290710274849, 0.7109151807703674, 0.7225889074967984, 0.7127869175450694, 0.7091912126884051, 0.7130824549305487, 0.7189439464092208, 0.7196335336420057, 0.7162348537089942, 0.7190917151019603, 0.7188454339473943, 0.7086986503792729, 0.7141660920106393, 0.7148064230125111, 0.7185006403310019, 0.7190424588710472, 0.7128854300068959, 0.7121465865431977, 0.7195350211801793, 0.7247561816569796, 0.7182543591764358, 0.7276130430499458, 0.7193379962565265, 0.7192887400256133, 0.7205694020293567]
+the training cindex of 3 fold as follows:[0.5189710941110027, 0.538840683883555, 0.5372490629973815, 0.5882836165733942, 0.5807875956256097, 0.5979360271088977, 0.581198336499461, 0.5947014427273194, 0.5794013451763619, 0.5897212096318735, 0.5733942598962879, 0.5716229398778045, 0.5784771782101966, 0.5771936129794116, 0.5758587051393952, 0.5758587051393952, 0.5854084304564358, 0.5868973661241464, 0.5938286183703856, 0.5901832931149561, 0.591312830518047, 0.6011706114904759, 0.6036350567335832, 0.6076397802536325, 0.5968578323150382, 0.6103095959336653, 0.6206808029984083, 0.6161113107768137, 0.6148277455460287, 0.6212455716999538, 0.6321302048570109, 0.6174975612260615, 0.6238127021615238, 0.6403193510294193, 0.6450171997740926, 0.6440930328079273, 0.6441957180263901, 0.6369564101247626, 0.6390101144940186, 0.6417826153925142, 0.6537967859526621, 0.642398726703291, 0.6408071058171176, 0.6674539200082148, 0.6586743338296452, 0.654926323355753, 0.6615495199466037, 0.6541048416080505, 0.6679160034912974, 0.6669918365251322, 0.6699697078605534, 0.6712532730913385, 0.6704317913436361, 0.6740771165990656, 0.6704831339528675, 0.6804949427529907, 0.6753606818298505, 0.6791600349129743, 0.6707911896082559, 0.6794167479591313, 0.6836781845253376, 0.6840375827899574, 0.6808029984083791, 0.6964111516147251, 0.6818811932022385, 0.6886584176207835, 0.6904040663346511, 0.6841916106176515, 0.6859886019407506, 0.6925091133131386, 0.6927658263592956, 0.6927658263592956, 0.6846536941007342, 0.6888124454484776, 0.6876829080453869, 0.6947168455100888, 0.6990296246855265, 0.6944087898547004, 0.6997484212147661, 0.6994403655593777, 0.6962571237870309, 0.7041125429994353, 0.7064229604148483, 0.713302870051856, 0.6982081429378241, 0.7095035169687324, 0.7070390717256251, 0.7038558299532782, 0.7107870821995174, 0.7088360630487242, 0.7161267135595831, 0.6970272629255019, 0.7059095343225342, 0.7114545361195256, 0.7059608769317657, 0.7121733326487653, 0.7223391692765826, 0.7105817117625918, 0.7081686091287159, 0.7072957847717821, 0.7171535657442111, 0.7083226369564102, 0.7132001848333932, 0.7114031935102942, 0.7235200492889049, 0.7211069466550291, 0.7228012527596652, 0.7182831031473019, 0.7212096318734919, 0.723674077116599, 0.7167941674795913, 0.7175643066180624, 0.7197206962057812, 0.7199260666427068, 0.7186938440211531, 0.7154079170303435, 0.7180777327103763, 0.7267546336704831, 0.7207475483904092, 0.7173075935719053, 0.7256250962673924, 0.7329157467782512, 0.7203881501257894, 0.7264979206243262, 0.7256250962673924, 0.7202341222980951, 0.7254710684396981, 0.7298351902243672, 0.7294757919597474, 0.7338912563536479, 0.7287569954305078, 0.7257791240950865, 0.7312727832828464, 0.7335318580890281, 0.7306053293628382, 0.7279355136828054, 0.7262412075781691, 0.726600605842789, 0.73543153463059, 0.7241361605996817, 0.7347127381013503, 0.7399496842429533, 0.7321456076397802, 0.7329157467782512, 0.7368177850798378, 0.7383067207475484, 0.728911023258202, 0.739282230322945, 0.7285516249935822, 0.7377932946552344, 0.7320942650305489, 0.7386661190121682, 0.7406171381629615, 0.73543153463059, 0.7271140319351029, 0.7386147764029368, 0.7334291728705653, 0.7370231555167633, 0.7429275555783745, 0.7392308877137136, 0.7346100528828875, 0.7394876007598706, 0.7401037120706474, 0.7411819068645068, 0.7404117677260358, 0.7370231555167633, 0.7416953329568209, 0.7400523694614161, 0.7363043589875238, 0.7344560250551933, 0.7498588078246137, 0.7339939415721107, 0.7398983416337218, 0.7455973712584073, 0.7331211172151769, 0.741335934692201, 0.7394362581506392, 0.7447245469014735, 0.7391795451044822, 0.7439030651537711, 0.7408738512091184, 0.7417466755660522, 0.7515017713200185, 0.7422601016583663, 0.7432356112337629, 0.7482671869384402, 0.7401037120706474, 0.7462648251784155, 0.7424141294860604, 0.7424141294860604, 0.746316167787647, 0.7435436668891513, 0.7510396878369359, 0.745546028649176, 0.7464701956153412, 0.7488832982492171, 0.7454946860399445, 0.7493453817322996, 0.7500641782615393, 0.750166863480002]
+mean epoch train cindex:[0.5005825  0.50922215 0.52835937 0.53800716 0.55320172 0.57418618
+ 0.55788836 0.57054695 0.57306793 0.57967982 0.58276819 0.58698107
+ 0.59090025 0.60099131 0.60456584 0.59782788 0.60934565 0.61443399
+ 0.62554472 0.62096701 0.62257188 0.62790479 0.63259133 0.63187832
+ 0.62303874 0.6423193  0.64394561 0.64188883 0.63670039 0.65110359
+ 0.64911544 0.650281   0.65435057 0.65698772 0.66657641 0.66249699
+ 0.66289826 0.66005346 0.66345346 0.66597191 0.66752491 0.66834864
+ 0.66790525 0.6764814  0.67443521 0.67427201 0.67786716 0.67804747
+ 0.68259999 0.68449557 0.68387292 0.67815762 0.68063292 0.68375754
+ 0.68410229 0.68506059 0.68653271 0.6909693  0.68696576 0.68759004
+ 0.6947829  0.69629943 0.69057933 0.69581966 0.69383784 0.69716179
+ 0.69733141 0.69122295 0.69377511 0.69814356 0.69860992 0.70107852
+ 0.70274944 0.69888228 0.70398026 0.7000628  0.70290782 0.70499962
+ 0.70169349 0.70237306 0.70389742 0.70617804 0.70400005 0.70917326
+ 0.70418882 0.70551409 0.70518967 0.70618156 0.7116807  0.71056324
+ 0.71367902 0.70855069 0.71191609 0.71258121 0.70946157 0.71363792
+ 0.71722327 0.71269405 0.71423673 0.7109427  0.71884599 0.71291005
+ 0.71453943 0.71593094 0.71697436 0.72130966 0.71735745 0.71686871
+ 0.720586   0.72142427 0.71877101 0.72145337 0.72002603 0.72009078
+ 0.72033727 0.71774007 0.72076733 0.72374402 0.72076177 0.72182557
+ 0.72273004 0.72610712 0.7236642  0.72602191 0.72607322 0.72418694
+ 0.72360764 0.72741476 0.72771917 0.72765395 0.7268108  0.72755814
+ 0.72634372 0.73103471 0.73178969 0.72718472 0.72865515 0.72688679
+ 0.72965409 0.72901127 0.73053632 0.73323904 0.72947019 0.73183782
+ 0.73502173 0.73582757 0.73306396 0.73329668 0.73328882 0.73594785
+ 0.73296655 0.734527   0.73785727 0.73193668 0.73225515 0.73821342
+ 0.73729106 0.73655595 0.73648155 0.73884043 0.73446874 0.73728011
+ 0.74069628 0.73844832 0.73688922 0.74209429 0.74259945 0.73939645
+ 0.73858508 0.735769   0.74658617 0.73872237 0.73975151 0.74301339
+ 0.74101    0.7430722  0.74214798 0.74736134 0.74122571 0.74305834
+ 0.74111088 0.74359657 0.74585605 0.74585032 0.74414088 0.74814823
+ 0.74015208 0.74554391 0.74605386 0.74538924 0.74772048 0.74419367
+ 0.74452014 0.74519126 0.74938877 0.74786804 0.75040911 0.75004481
+ 0.75059202 0.74948781]
+the validation cindex of 0 fold as follows:[0.6112, 0.6344, 0.632, 0.6312, 0.6304, 0.628, 0.6088, 0.6032, 0.6144, 0.612, 0.6096, 0.6024, 0.5992, 0.6128, 0.6224, 0.6256, 0.624, 0.6248, 0.6288, 0.6256, 0.6296, 0.6312, 0.6256, 0.6264, 0.6256, 0.6216, 0.6248, 0.6248, 0.6224, 0.6208, 0.6144, 0.6112, 0.62, 0.62, 0.6168, 0.6088, 0.6112, 0.612, 0.6056, 0.6048, 0.6088, 0.6064, 0.6112, 0.6104, 0.6168, 0.6136, 0.6064, 0.6048, 0.6072, 0.6096, 0.6008, 0.6048, 0.6016, 0.6032, 0.6096, 0.6032, 0.6048, 0.6072, 0.6096, 0.6072, 0.6032, 0.6048, 0.6032, 0.6008, 0.6016, 0.6008, 0.5984, 0.6, 0.6, 0.5976, 0.6064, 0.5976, 0.6048, 0.5968, 0.5952, 0.5944, 0.596, 0.6016, 0.6, 0.5952, 0.5936, 0.6008, 0.5968, 0.5864, 0.5832, 0.592, 0.5864, 0.592, 0.5896, 0.5952, 0.596, 0.5928, 0.588, 0.5904, 0.5896, 0.592, 0.5872, 0.5856, 0.5896, 0.5872, 0.5904, 0.5912, 0.5904, 0.5928, 0.5872, 0.5824, 0.5848, 0.5824, 0.58, 0.5808, 0.5856, 0.5808, 0.5776, 0.5824, 0.5776, 0.5736, 0.5776, 0.5832, 0.5808, 0.5712, 0.5776, 0.58, 0.5784, 0.5752, 0.5752, 0.58, 0.576, 0.58, 0.572, 0.5688, 0.5768, 0.5776, 0.5768, 0.5784, 0.5784, 0.5848, 0.5688, 0.5736, 0.5752, 0.5712, 0.5672, 0.5728, 0.5728, 0.5712, 0.576, 0.5768, 0.5752, 0.5704, 0.5704, 0.5744, 0.5712, 0.5688, 0.5688, 0.5648, 0.572, 0.5736, 0.572, 0.5704, 0.5672, 0.5712, 0.5744, 0.568, 0.5648, 0.5672, 0.5704, 0.5688, 0.5672, 0.5728, 0.5792, 0.5808, 0.5656, 0.5744, 0.5648, 0.5656, 0.5688, 0.56, 0.5688, 0.5584, 0.5632, 0.56, 0.5664, 0.5648, 0.5632, 0.5576, 0.5608, 0.5584, 0.5616, 0.556, 0.5592, 0.5632, 0.5712, 0.5664, 0.5592, 0.5688, 0.5608, 0.5632, 0.5616, 0.5592, 0.5584, 0.5624]
+the validation cindex of 1 fold as follows:[0.5394105551747772, 0.549006168608636, 0.5496915695681974, 0.5544893762851268, 0.5538039753255655, 0.549006168608636, 0.546949965729952, 0.5476353666895134, 0.542837559972584, 0.5407813570939, 0.5407813570939, 0.5325565455791638, 0.5270733379026731, 0.5270733379026731, 0.5311857436600411, 0.520904729266621, 0.5092529129540782, 0.5126799177518848, 0.5085675119945168, 0.5099383139136395, 0.5003427004797807, 0.5113091158327622, 0.5078821110349554, 0.5161069225496916, 0.5154215215901302, 0.5250171350239891, 0.5154215215901302, 0.5161069225496916, 0.5065113091158328, 0.5058259081562714, 0.5133653187114462, 0.5078821110349554, 0.5113091158327622, 0.5065113091158328, 0.5010281014393421, 0.5078821110349554, 0.5030843043180261, 0.5058259081562714, 0.5037697052775874, 0.4996572995202193, 0.4962302947224126, 0.4976010966415353, 0.49485949280328995, 0.4852638793694311, 0.4859492803289925, 0.4880054832076765, 0.4880054832076765, 0.4873200822481151, 0.4880054832076765, 0.4845784784098698, 0.4859492803289925, 0.47978067169294036, 0.48115147361206306, 0.47840986977381766, 0.47840986977381766, 0.4729266620973269, 0.47498286497601094, 0.47909527073337904, 0.47498286497601094, 0.47772446881425634, 0.4756682659355723, 0.48115147361206306, 0.48115147361206306, 0.477039067854695, 0.47840986977381766, 0.477039067854695, 0.4736120630568883, 0.47635366689513364, 0.47909527073337904, 0.4838930774503084, 0.47909527073337904, 0.47772446881425634, 0.4818368745716244, 0.47772446881425634, 0.4756682659355723, 0.46675805346127486, 0.4674434544208362, 0.46401644962302946, 0.47498286497601094, 0.4742974640164496, 0.46333104866346814, 0.46196024674434544, 0.4612748457847841, 0.46058944482522274, 0.4612748457847841, 0.4592186429061001, 0.45030843043180263, 0.4564770390678547, 0.44619602467443453, 0.44962302947224125, 0.44482522275531183, 0.4441398217957505, 0.45236463331048665, 0.45030843043180263, 0.4544208361891707, 0.45236463331048665, 0.457162440027416, 0.4516792323509253, 0.4544208361891707, 0.44756682659355723, 0.4516792323509253, 0.45236463331048665, 0.4468814256339959, 0.44893762851267993, 0.4544208361891707, 0.44825222755311855, 0.4516792323509253, 0.4592186429061001, 0.45099383139136395, 0.45099383139136395, 0.4544208361891707, 0.44825222755311855, 0.44756682659355723, 0.44825222755311855, 0.44893762851267993, 0.4455106237148732, 0.4455106237148732, 0.4455106237148732, 0.44756682659355723, 0.4441398217957505, 0.44825222755311855, 0.44482522275531183, 0.44756682659355723, 0.45099383139136395, 0.44893762851267993, 0.44962302947224125, 0.44002741603838247, 0.44139821795750517, 0.44139821795750517, 0.4427690198766278, 0.44619602467443453, 0.4434544208361892, 0.44825222755311855, 0.4393420150788211, 0.4407128169979438, 0.43728581220013707, 0.4407128169979438, 0.4420836189170665, 0.44139821795750517, 0.44002741603838247, 0.43865661411925977, 0.4407128169979438, 0.43797121315969845, 0.43797121315969845, 0.4345442083618917, 0.4345442083618917, 0.43591501028101437, 0.43248800548320765, 0.4427690198766278, 0.43797121315969845, 0.43797121315969845, 0.433173406442769, 0.43248800548320765, 0.43522960932145305, 0.43522960932145305, 0.4345442083618917, 0.433173406442769, 0.43591501028101437, 0.4441398217957505, 0.43660041124057575, 0.4283755997258396, 0.43591501028101437, 0.4283755997258396, 0.4345442083618917, 0.4235777930089102, 0.43660041124057575, 0.43385880740233035, 0.429061000685401, 0.43043180260452363, 0.42289239204934886, 0.4263193968471556, 0.433173406442769, 0.4297464016449623, 0.42220699108978754, 0.429061000685401, 0.4283755997258396, 0.43043180260452363, 0.43660041124057575, 0.4263193968471556, 0.4434544208361892, 0.4420836189170665, 0.42289239204934886, 0.4276901987662783, 0.43797121315969845, 0.4201507882111035, 0.43660041124057575, 0.41809458533241944, 0.44002741603838247, 0.429061000685401, 0.4297464016449623, 0.42289239204934886, 0.429061000685401, 0.4235777930089102, 0.4174091843728581, 0.433173406442769, 0.4174091843728581, 0.43797121315969845, 0.43248800548320765, 0.42152159013022616, 0.429061000685401]
+the validation cindex of 2 fold as follows:[0.5993723849372385, 0.602510460251046, 0.6014644351464435, 0.5993723849372385, 0.5878661087866108, 0.5868200836820083, 0.5815899581589958, 0.5878661087866108, 0.5857740585774058, 0.5794979079497908, 0.5753138075313807, 0.5700836820083682, 0.5658995815899581, 0.5669456066945606, 0.5627615062761506, 0.5658995815899581, 0.5658995815899581, 0.553347280334728, 0.5523012552301255, 0.5596234309623431, 0.5679916317991632, 0.5679916317991632, 0.5575313807531381, 0.5460251046025104, 0.547071129707113, 0.5449790794979079, 0.5481171548117155, 0.5439330543933054, 0.5407949790794979, 0.5407949790794979, 0.5439330543933054, 0.5428870292887029, 0.5397489539748954, 0.5292887029288703, 0.5219665271966527, 0.5303347280334728, 0.5167364016736402, 0.5167364016736402, 0.5167364016736402, 0.5135983263598326, 0.5104602510460251, 0.50418410041841, 0.5073221757322176, 0.5010460251046025, 0.49686192468619245, 0.5010460251046025, 0.5010460251046025, 0.50418410041841, 0.5115062761506276, 0.5094142259414226, 0.5083682008368201, 0.5115062761506276, 0.5115062761506276, 0.50418410041841, 0.5083682008368201, 0.5031380753138075, 0.5062761506276151, 0.5083682008368201, 0.5094142259414226, 0.5135983263598326, 0.5062761506276151, 0.5115062761506276, 0.5052301255230126, 0.5115062761506276, 0.50418410041841, 0.5052301255230126, 0.50418410041841, 0.5073221757322176, 0.5062761506276151, 0.5146443514644351, 0.5094142259414226, 0.5073221757322176, 0.5125523012552301, 0.5230125523012552, 0.5251046025104602, 0.5240585774058577, 0.5167364016736402, 0.5209205020920502, 0.5198744769874477, 0.5167364016736402, 0.5209205020920502, 0.5188284518828452, 0.5156903765690377, 0.5135983263598326, 0.5083682008368201, 0.5209205020920502, 0.5177824267782427, 0.5251046025104602, 0.5219665271966527, 0.5135983263598326, 0.5146443514644351, 0.5115062761506276, 0.5177824267782427, 0.5104602510460251, 0.5125523012552301, 0.5104602510460251, 0.5083682008368201, 0.5073221757322176, 0.5146443514644351, 0.5156903765690377, 0.5146443514644351, 0.5240585774058577, 0.5146443514644351, 0.5271966527196653, 0.5135983263598326, 0.5083682008368201, 0.5146443514644351, 0.5135983263598326, 0.5188284518828452, 0.5083682008368201, 0.5083682008368201, 0.5167364016736402, 0.5094142259414226, 0.5135983263598326, 0.5167364016736402, 0.5156903765690377, 0.5104602510460251, 0.5146443514644351, 0.5073221757322176, 0.5135983263598326, 0.50418410041841, 0.5135983263598326, 0.5125523012552301, 0.5062761506276151, 0.5115062761506276, 0.5146443514644351, 0.5094142259414226, 0.5031380753138075, 0.5083682008368201, 0.5073221757322176, 0.5052301255230126, 0.5094142259414226, 0.5062761506276151, 0.5083682008368201, 0.5062761506276151, 0.5125523012552301, 0.5083682008368201, 0.5125523012552301, 0.5052301255230126, 0.5167364016736402, 0.5073221757322176, 0.5125523012552301, 0.5073221757322176, 0.5073221757322176, 0.5052301255230126, 0.50418410041841, 0.5104602510460251, 0.5115062761506276, 0.5083682008368201, 0.5031380753138075, 0.5073221757322176, 0.5062761506276151, 0.5104602510460251, 0.5094142259414226, 0.5094142259414226, 0.5031380753138075, 0.50418410041841, 0.50418410041841, 0.502092050209205, 0.50418410041841, 0.5073221757322176, 0.5031380753138075, 0.5052301255230126, 0.5052301255230126, 0.497907949790795, 0.5031380753138075, 0.5052301255230126, 0.4989539748953975, 0.5010460251046025, 0.5010460251046025, 0.5010460251046025, 0.5031380753138075, 0.5052301255230126, 0.5031380753138075, 0.5062761506276151, 0.502092050209205, 0.502092050209205, 0.49476987447698745, 0.5062761506276151, 0.497907949790795, 0.5, 0.5, 0.49581589958158995, 0.49581589958158995, 0.49476987447698745, 0.5052301255230126, 0.5010460251046025, 0.4989539748953975, 0.4895397489539749, 0.49686192468619245, 0.4989539748953975, 0.4884937238493724, 0.5052301255230126, 0.4895397489539749, 0.49372384937238495, 0.4989539748953975, 0.4989539748953975, 0.4874476987447699, 0.4905857740585774, 0.4916317991631799]
+the validation cindex of 3 fold as follows:[0.5868312757201646, 0.5761316872427984, 0.5934156378600823, 0.605761316872428, 0.6098765432098765, 0.6090534979423868, 0.6139917695473252, 0.6172839506172839, 0.6205761316872428, 0.6197530864197531, 0.6263374485596708, 0.6304526748971193, 0.6337448559670782, 0.6329218106995885, 0.6304526748971193, 0.6362139917695473, 0.6353909465020576, 0.6362139917695473, 0.6337448559670782, 0.6288065843621399, 0.6296296296296297, 0.6213991769547325, 0.6271604938271605, 0.6197530864197531, 0.6279835390946502, 0.6312757201646091, 0.6320987654320988, 0.6312757201646091, 0.6329218106995885, 0.6337448559670782, 0.6279835390946502, 0.6312757201646091, 0.6312757201646091, 0.6304526748971193, 0.6320987654320988, 0.6337448559670782, 0.6320987654320988, 0.6337448559670782, 0.6312757201646091, 0.6345679012345679, 0.6362139917695473, 0.6353909465020576, 0.6329218106995885, 0.6288065843621399, 0.6296296296296297, 0.6246913580246913, 0.6213991769547325, 0.6255144032921811, 0.6255144032921811, 0.6246913580246913, 0.6246913580246913, 0.6296296296296297, 0.6279835390946502, 0.6329218106995885, 0.6238683127572017, 0.6279835390946502, 0.6238683127572017, 0.6296296296296297, 0.6271604938271605, 0.6279835390946502, 0.6246913580246913, 0.6255144032921811, 0.6246913580246913, 0.6263374485596708, 0.6312757201646091, 0.6304526748971193, 0.6279835390946502, 0.6189300411522634, 0.6164609053497943, 0.6230452674897119, 0.6238683127572017, 0.6296296296296297, 0.6271604938271605, 0.6197530864197531, 0.6238683127572017, 0.6337448559670782, 0.6255144032921811, 0.6197530864197531, 0.6172839506172839, 0.6230452674897119, 0.6197530864197531, 0.6222222222222222, 0.6172839506172839, 0.6172839506172839, 0.6189300411522634, 0.6181069958847737, 0.6164609053497943, 0.6197530864197531, 0.6205761316872428, 0.6181069958847737, 0.6115226337448559, 0.6156378600823045, 0.6139917695473252, 0.6172839506172839, 0.6213991769547325, 0.6164609053497943, 0.6156378600823045, 0.6148148148148148, 0.6172839506172839, 0.6123456790123457, 0.6074074074074074, 0.6181069958847737, 0.6156378600823045, 0.6123456790123457, 0.6139917695473252, 0.6156378600823045, 0.6074074074074074, 0.6049382716049383, 0.6148148148148148, 0.6131687242798354, 0.6115226337448559, 0.6181069958847737, 0.6074074074074074, 0.6106995884773663, 0.6197530864197531, 0.6082304526748972, 0.6139917695473252, 0.6082304526748972, 0.5967078189300411, 0.5958847736625514, 0.6041152263374485, 0.6, 0.5975308641975309, 0.5958847736625514, 0.6065843621399177, 0.6024691358024692, 0.5975308641975309, 0.5917695473251029, 0.6049382716049383, 0.6008230452674898, 0.5975308641975309, 0.6090534979423868, 0.6032921810699589, 0.6032921810699589, 0.6008230452674898, 0.6024691358024692, 0.6008230452674898, 0.5967078189300411, 0.6024691358024692, 0.5967078189300411, 0.5983539094650205, 0.594238683127572, 0.5909465020576131, 0.5876543209876544, 0.5868312757201646, 0.5868312757201646, 0.5868312757201646, 0.5818930041152264, 0.5851851851851851, 0.588477366255144, 0.5876543209876544, 0.5983539094650205, 0.582716049382716, 0.5818930041152264, 0.5835390946502058, 0.5843621399176955, 0.5802469135802469, 0.588477366255144, 0.5794238683127572, 0.5777777777777777, 0.5794238683127572, 0.582716049382716, 0.574485596707819, 0.568724279835391, 0.5761316872427984, 0.5786008230452675, 0.5761316872427984, 0.5794238683127572, 0.5860082304526749, 0.5810699588477366, 0.5753086419753086, 0.5802469135802469, 0.5720164609053497, 0.5662551440329218, 0.5728395061728395, 0.5786008230452675, 0.5679012345679012, 0.5761316872427984, 0.5720164609053497, 0.5777777777777777, 0.5761316872427984, 0.562962962962963, 0.5654320987654321, 0.5654320987654321, 0.5646090534979424, 0.5613168724279836, 0.5703703703703704, 0.5604938271604938, 0.5654320987654321, 0.5679012345679012, 0.562962962962963, 0.568724279835391, 0.5670781893004115, 0.5720164609053497, 0.562962962962963, 0.5720164609053497, 0.562962962962963, 0.568724279835391, 0.562962962962963, 0.5621399176954732]
+mean epoch val cindex:[0.58420355 0.59051208 0.59414291 0.59770577 0.59548666 0.59321994
+ 0.58783292 0.58899636 0.59089694 0.58800809 0.58800815 0.58387323
+ 0.58147944 0.58493519 0.58669998 0.58715458 0.58363586 0.5817603
+ 0.58085341 0.58099208 0.58189099 0.58297498 0.5795435  0.57707128
+ 0.57901905 0.58071798 0.58010936 0.57902892 0.57565702 0.57529144
+ 0.57492048 0.57331122 0.57558345 0.57156317 0.56797335 0.57019042
+ 0.56577987 0.56707679 0.56434546 0.56315588 0.56292613 0.56089404
+ 0.56157587 0.55637912 0.55731021 0.55683572 0.55421267 0.55545465
+ 0.55805654 0.55707102 0.55495221 0.55642914 0.55556032 0.55467895
+ 0.5550616  0.55181207 0.55248183 0.55607328 0.5552894  0.55662658
+ 0.55245894 0.55574304 0.55356824 0.5539207  0.55386742 0.55338047
+ 0.55104493 0.55065147 0.55045808 0.55479567 0.55469445 0.55306907
+ 0.55658742 0.55432253 0.5549603  0.55474037 0.55142356 0.55157251
+ 0.55303532 0.55231978 0.54940116 0.55095273 0.54776229 0.54446793
+ 0.54294327 0.54756154 0.54273794 0.54833368 0.54458467 0.54413209
+ 0.54174805 0.54102099 0.54303471 0.54211316 0.54449308 0.54282145
+ 0.54209213 0.53985406 0.54398728 0.54070072 0.54103275 0.54643255
+ 0.54189091 0.54531999 0.54230273 0.53866457 0.53963275 0.54003881
+ 0.54115927 0.53833269 0.53997792 0.54097391 0.53549711 0.53873754
+ 0.54075678 0.53575786 0.53689066 0.53789636 0.53309921 0.53120573
+ 0.53353789 0.53460589 0.5340125  0.53208869 0.53555707 0.53668413
+ 0.53074313 0.52907646 0.53167617 0.52992856 0.53143925 0.53488054
+ 0.53365514 0.5323506  0.531553   0.53427681 0.52967602 0.53123593
+ 0.53107437 0.53116791 0.52788317 0.53007595 0.52725997 0.52603693
+ 0.5256514  0.5255899  0.52710163 0.52407182 0.5266806  0.52599666
+ 0.52603693 0.52665087 0.52361608 0.52283421 0.52504573 0.52391111
+ 0.52240111 0.52474412 0.52321394 0.52244057 0.52238041 0.52244228
+ 0.51822283 0.51892465 0.51700436 0.52178483 0.52060516 0.52005971
+ 0.52417151 0.52145209 0.51706852 0.5227396  0.51794825 0.51430005
+ 0.51924416 0.51726712 0.51730627 0.51647549 0.516953   0.51978504
+ 0.52115383 0.51266384 0.51303455 0.5142048  0.51008243 0.51538685
+ 0.51277775 0.5138688  0.51080821 0.51442739 0.51400233 0.51316975
+ 0.51377153 0.51194135 0.51266505 0.51289491 0.51537204 0.511965
+ 0.50836758 0.51130818]
+the testing cindex of 0 fold as follows:[0.5557661072008663, 0.5768814293448836, 0.5866269626421223, 0.5925825663237683, 0.5933946940985382, 0.5914997292907418, 0.5925825663237683, 0.5923118570655116, 0.5961017866811045, 0.6050351922035734, 0.6020573903627504, 0.6031402273957769, 0.6034109366540336, 0.6028695181375203, 0.6107200866269626, 0.6136978884677856, 0.6145100162425555, 0.6128857606930157, 0.6120736329182458, 0.617758527341635, 0.6193827828911749, 0.6218191662154846, 0.6253383865728208, 0.6253383865728208, 0.6280454791553871, 0.6261505143475907, 0.6191120736329182, 0.6182999458581484, 0.6212777476989713, 0.6164049810503519, 0.6220898754737412, 0.6269626421223606, 0.6239848402815377, 0.620736329182458, 0.6193827828911749, 0.6201949106659448, 0.6169463995668651, 0.6128857606930157, 0.612615051434759, 0.6134271792095289, 0.6142393069842988, 0.6118029236599891, 0.610449377368706, 0.6063887384948565, 0.607471575527883, 0.6058473199783433, 0.6025988088792636, 0.6015159718462372, 0.6017866811044937, 0.6050351922035734, 0.6034109366540336, 0.5961017866811045, 0.595018949648078, 0.5936654033567949, 0.5866269626421223, 0.5882512181916622, 0.5917704385489984, 0.5874390904168922, 0.5852734163508392, 0.5877097996751489, 0.5871683811586357, 0.5901461829994585, 0.5887926367081754, 0.5860855441256091, 0.5874390904168922, 0.5874390904168922, 0.5858148348673524, 0.5831077422847861, 0.5836491608012994, 0.5874390904168922, 0.5820249052517596, 0.5768814293448836, 0.5768814293448836, 0.5795885219274499, 0.5812127774769897, 0.5776935571196535, 0.57877639415268, 0.5763400108283703, 0.5779642663779101, 0.576610720086627, 0.575798592311857, 0.5744450460205739, 0.5768814293448836, 0.57877639415268, 0.5774228478613969, 0.5733622089875474, 0.5730914997292907, 0.5771521386031402, 0.5771521386031402, 0.5720086626962642, 0.5665944775311316, 0.5665944775311316, 0.5695722793719545, 0.5687601515971846, 0.5668651867893882, 0.5665944775311316, 0.5682187330806714, 0.5644288034650785, 0.5595560368164592, 0.5600974553329724, 0.5576610720086627, 0.5660530590146183, 0.5625338386572821, 0.5611802923659989, 0.5638873849485653, 0.5641580942068218, 0.5629399025446671, 0.5592853275582025, 0.5590146182999458, 0.5592853275582025, 0.5568489442338928, 0.5563075257173795, 0.5630752571737954, 0.5554953979426096, 0.5592853275582025, 0.5592853275582025, 0.5571196534921494, 0.556036816459123, 0.5538711423930699, 0.5584731997834326, 0.5592853275582025, 0.5587439090416892, 0.5568489442338928, 0.5573903627504061, 0.5522468868435301, 0.5527883053600433, 0.5576610720086627, 0.5525175961017866, 0.5511640498105035, 0.5514347590687602, 0.5489983757444504, 0.5454791553871142, 0.5462912831618841, 0.544937736870601, 0.5452084461288577, 0.5452084461288577, 0.5465619924201408, 0.5416892257715213, 0.539794260963725, 0.5403356794802382, 0.5457498646453709, 0.5435841905793178, 0.5416892257715213, 0.5403356794802382, 0.544937736870601, 0.5406063887384949, 0.5373578776394152, 0.5403356794802382, 0.5414185165132648, 0.5395235517054683, 0.5384407146724418, 0.5387114239306985, 0.5381700054141851, 0.5460205739036275, 0.5392528424472117, 0.5373578776394152, 0.538982133188955, 0.5381700054141851, 0.539794260963725, 0.5378992961559286, 0.5392528424472117, 0.5392528424472117, 0.5349214943151056, 0.5305901461829995, 0.5341093665403357, 0.5357336220898755, 0.5354629128316188, 0.533838657282079, 0.5351922035733622, 0.5346507850568489, 0.5414185165132648, 0.5351922035733622, 0.5392528424472117, 0.5354629128316188, 0.5335679480238225, 0.5330265295073091, 0.533838657282079, 0.5343800757985923, 0.5289658906334597, 0.5365457498646453, 0.5305901461829995, 0.528695181375203, 0.5332972387655658, 0.5365457498646453, 0.5362750406063888, 0.5332972387655658, 0.5343800757985923, 0.5349214943151056, 0.531672983216026, 0.5346507850568489, 0.5292365998917163, 0.5284244721169464, 0.5322144017325392, 0.5284244721169464, 0.5319436924742826, 0.5273416350839198, 0.5305901461829995, 0.5270709258256633, 0.5295073091499729, 0.5281537628586898]
+the testing cindex of 1 fold as follows:[0.5970988750740083, 0.6053878034339846, 0.6059798697454115, 0.598283007696862, 0.5891059798697454, 0.5763765541740675, 0.5674955595026643, 0.5568383658969804, 0.5426287744227354, 0.5441089402013025, 0.5399644760213144, 0.5414446417998816, 0.5411486086441681, 0.5408525754884547, 0.5429248075784487, 0.5438129070455892, 0.5373001776198935, 0.5364120781527532, 0.5417406749555951, 0.5458851391355832, 0.5464772054470101, 0.5436648904677324, 0.5441089402013025, 0.5414446417998816, 0.5441089402013025, 0.5441089402013025, 0.5461811722912966, 0.5509177027827117, 0.5544701006512729, 0.5568383658969804, 0.5538780343398461, 0.551805802249852, 0.5497335701598579, 0.5526939017169923, 0.5577264653641207, 0.5597986974541148, 0.5586145648312612, 0.5559502664298401, 0.5559502664298401, 0.5595026642984015, 0.5642391947898164, 0.5615748963883955, 0.5642391947898164, 0.5642391947898164, 0.5671995263469508, 0.5663114268798105, 0.5651272942569567, 0.5674955595026643, 0.5683836589698046, 0.5692717584369449, 0.5728241563055062, 0.5716400236826524, 0.5689757252812315, 0.5737122557726465, 0.5713439905269391, 0.5680876258140912, 0.5645352279455299, 0.5692717584369449, 0.5716400236826524, 0.57400828892836, 0.5754884547069272, 0.5710479573712256, 0.5754884547069272, 0.5808170515097691, 0.5743043220840734, 0.5737122557726465, 0.5793368857312019, 0.5748963883955003, 0.5746003552397868, 0.5707519242155121, 0.5674955595026643, 0.576080521018354, 0.5725281231497927, 0.568679692125518, 0.5710479573712256, 0.5751924215512138, 0.5746003552397868, 0.5716400236826524, 0.5636471284783896, 0.5751924215512138, 0.5763765541740675, 0.5728241563055062, 0.5751924215512138, 0.5716400236826524, 0.5704558910597987, 0.5716400236826524, 0.5775606867969213, 0.5707519242155121, 0.5748963883955003, 0.5725281231497927, 0.5707519242155121, 0.5731201894612197, 0.5754884547069272, 0.5799289520426287, 0.5746003552397868, 0.5858496151568976, 0.5790408525754884, 0.5748963883955003, 0.5698638247483718, 0.5766725873297809, 0.5820011841326228, 0.5766725873297809, 0.5757844878626406, 0.5778567199526347, 0.5704558910597987, 0.5772646536412078, 0.5743043220840734, 0.57400828892836, 0.5754884547069272, 0.5831853167554766, 0.5757844878626406, 0.5737122557726465, 0.5787448194197751, 0.5787448194197751, 0.5828892835997632, 0.5731201894612197, 0.5743043220840734, 0.5754884547069272, 0.5728241563055062, 0.5805210183540557, 0.5775606867969213, 0.5817051509769094, 0.5763765541740675, 0.5799289520426287, 0.5811130846654825, 0.5799289520426287, 0.5822972172883363, 0.5840734162226169, 0.5831853167554766, 0.5808170515097691, 0.5817051509769094, 0.5831853167554766, 0.5769686204854944, 0.5820011841326228, 0.5743043220840734, 0.5852575488454707, 0.5808170515097691, 0.5787448194197751, 0.5825932504440497, 0.5787448194197751, 0.5763765541740675, 0.5867377146240379, 0.5882178804026051, 0.5837773830669035, 0.5858496151568976, 0.5802249851983422, 0.5873297809354647, 0.581409117821196, 0.5766725873297809, 0.5817051509769094, 0.5831853167554766, 0.5822972172883363, 0.5864416814683244, 0.5867377146240379, 0.5840734162226169, 0.5873297809354647, 0.5858496151568976, 0.5855535820011841, 0.5805210183540557, 0.5852575488454707, 0.5914742451154529, 0.5822972172883363, 0.5979869745411486, 0.5905861456483126, 0.6030195381882771, 0.5923623445825933, 0.5902901124925992, 0.5896980461811723, 0.5882178804026051, 0.5905861456483126, 0.5956187092954411, 0.5870337477797514, 0.5932504440497336, 0.5929544108940201, 0.5929544108940201, 0.5911782119597395, 0.5929544108940201, 0.5911782119597395, 0.5959147424511545, 0.5879218472468917, 0.5867377146240379, 0.5965068087625814, 0.5950266429840142, 0.5920663114268798, 0.6003552397868561, 0.5938425103611604, 0.6006512729425696, 0.5923623445825933, 0.5926583777383067, 0.5959147424511545, 0.6012433392539964, 0.5929544108940201, 0.5926583777383067, 0.5965068087625814, 0.5953226761397277, 0.5935464772054471, 0.5891059798697454, 0.5864416814683244, 0.5882178804026051, 0.5855535820011841]
+the testing cindex of 2 fold as follows:[0.5324459234608985, 0.551414309484193, 0.5693843594009983, 0.5720465890183029, 0.5763727121464226, 0.5743760399334442, 0.5667221297836939, 0.5663893510815308, 0.56738768718802, 0.5657237936772047, 0.5653910149750416, 0.5643926788685524, 0.562063227953411, 0.5650582362728785, 0.5680532445923461, 0.5660565723793677, 0.5667221297836939, 0.5667221297836939, 0.5680532445923461, 0.5670549084858569, 0.5683860232945092, 0.5703826955074875, 0.5713810316139767, 0.5657237936772047, 0.5687188019966722, 0.5727121464226289, 0.5787021630615641, 0.5767054908485857, 0.578369384359401, 0.5787021630615641, 0.5816971713810316, 0.5893510815307821, 0.5880199667221297, 0.5886855241264559, 0.5886855241264559, 0.5910149750415974, 0.58369384359401, 0.58369384359401, 0.5767054908485857, 0.5797004991680532, 0.5767054908485857, 0.584359400998336, 0.5850249584026622, 0.5893510815307821, 0.5883527454242928, 0.5910149750415974, 0.5910149750415974, 0.5903494176372712, 0.5903494176372712, 0.5900166389351081, 0.584359400998336, 0.5816971713810316, 0.5860232945091514, 0.5856905158069884, 0.5873544093178037, 0.584359400998336, 0.5873544093178037, 0.5866888519134775, 0.5876871880199668, 0.5870216306156406, 0.5883527454242928, 0.58369384359401, 0.5880199667221297, 0.5883527454242928, 0.5870216306156406, 0.5876871880199668, 0.5903494176372712, 0.5906821963394343, 0.5930116472545757, 0.5920133111480865, 0.5940099833610649, 0.5936772046589018, 0.5970049916805324, 0.5976705490848586, 0.5983361064891847, 0.6023294509151415, 0.6003327787021631, 0.6033277870216306, 0.6009983361064892, 0.6003327787021631, 0.6039933444259568, 0.6046589018302828, 0.6036605657237937, 0.6076539101497505, 0.6073211314475874, 0.6049916805324459, 0.6066555740432612, 0.6093178036605658, 0.6129783693843595, 0.6136439267886855, 0.611314475873544, 0.6069883527454243, 0.6099833610648918, 0.6146422628951748, 0.6123128119800333, 0.6163061564059901, 0.6119800332778702, 0.6133111480865224, 0.6156405990016639, 0.6176372712146423, 0.6186356073211314, 0.6183028286189683, 0.6169717138103161, 0.6189683860232945, 0.6189683860232945, 0.6143094841930117, 0.6183028286189683, 0.6236272878535774, 0.621963394342762, 0.6229617304492513, 0.6199667221297837, 0.621630615640599, 0.6252911813643927, 0.621630615640599, 0.6246256239600666, 0.6206322795341098, 0.6226289517470882, 0.6249584026622296, 0.6242928452579035, 0.6286189683860233, 0.627287853577371, 0.6276206322795341, 0.6302828618968386, 0.6292845257903494, 0.626955074875208, 0.6316139767054908, 0.626955074875208, 0.6282861896838602, 0.6279534109816972, 0.6266222961730449, 0.6276206322795341, 0.627287853577371, 0.6289517470881864, 0.627287853577371, 0.6266222961730449, 0.6302828618968386, 0.6276206322795341, 0.6259567387687188, 0.6329450915141431, 0.6279534109816972, 0.627287853577371, 0.637936772046589, 0.6362728785357737, 0.6332778702163061, 0.6332778702163061, 0.6302828618968386, 0.6299500831946755, 0.6336106489184692, 0.6332778702163061, 0.63261231281198, 0.6306156405990017, 0.6309484193011647, 0.6412645590682197, 0.6302828618968386, 0.6362728785357737, 0.6372712146422629, 0.6349417637271214, 0.6362728785357737, 0.6409317803660566, 0.6356073211314476, 0.6372712146422629, 0.6362728785357737, 0.637936772046589, 0.637936772046589, 0.6369384359400998, 0.6342762063227954, 0.6422628951747088, 0.6372712146422629, 0.632279534109817, 0.6362728785357737, 0.6342762063227954, 0.6386023294509151, 0.6306156405990017, 0.6339434276206323, 0.6332778702163061, 0.6362728785357737, 0.6329450915141431, 0.6332778702163061, 0.63261231281198, 0.6332778702163061, 0.63261231281198, 0.6329450915141431, 0.6279534109816972, 0.6342762063227954, 0.63261231281198, 0.6362728785357737, 0.632279534109817, 0.6349417637271214, 0.6336106489184692, 0.6336106489184692, 0.63261231281198, 0.6342762063227954, 0.6339434276206323, 0.6339434276206323, 0.6359400998336107, 0.6366056572379367, 0.6332778702163061, 0.6362728785357737, 0.6349417637271214, 0.6352745424292845]
+the testing cindex of 3 fold as follows:[0.39343116701607267, 0.4248777078965758, 0.44304682040531096, 0.4444444444444444, 0.4416491963661775, 0.4412997903563941, 0.4472396925227114, 0.449685534591195, 0.44898672257162825, 0.44863731656184486, 0.44758909853249473, 0.43675751222921033, 0.4447938504542278, 0.45073375262054505, 0.4580712788259958, 0.4605171208944794, 0.45772187281621246, 0.4647099930118798, 0.4751921733053808, 0.47099930118798045, 0.48392732354996504, 0.4947589098532495, 0.4954577218728162, 0.49510831586303283, 0.5006988120195668, 0.5101327742837177, 0.5087351502445842, 0.5167714884696016, 0.5164220824598184, 0.5283018867924528, 0.5230607966457023, 0.5377358490566038, 0.5433263452131377, 0.5496156533892383, 0.560796645702306, 0.5527603074772887, 0.5524109014675053, 0.5538085255066387, 0.5576519916142557, 0.5625436757512229, 0.5646401118099231, 0.5604472396925227, 0.5583508036338225, 0.5747728860936409, 0.5761705101327743, 0.5723270440251572, 0.5733752620545073, 0.5740740740740741, 0.5684835779175402, 0.5754716981132075, 0.5705800139762404, 0.5723270440251572, 0.5817610062893082, 0.5765199161425576, 0.576869322152341, 0.5796645702306079, 0.5845562543675751, 0.5838574423480084, 0.5831586303284416, 0.583508036338225, 0.5796645702306079, 0.5856044723969253, 0.5817610062893082, 0.5810621942697415, 0.5838574423480084, 0.5824598183088749, 0.5918937805730259, 0.596785464709993, 0.5946890286512928, 0.5880503144654088, 0.5932914046121593, 0.5908455625436757, 0.5925925925925926, 0.5971348707197763, 0.5950384346610762, 0.5877009084556254, 0.5925925925925926, 0.5894479385045422, 0.5922431865828093, 0.5953878406708596, 0.5915443745632425, 0.5953878406708596, 0.592941998602376, 0.593990216631726, 0.5999301187980434, 0.5957372466806429, 0.5936408106219427, 0.5985324947589099, 0.59958071278826, 0.5992313067784766, 0.5978336827393431, 0.5992313067784766, 0.5971348707197763, 0.5978336827393431, 0.5915443745632425, 0.5925925925925926, 0.5925925925925926, 0.5957372466806429, 0.6023759608665269, 0.6107617051013278, 0.6016771488469602, 0.6055206149545772, 0.5988819007686932, 0.6009783368273934, 0.5964360587002097, 0.5946890286512928, 0.59958071278826, 0.6013277428371768, 0.5999301187980434, 0.6048218029350105, 0.6069182389937107, 0.6013277428371768, 0.6037735849056604, 0.6044723969252271, 0.596785464709993, 0.6023759608665269, 0.5953878406708596, 0.5988819007686932, 0.603424178895877, 0.6055206149545772, 0.6020265548567435, 0.603424178895877, 0.606219426974144, 0.606219426974144, 0.6044723969252271, 0.6058700209643606, 0.6013277428371768, 0.5992313067784766, 0.5943396226415094, 0.5985324947589099, 0.6023759608665269, 0.6065688329839273, 0.6065688329839273, 0.6090146750524109, 0.603424178895877, 0.6079664570230608, 0.6051712089447938, 0.606219426974144, 0.6037735849056604, 0.6030747728860937, 0.5988819007686932, 0.6076170510132775, 0.6016771488469602, 0.6093640810621943, 0.610062893081761, 0.6114605171208944, 0.6135569531795947, 0.6118099231306778, 0.6121593291404612, 0.6121593291404612, 0.603424178895877, 0.6048218029350105, 0.6058700209643606, 0.603424178895877, 0.60062893081761, 0.6048218029350105, 0.6020265548567435, 0.603424178895877, 0.6072676450034941, 0.6093640810621943, 0.6104122990915444, 0.6086652690426275, 0.6107617051013278, 0.6097134870719776, 0.6065688329839273, 0.6027253668763103, 0.6023759608665269, 0.6013277428371768, 0.6030747728860937, 0.6027253668763103, 0.5992313067784766, 0.5985324947589099, 0.6002795248078266, 0.5957372466806429, 0.5971348707197763, 0.5999301187980434, 0.6009783368273934, 0.5985324947589099, 0.5960866526904263, 0.5988819007686932, 0.5953878406708596, 0.6013277428371768, 0.5978336827393431, 0.5992313067784766, 0.5999301187980434, 0.596785464709993, 0.6020265548567435, 0.5988819007686932, 0.6020265548567435, 0.6020265548567435, 0.5950384346610762, 0.5925925925925926, 0.5981830887491265, 0.5943396226415094, 0.5908455625436757, 0.5971348707197763, 0.596785464709993, 0.59958071278826, 0.5957372466806429, 0.5981830887491265]
+mean epoch test cindex:[0.51968552 0.53964031 0.5512595  0.55183915 0.55013065 0.54588803
+ 0.54350999 0.54130628 0.53877624 0.54087631 0.53875049 0.53643377
+ 0.53785416 0.53987852 0.54494235 0.54602112 0.54406355 0.54518249
+ 0.54926493 0.55042447 0.55454333 0.55765642 0.55907152 0.55690378
+ 0.56039301 0.56327609 0.56318264 0.56567366 0.56763483 0.57006185
+ 0.57018147 0.57646384 0.57626618 0.57793285 0.58164785 0.58094222
+ 0.57791643 0.5765846  0.5757307  0.5787935  0.57995603 0.57954612
+ 0.57951608 0.58368798 0.58479859 0.58387519 0.58302909 0.58335876
+ 0.58225083 0.58494882 0.58279363 0.58044151 0.58294474 0.58239702
+ 0.58054867 0.5800907  0.58205408 0.58181429 0.58193981 0.58306194
+ 0.58266854 0.58262311 0.58351552 0.58407938 0.58315562 0.58282459
+ 0.58684873 0.58636795 0.58648755 0.58456366 0.58420546 0.58437118
+ 0.58475178 0.58576841 0.58640882 0.58572908 0.58657553 0.58518894
+ 0.58371323 0.58688094 0.58692822 0.58682899 0.5871691  0.58801514
+ 0.5887825  0.58643279 0.58773714 0.58893859 0.5911519  0.589353
+ 0.58662364 0.58648358 0.58804474 0.59029126 0.58633068 0.59033571
+ 0.58795805 0.5870934  0.58685911 0.59129225 0.58999375 0.59163727
+ 0.58854299 0.58974593 0.58743693 0.58760532 0.58878194 0.58956216
+ 0.58909915 0.59256354 0.5898796  0.58824453 0.59272121 0.59008581
+ 0.59089642 0.58885344 0.58736019 0.58884139 0.58860308 0.59328345
+ 0.59154011 0.59287347 0.59243195 0.59320582 0.59119686 0.59255031
+ 0.59206028 0.59102713 0.5891606  0.58935165 0.59017503 0.59063029
+ 0.58969512 0.59081036 0.58738981 0.59217883 0.59004272 0.58815255
+ 0.58977655 0.58752717 0.58707404 0.59396893 0.59196428 0.59168875
+ 0.59353203 0.59064369 0.59204867 0.59179134 0.59088208 0.59150009
+ 0.58891646 0.58919472 0.59293657 0.59161633 0.59005702 0.59169517
+ 0.59045002 0.59085516 0.59212868 0.59203206 0.59460265 0.59162205
+ 0.59540174 0.59220664 0.59515904 0.59127438 0.59259797 0.59053392
+ 0.5896911  0.59105879 0.59263618 0.58984019 0.59084961 0.5895245
+ 0.58923377 0.59010193 0.59017912 0.58934216 0.5883949  0.58915684
+ 0.586332   0.58986871 0.58852774 0.59052989 0.59229318 0.59004952
+ 0.59233436 0.59027688 0.58999214 0.59155068 0.58953267 0.58706192
+ 0.58924982 0.58830358 0.58851301 0.58865716 0.58743987 0.58734155
+ 0.58710105 0.58679124]
+max epoch is 0.5954017365010428, cindex is 162
+finished!
+end script

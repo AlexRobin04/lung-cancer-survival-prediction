@@ -1,0 +1,3 @@
+# 已拆分为：
+# - requirements-api-base.txt（重依赖，用于 Dockerfile.base）
+# - requirements-api-app.txt（轻依赖，用于应用层）

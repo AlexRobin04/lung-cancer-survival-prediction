@@ -1,0 +1,32 @@
+
+Load Dataset
+split_dir: /home/yuehailin/dazewen/ViLa-MIL/splits/TCGA_LIHC
+################# Settings ###################
+num_splits:  4
+k_start:  -1
+k_end:  -1
+task:  task_tcga_lihc_subrisk
+max_epochs:  200
+lr:  1e-05
+experiment:  None
+label_frac:  1.0
+seed:  1
+model_type:  S4MIL
+mode:  transformer
+use_drop_out:  True
+weighted_sample:  False
+opt:  adam
+split_dir:  /home/yuehailin/dazewen/ViLa-MIL/splits/TCGA_LIHC
+
+Training Fold 0!
+
+Init train/val/test splits...
+Training on 174 samples
+Validating on 44 samples
+Testing on 73 samples
+/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+
+dropout:  0.25
+
+

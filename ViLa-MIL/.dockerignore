@@ -1,0 +1,23 @@
+# 默认全部忽略，用白名单减少 build context
+**
+
+# Dockerfile / 依赖清单需要进入上下文
+!Dockerfile
+!Dockerfile.base
+!.dockerignore
+!deploy/
+!deploy/requirements-api-base.txt
+!deploy/requirements-api-app.txt
+
+# 应用镜像需要源代码（基础镜像不需要，但保持白名单清晰）
+!api_server.py
+!main_*.py
+!datasets/
+!models/
+!modules/
+!utils/
+!wsi_core/
+!text_prompt/
+!datasets_csv/
+!splits/
+!lusc (1).csv

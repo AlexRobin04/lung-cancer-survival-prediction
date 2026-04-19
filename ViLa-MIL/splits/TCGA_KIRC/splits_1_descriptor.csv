@@ -1,0 +1,5 @@
+,train,val,test
+low,47,12,20
+Moderate,60,15,25
+Elevated,64,16,26
+high,136,34,56

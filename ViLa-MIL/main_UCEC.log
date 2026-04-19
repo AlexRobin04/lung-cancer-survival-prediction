@@ -1,0 +1,48 @@
+
+Load Dataset
+split_dir: /home/yuehailin/dazewen/ViLa-MIL/splits/TCGA_UCEC
+################# Settings ###################
+num_splits:  4
+k_start:  -1
+k_end:  -1
+task:  task_tcga_ucec_subrisk
+max_epochs:  200
+lr:  1e-05
+experiment:  None
+label_frac:  1.0
+seed:  1
+model_type:  S4MIL
+mode:  transformer
+use_drop_out:  True
+weighted_sample:  False
+opt:  adam
+split_dir:  /home/yuehailin/dazewen/ViLa-MIL/splits/TCGA_UCEC
+
+Training Fold 0!
+
+Init train/val/test splits...
+Training on 314 samples
+Validating on 79 samples
+Testing on 127 samples
+/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+
+dropout:  0.25
+
+
+Traceback (most recent call last):
+  File "/home/yuehailin/dazewen/ViLa-MIL/main_UCEC.py", line 250, in <module>
+    results = main(args)
+  File "/home/yuehailin/dazewen/ViLa-MIL/main_UCEC.py", line 216, in main
+    results, test_loss,c_index_test, all_epoch_train_ci, all_epoch_val_ci, all_epoch_test_ci = train(datasets, i, args)
+  File "/home/yuehailin/dazewen/ViLa-MIL/utils/core_utils.py", line 264, in train
+    train_ci = train_loop(args, epoch, model, train_loader, optimizer, args.n_classes, writer, loss_fn)
+  File "/home/yuehailin/dazewen/ViLa-MIL/utils/core_utils.py", line 363, in train_loop
+    loss.backward()
+  File "/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/_tensor.py", line 626, in backward
+    torch.autograd.backward(
+  File "/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/autograd/__init__.py", line 347, in backward
+    _engine_run_backward(
+  File "/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/autograd/graph.py", line 823, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+RuntimeError: cuFFT error: CUFFT_INTERNAL_ERROR

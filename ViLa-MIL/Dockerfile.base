@@ -1,0 +1,33 @@
+FROM python:3.10-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ \
+    PIP_TRUSTED_HOST=mirrors.aliyun.com
+
+WORKDIR /app
+
+# Use domestic Debian mirror to speed up apt in CN region.
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    libgl1 \
+    libopenslide0 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 先装 CPU 版 PyTorch，再装 requirements：避免 timm 等先从默认源拉一整份 torch，再被下一行覆盖（重复下载、体积翻倍）
+RUN pip install --upgrade pip \
+    && pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio
+
+COPY deploy/requirements-api-base.txt /tmp/requirements-api-base.txt
+RUN pip install -r /tmp/requirements-api-base.txt
+
+# TRIDENT runtime deps（用于 WSI -> 双尺度 H5）
+RUN pip install openslide-python openslide-bin \
+    && pip install git+https://github.com/mahmoodlab/TRIDENT.git

@@ -1,0 +1,48 @@
+
+Load Dataset
+split_dir: /home/yuehailin/dazewen/ViLa-MIL/splits/TCGA_LGG
+################# Settings ###################
+num_splits:  4
+k_start:  -1
+k_end:  -1
+task:  task_tcga_lgg_subrisk
+max_epochs:  200
+lr:  1e-05
+experiment:  None
+label_frac:  1.0
+seed:  1
+model_type:  S4MIL
+mode:  transformer
+use_drop_out:  True
+weighted_sample:  False
+opt:  adam
+split_dir:  /home/yuehailin/dazewen/ViLa-MIL/splits/TCGA_LGG
+
+Training Fold 0!
+
+Init train/val/test splits...
+Training on 551 samples
+Validating on 118 samples
+Testing on 222 samples
+/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/optim/lr_scheduler.py:62: UserWarning: The verbose parameter is deprecated. Please use get_last_lr() to access the learning rate.
+  warnings.warn(
+
+dropout:  0.25
+
+
+Traceback (most recent call last):
+  File "/home/yuehailin/dazewen/ViLa-MIL/main_LGG.py", line 251, in <module>
+    results = main(args)
+  File "/home/yuehailin/dazewen/ViLa-MIL/main_LGG.py", line 217, in main
+    results, test_loss,c_index_test, all_epoch_train_ci, all_epoch_val_ci, all_epoch_test_ci = train(datasets, i, args)
+  File "/home/yuehailin/dazewen/ViLa-MIL/utils/core_utils.py", line 264, in train
+    train_ci = train_loop(args, epoch, model, train_loader, optimizer, args.n_classes, writer, loss_fn)
+  File "/home/yuehailin/dazewen/ViLa-MIL/utils/core_utils.py", line 363, in train_loop
+    loss.backward()
+  File "/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/_tensor.py", line 626, in backward
+    torch.autograd.backward(
+  File "/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/autograd/__init__.py", line 347, in backward
+    _engine_run_backward(
+  File "/home/yuehailin/anaconda3/envs/Foucss/lib/python3.9/site-packages/torch/autograd/graph.py", line 823, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 70.00 MiB. GPU 0 has a total capacity of 39.38 GiB of which 53.31 MiB is free. Process 100551 has 11.10 GiB memory in use. Process 69208 has 880.00 MiB memory in use. Process 86516 has 12.33 GiB memory in use. Process 104457 has 8.15 GiB memory in use. Process 38149 has 1.13 GiB memory in use. Process 38151 has 1.30 GiB memory in use. Including non-PyTorch memory, this process has 812.00 MiB memory in use. Process 38155 has 1.11 GiB memory in use. Process 38157 has 1.34 GiB memory in use. Process 38153 has 1.14 GiB memory in use. Of the allocated memory 184.93 MiB is allocated by PyTorch, and 91.07 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
