@@ -127,15 +127,15 @@
 - 对多模型输出对齐（`logits, Y_prob, loss`）
 - 精度/指标日志：
   - `Accuracy_Logger`
-  - `F1`（不同任务/实现可能记录的指标不同；前端训练曲线页面当前仅展示 Loss）
+  - `F1` / `ROC AUC` / `error`（不同任务日志字段可能不同；前端评估页已支持 Loss/AUC/F1/error 多图展示）
 
 ## 2.4 前端核心页面
 
 - `Training`：启动任务、状态轮询、日志查看
 - `DataManagement`：特征上传/删除与统计
-- `Clinical`：CSV 导入、为病例指定 20×/10× 特征；支持由图像生成特征（ResNet 路径）或由 WSI 生成特征（TRIDENT 路径）
+- `Clinical`：CSV 导入、为病例指定 20×/10× 特征；提供 `已有 H5 文件` 与 `从 WSI 生成` 两种入口，其中 WSI 生成包含 `快速预览`（低采样近似）与 `正式预测`（TRIDENT 全量）
 - `ModelEvaluation`：训练/验证 Loss 曲线、LUSC 示例 KM 曲线（Ours vs Others，baseline 可切换）
-- `Prediction`：按病例或按特征文件 + 任务预测、风险分层与可视化；支持上传图像（ResNet）或上传 WSI（TRIDENT）后推理
+- `Prediction`：按病例或按特征文件 + 任务预测、风险分层与可视化；`/api/predict/from-raster` 对 WSI 已支持快速近似与 TRIDENT 全量双路径
 - `Settings`：接口配置、平台介绍、推荐流程
 
 ---
@@ -231,7 +231,7 @@
   - 上传特征 H5（20x/10x）到 `uploaded_features/<cancer>/features_20|10`
 
 - `POST /api/data/upload-raster`
-  - 上传 PNG/JPEG/WebP 等位图；后端保存原图并生成 **单层 TIFF**（登记为 `processed_wsi`，`derivedFromRaster=true`）；**不单独完成推理**，在线推理见 `/api/predict/from-raster`
+  - 支持位图与 WSI 上传；位图会转为单层 TIFF 登记，WSI（`.svs/.ndpi/.mrxs/.scn`）直接入库登记为 `processed_wsi`；**不单独完成推理**，在线推理见 `/api/predict/from-raster`
 
 - `GET /api/data/datasets`
   - 返回：
@@ -268,7 +268,11 @@
 - `POST /api/clinical/cases/link-feature`
   - 将 `manifest` 中某特征文件的 ID 登记到指定 `caseId`（便于随访与按病例推理；非唯一路径，见 4.7）
 - `POST /api/clinical/cases/associate-features`（推荐）
-  - **一次性**为病例关联双尺度推理特征：JSON 传 `feature20FileId` + `feature10FileId`；或 `multipart` 传 `caseId`、`cancer`、`file`（病理图像），后端生成 H5 并写入 `cases.json`（`featureSource`: `h5_pair` / `raster_derived`）
+  - **一次性**为病例关联双尺度推理特征：JSON 传 `feature20FileId` + `feature10FileId`；或 `multipart` 传 `caseId`、`cancer`、`file`（WSI/图像）在线生成 H5 并写入 `cases.json`
+  - `multipart` 关键参数：
+    - `extractor=trident|raster`
+    - `quick=true|false`（当上传 WSI 且 `quick=true` 时走低采样近似真快速模式；`formal` 走 TRIDENT 全量）
+  - `featureSource` 可能值：`h5_pair` / `raster_derived` / `trident_derived`
 
 ## 4.7 预测接口
 
@@ -285,8 +289,11 @@
     - `未找到 checkpoint（期望 resultsDir 下存在 s_<fold>_checkpoint.pt）`
 
 - `POST /api/predict/from-raster`
-  - `multipart/form-data`：`file`（图像）、`taskId`（可选）、`cancer`、`caseId`（可选）
-  - 后端将图像 **在线** 划窗，经 **ImageNet ResNet50** 生成双尺度 H5（与 TCGA/CONCH 特征分布可能不一致，**仅供流程演示**），再执行与 `/api/predict` 相同的 MIL 推理
+  - `multipart/form-data`：`file`（WSI/图像）、`taskId`（可选）、`cancer`、`caseId`（可选）、`extractor`、`quick`
+  - 模式说明：
+    - 快速：WSI 走“缩略 + 低采样近似”路径（速度优先）
+    - 正式：走 TRIDENT 全量特征提取（结果优先）
+  - 之后与 `/api/predict` 共享同一 MIL 推理链路
 
 - `POST /api/predict/batch`
   - 批量调用预测（每项沿用上述单条规则）
@@ -874,6 +881,10 @@ curl -sS -X POST http://localhost/api/predict/batch \
   - TRIDENT 路径增加 `mpp` 参数：对 PNG/JPEG 在 TRIDENT 模式下要求提供 `mpp`（如 `0.25`）
   - Docker 部署补充：首次需先构建 `vila-mil-backend-base:local`；并说明 PyTorch 依赖安装顺序以避免重复下载
   - Docker 运行补充：挂载 `./TRIDENT:/TRIDENT` 并设置 `TRIDENT_REPO_DIR=/TRIDENT`（用于容器内调用 TRIDENT）
+  - 集成方法演进：`EnsembleDecision` 当前固定 `avg_prob`，并在评估端补齐 fold->480 点统一曲线（仅展示层平滑，不改原始日志指标）
+  - ModelEvaluation 最优任务对比中，`EnsembleDecision` 已可与 5 个基线同图对齐显示（Loss/AUC）
+  - Clinical 页面模式简化：合并为 `已有 H5` + `从 WSI 生成`；保留“快速预览≈低采样近似 / 正式预测=TRIDENT 全量”文案
+  - WSI 上传链路修复：`.svs/.ndpi/.mrxs/.scn` 在上传、关联、推理入口统一放行并完成路径对齐
 
 如后续新增模型、改动训练入口或调整接口字段，请同步更新本文件。
 
