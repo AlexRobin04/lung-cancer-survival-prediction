@@ -1,0 +1,43 @@
+flowchart TD
+    A[输入病例特征 x] --> B[五路基线MIL前向<br/>RRTMIL / AMIL / WiKG / DSMIL / S4MIL]
+    B --> C[分支logits z_b]
+    C --> D[分支概率 Softmax]
+    D --> E[avg_prob 概率融合]
+    E --> F[基础风险 期望等级]
+
+    subgraph S1[在线策略增强]
+      G[历史队列C-index排序<br/>选择最强 best 与次强 second]
+      H{当前case有best历史预测?}
+      I[复用最强模型概率]
+      J[回退到融合概率]
+      K[轻量二次校准]
+      L{稳健门控通过?}
+      M[输出校准风险]
+      N[回退到 lambda 等于零]
+    end
+
+    F --> G
+    G --> H
+    H -- 是 --> I
+    H -- 否 --> J
+    I --> K
+    J --> K
+    K --> L
+    L -- 通过 --> M
+    L -- 不通过 --> N
+
+    M --> O[最终风险分数与预测记录]
+    N --> O
+
+    P[稳健门控：lambda上限 时间切分验证 最小提升阈值 退化回退]
+    L -.约束说明.-> P
+
+    classDef main fill:#EAF3FF,stroke:#5B8FF9,stroke-width:1.2px,color:#111;
+    classDef enhance fill:#FFF2E8,stroke:#FA8C16,stroke-width:1.2px,color:#111;
+    classDef output fill:#F6FFED,stroke:#52C41A,stroke-width:1.2px,color:#111;
+    classDef note fill:#FAFAFA,stroke:#999,stroke-dasharray: 4 3,color:#333;
+
+    class A,B,C,D,E,F main;
+    class G,H,I,J,K,L,M,N enhance;
+    class O output;
+    class P note;

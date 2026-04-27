@@ -36,39 +36,7 @@ import Toast from '../common/Toast.jsx'
 /** 与后端 ensemble_exclude / 文档 6.1 留一法一致 */
 const ENSEMBLE_BRANCH_IDS = ['RRTMIL', 'AMIL', 'WiKG', 'DSMIL', 'S4MIL']
 
-/** EnsembleFeature：前端一键提交的消融组合（共用当前表单中的癌种与超参） */
-const ENSEMBLE_ABLATION_PRESETS = [
-  {
-    id: 'ab-gate-freeze',
-    label: '门控 + 冻结五基线',
-    fusion: 'gate',
-    freezeBase: true,
-    hint: 'fusion_mode=gate，仅训练对齐层 / 门控 / 融合头',
-  },
-  {
-    id: 'ab-concat-freeze',
-    label: '拼接 + 冻结五基线',
-    fusion: 'concat',
-    freezeBase: true,
-    hint: 'fusion_mode=concat，与门控对照（同冻结策略）',
-  },
-  {
-    id: 'ab-gate-ft',
-    label: '门控 + 端到端微调',
-    fusion: 'gate',
-    freezeBase: false,
-    hint: 'finetune_ensemble，显存与时间更高',
-  },
-  {
-    id: 'ab-concat-ft',
-    label: '拼接 + 端到端微调',
-    fusion: 'concat',
-    freezeBase: false,
-    hint: '拼接 + 全模型微调，消融对照',
-  },
-]
-
-/** 常用「用几路特征」子集，对应文档 6.1 思想（非穷举 2^5−1） */
+/** 常用「用几路基线」子集（决策级 exclude） */
 const BRANCH_SUBSET_PRESETS = [
   {
     id: 'br-all',
@@ -125,11 +93,15 @@ export default function Training() {
   const [kFolds, setKFolds] = useState(4)
   const [weightDecay, setWeightDecay] = useState(1e-5)
   const [earlyStopping, setEarlyStopping] = useState(false)
-  const [freezeEnsembleBase, setFreezeEnsembleBase] = useState(true)
-  /** EnsembleFeature：gate=门控加权融合；concat=对齐后拼接（消融） */
-  const [ensembleFusion, setEnsembleFusion] = useState('gate')
-  const [ablationChecks, setAblationChecks] = useState(() =>
-    Object.fromEntries(ENSEMBLE_ABLATION_PRESETS.map((p) => [p.id, p.id === 'ab-gate-freeze' || p.id === 'ab-concat-freeze']))
+  /** EnsembleDecision：固定为 avg_prob（各分支概率均值） */
+  const [decisionFusion, setDecisionFusion] = useState('avg_prob')
+  /** 对接 POST /api/training/start：与后端 ensembleBranchPriorAuto 等一致 */
+  const [ensembleBranchPriorAuto, setEnsembleBranchPriorAuto] = useState(true)
+  /** 空字符串表示不传，后端用默认 1.0；可填 0.55 等 */
+  const [ensembleBranchPriorTemperature, setEnsembleBranchPriorTemperature] = useState('0.55')
+  /** weighted 时可选：每路基线相对权重，留空表示该路默认 1（与后端一致） */
+  const [decisionBranchWeightById, setDecisionBranchWeightById] = useState(() =>
+    Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((b) => [b, '']))
   )
   /** 某路为 false 时，该基线在对齐后特征置零（等价于 ensembleExclude） */
   const [branchInclude, setBranchInclude] = useState(() =>
@@ -182,6 +154,21 @@ export default function Training() {
   useEffect(() => {
     loadHistory()
   }, [])
+
+  /** 排除某路时清空其权重输入，避免误传 */
+  useEffect(() => {
+    setDecisionBranchWeightById((prev) => {
+      const next = { ...prev }
+      let changed = false
+      for (const b of ENSEMBLE_BRANCH_IDS) {
+        if (!branchInclude[b] && String(next[b] ?? '').trim() !== '') {
+          next[b] = ''
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+  }, [branchInclude])
 
   const removeQueueItem = async (taskId) => {
     if (!taskId || queueDeleting) return
@@ -278,8 +265,21 @@ export default function Training() {
     [cancer, modelType, maxEpochs, learningRate, kFolds, weightDecay, earlyStopping, repeat, seed]
   )
 
+  /** 写入与 Dashboard C-index 先验相关的 body 字段 */
+  const attachEnsemblePriorApiFields = useCallback(
+    (payload) => {
+      payload.ensembleBranchPriorAuto = !!ensembleBranchPriorAuto
+      const tRaw = String(ensembleBranchPriorTemperature ?? '').trim()
+      if (tRaw !== '') {
+        const n = Number(tRaw)
+        if (!Number.isNaN(n) && n > 0) payload.ensembleBranchPriorTemperature = n
+      }
+    },
+    [ensembleBranchPriorAuto, ensembleBranchPriorTemperature]
+  )
+
   const start = async () => {
-    if (String(modelType) === 'EnsembleFeature') {
+    if (String(modelType) === 'EnsembleDecision') {
       const ex = ENSEMBLE_BRANCH_IDS.filter((b) => !branchInclude[b])
       if (ex.length >= ENSEMBLE_BRANCH_IDS.length) {
         setError('至少保留一路基线特征（文档 6.1：不可五路全关）')
@@ -291,12 +291,35 @@ export default function Training() {
     setNotice('')
     try {
       const payload = { ...buildBasePayload() }
-      if (String(modelType) === 'EnsembleFeature') {
+      if (String(modelType) === 'EnsembleDecision') {
         payload.repeat = 1
-        if (!freezeEnsembleBase) payload.finetuneEnsemble = true
-        payload.ensembleFusion = ensembleFusion === 'concat' ? 'concat' : 'gate'
+        payload.decisionFusion = String(decisionFusion || 'weighted').toLowerCase()
         const ex = ENSEMBLE_BRANCH_IDS.filter((b) => !branchInclude[b])
         if (ex.length > 0) payload.ensembleExclude = ex
+        attachEnsemblePriorApiFields(payload)
+        if (String(decisionFusion || 'weighted').toLowerCase() === 'weighted') {
+          const wObj = {}
+          for (const b of ENSEMBLE_BRANCH_IDS) {
+            if (!branchInclude[b]) continue
+            const raw = String(decisionBranchWeightById[b] ?? '').trim()
+            if (raw === '') continue
+            const n = Number(raw)
+            if (Number.isNaN(n)) {
+              setError(`${b} 权重须为数字`)
+              setLoading(false)
+              return
+            }
+            if (n < 0) {
+              setError(`${b} 权重不能为负`)
+              setLoading(false)
+              return
+            }
+            wObj[b] = n
+          }
+          if (Object.keys(wObj).length > 0) {
+            payload.decisionBranchWeights = wObj
+          }
+        }
       }
       const res = await trainingApi.start(payload)
       if (res?.taskId) {
@@ -311,77 +334,6 @@ export default function Training() {
       await loadHistory()
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '启动失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const submitEnsembleAblations = async () => {
-    if (String(modelType) !== 'EnsembleFeature') return
-    const ex = ENSEMBLE_BRANCH_IDS.filter((b) => !branchInclude[b])
-    if (ex.length >= ENSEMBLE_BRANCH_IDS.length) {
-      setError('至少保留一路基线特征')
-      return
-    }
-    const selected = ENSEMBLE_ABLATION_PRESETS.filter((p) => ablationChecks[p.id])
-    if (selected.length === 0) {
-      setError('请至少勾选一项消融预设')
-      return
-    }
-    setLoading(true)
-    setError('')
-    setNotice('')
-    try {
-      let lastRes = null
-      for (const p of selected) {
-        const payload = { ...buildBasePayload(), modelType: 'EnsembleFeature', repeat: 1 }
-        payload.ensembleFusion = p.fusion === 'concat' ? 'concat' : 'gate'
-        if (!p.freezeBase) payload.finetuneEnsemble = true
-        if (ex.length > 0) payload.ensembleExclude = ex
-        lastRes = await trainingApi.start(payload)
-      }
-      const n = selected.length
-      const lastId = lastRes?.taskId
-      if (lastId) {
-        setTask({ taskId: lastId, status: lastRes?.queued ? 'queued' : 'running' })
-        setSelectedTaskId(lastId)
-      }
-      setNotice(
-        `已依次提交 ${n} 个 EnsembleFeature 消融任务（共用当前癌种与超参）。` +
-          (n > 1 ? '单任务运行时后续项会自动入队；请在 Training Queue / History 中查看。' : '')
-      )
-      await loadHistory()
-    } catch (e) {
-      setError(e?.response?.data?.message || e.message || '消融提交失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  /** 6.1 留一：依次提交 5 个任务，每次排除一路；共用当前融合方式、冻结选项与超参 */
-  const submitLeaveOneOutBatch = async () => {
-    if (String(modelType) !== 'EnsembleFeature') return
-    setLoading(true)
-    setError('')
-    setNotice('')
-    try {
-      let lastRes = null
-      for (const drop of ENSEMBLE_BRANCH_IDS) {
-        const payload = { ...buildBasePayload(), modelType: 'EnsembleFeature', repeat: 1 }
-        payload.ensembleFusion = ensembleFusion === 'concat' ? 'concat' : 'gate'
-        if (!freezeEnsembleBase) payload.finetuneEnsemble = true
-        payload.ensembleExclude = [drop]
-        lastRes = await trainingApi.start(payload)
-      }
-      const lastId = lastRes?.taskId
-      if (lastId) {
-        setTask({ taskId: lastId, status: lastRes?.queued ? 'queued' : 'running' })
-        setSelectedTaskId(lastId)
-      }
-      setNotice('已依次提交 5 个留一法（ensembleExclude 各一路）任务；与当前「融合方式」「冻结基线」设置一致。')
-      await loadHistory()
-    } catch (e) {
-      setError(e?.response?.data?.message || e.message || '留一法提交失败')
     } finally {
       setLoading(false)
     }
@@ -431,7 +383,10 @@ export default function Training() {
   }
 
   const modelOptions = useMemo(() => models.map((m) => (typeof m === 'string' ? { id: m, name: m } : m)), [models])
-  const allowedModelIds = useMemo(() => new Set(['AMIL', 'WiKG', 'DSMIL', 'S4MIL', 'RRTMIL', 'EnsembleFeature']), [])
+  const allowedModelIds = useMemo(
+    () => new Set(['AMIL', 'WiKG', 'DSMIL', 'S4MIL', 'RRTMIL', 'EnsembleDecision']),
+    []
+  )
   const filteredModelOptions = useMemo(() => modelOptions.filter((m) => allowedModelIds.has(String(m.id))), [modelOptions, allowedModelIds])
 
   const openHistoryManager = () => {
@@ -632,21 +587,14 @@ export default function Training() {
               }
               label="早停（--early_stopping，按验证集 val_error）"
             />
-            {String(modelType) === 'EnsembleFeature' && (
+            {String(modelType) === 'EnsembleDecision' && (
               <>
-                <Alert severity="info" sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' } }}>
-                  EnsembleFeature 为特征级集成。后端会在每个训练折上，自动从{' '}
-                  <code>uploaded_features/best_models.json</code> 与 <code>tasks.json</code> 解析五个基模型（RRTMIL/AMIL/WiKG/DSMIL/S4MIL）当前癌种
-                  + mode 的最佳任务，并加载对应 <code>resultsDir/s_折_checkpoint.pt</code>。请先在平台各训好五个基模型并产生 best
-                  记录；若需用手动权重目录，请用命令行 <code>--ensemble_ckpt_dir</code> 启动训练。
-                </Alert>
                 <Box sx={{ gridColumn: '1 / -1' }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                    基线特征子集（用几路特征 · 文档 6.1）
+                    基线子集（ensembleExclude）
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    勾选 = 该路参与融合；取消勾选 = 对齐后该路置零，等价于请求体{' '}
-                    <code>ensembleExclude</code>。单次 Start、下方「融合×冻结」批量消融都会带上当前子集。留一法入队与这里独立，固定每次只关一路。
+                    勾选 = 该路参与决策融合；取消勾选 = 排除该路基线 logits。
                   </Typography>
                   <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 1 }} alignItems="center">
                     {ENSEMBLE_BRANCH_IDS.map((b) => (
@@ -679,9 +627,9 @@ export default function Training() {
                     ))}
                     {ENSEMBLE_BRANCH_IDS.map((b) => (
                       <Chip
-                        key={`solo-off-${b}`}
+                        key={`exclude-only-${b}`}
                         size="small"
-                        label={`只关 ${b}`}
+                        label={`仅排除 ${b}`}
                         variant="outlined"
                         onClick={() =>
                           setBranchInclude(
@@ -690,102 +638,127 @@ export default function Training() {
                         }
                       />
                     ))}
-                  </Stack>
-                </Box>
-                <FormControlLabel
-                  sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' }, alignSelf: 'center' }}
-                  control={
-                    <Checkbox checked={freezeEnsembleBase} onChange={(e) => setFreezeEnsembleBase(e.target.checked)} />
-                  }
-                  label="冻结五个基模型，仅训练融合头（推荐；取消勾选则端到端微调）"
-                />
-                <FormControl size="small" sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' }, minWidth: 280 }}>
-                  <InputLabel id="ensemble-fusion-label">融合方式</InputLabel>
-                  <Select
-                    labelId="ensemble-fusion-label"
-                    label="融合方式"
-                    value={ensembleFusion}
-                    onChange={(e) => setEnsembleFusion(e.target.value)}
-                  >
-                    <MenuItem value="gate">门控加权（推荐）</MenuItem>
-                    <MenuItem value="concat">对齐后拼接（消融对照）</MenuItem>
-                  </Select>
-                </FormControl>
-                <Divider sx={{ gridColumn: '1 / -1' }} />
-                <Box sx={{ gridColumn: '1 / -1' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                    消融实验（批量入队）
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    与上方单次 Start 共用：Cancer、maxEpochs、learningRate、kFolds、weightDecay、早停、seed，以及当前{' '}
-                    <strong>基线特征子集</strong>（<code>ensembleExclude</code>）；每项为独立任务，按列表顺序提交（有运行中任务时自动排队）。
-                  </Typography>
-                  <Stack spacing={0.5} sx={{ mb: 1 }}>
-                    {ENSEMBLE_ABLATION_PRESETS.map((p) => (
-                      <FormControlLabel
-                        key={p.id}
-                        sx={{ alignItems: 'flex-start', ml: 0 }}
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={!!ablationChecks[p.id]}
-                            onChange={() => setAblationChecks((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
-                          />
-                        }
-                        label={
-                          <Box>
-                            <Typography variant="body2">{p.label}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {p.hint}
-                            </Typography>
-                          </Box>
+                    {ENSEMBLE_BRANCH_IDS.map((b) => (
+                      <Chip
+                        key={`enable-only-${b}`}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        label={`仅启用 ${b}`}
+                        onClick={() =>
+                          setBranchInclude(
+                            Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((x) => [x, x === b]))
+                          )
                         }
                       />
                     ))}
                   </Stack>
-                  <Stack direction="row" flexWrap="wrap" gap={1} alignItems="center">
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      disabled={loading}
-                      onClick={() =>
-                        setAblationChecks(Object.fromEntries(ENSEMBLE_ABLATION_PRESETS.map((x) => [x.id, true])))
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    当前将提交：
+                    {(() => {
+                      const active = ENSEMBLE_BRANCH_IDS.filter((b) => !!branchInclude[b])
+                      const ex = ENSEMBLE_BRANCH_IDS.filter((b) => !branchInclude[b])
+                      const activeText = active.length ? active.join(', ') : '（无）'
+                      const exText = ex.length ? ex.join(',') : '（空）'
+                      return ` 启用=[${activeText}]；--ensemble_exclude ${exText}`
+                    })()}
+                  </Typography>
+                </Box>
+                    <Alert severity="info" sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' } }}>
+                      <strong>EnsembleDecision</strong> 为<strong>决策级（后期）融合</strong>：每路走完各自 MIL 并给出判断，再在 logits/概率层用<strong>固定规则</strong>合并（投票或加权），<strong>不训练融合层</strong>。任务仅用于写出带融合配置的 checkpoint
+                      并跑验证/测试；五路基线须已训练。后端按折从 <code>best_models.json</code> / <code>tasks.json</code> 解析五路 checkpoint。
+                    </Alert>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' }, alignSelf: 'center' }}
+                    >
+                      当前仅保留一种简单融合：<strong>avg_prob</strong>（各基线输出概率逐类平均）。例如 A=80%、B=70%，融合即 75%。
+                    </Typography>
+                    <FormControl size="small" sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' }, minWidth: 280 }}>
+                      <InputLabel id="decision-fusion-label">决策融合 decisionFusion</InputLabel>
+                      <Select
+                        labelId="decision-fusion-label"
+                        label="决策融合 decisionFusion"
+                        value={decisionFusion}
+                        onChange={(e) => setDecisionFusion(e.target.value)}
+                      >
+                        <MenuItem value="avg_prob">简单概率均值（avg_prob）</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <Box sx={{ gridColumn: '1 / -1', display: 'none' }}>
+                      <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} sx={{ mb: 0.75 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                          显式支路权重 decisionBranchWeights（可选）
+                        </Typography>
+                        <Chip
+                          size="small"
+                          label="清空权重"
+                          variant="outlined"
+                          onClick={() =>
+                            setDecisionBranchWeightById(Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((b) => [b, ''])))
+                          }
+                        />
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                        仅 <strong>weighted</strong> 生效；有任意非空数字时覆盖先验。留空表示该参与支路权重为 1；填 0 表示该路不参与显式加权（由后端与其它路归一化）。已取消勾选的基线不可填。
+                      </Typography>
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: {
+                            xs: '1fr',
+                            sm: 'repeat(2, minmax(0, 1fr))',
+                            md: 'repeat(3, minmax(0, 1fr))',
+                            lg: 'repeat(5, minmax(0, 1fr))',
+                          },
+                          gap: 1.5,
+                        }}
+                      >
+                        {ENSEMBLE_BRANCH_IDS.map((b) => (
+                          <TextField
+                            key={b}
+                            size="small"
+                            label={b}
+                            value={decisionBranchWeightById[b] ?? ''}
+                            onChange={(e) =>
+                              setDecisionBranchWeightById((p) => ({ ...p, [b]: e.target.value }))
+                            }
+                            disabled={!branchInclude[b]}
+                            placeholder="默认 1"
+                            inputProps={{ inputMode: 'decimal' }}
+                            helperText={!branchInclude[b] ? '已排除' : undefined}
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                <Box sx={{ gridColumn: '1 / -1' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                    分支先验（可选，用于 weighted 固定权重）
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    未填温度则不传（默认 1.0）。先验写入固定 <code>fusion_logits</code> buffer（非训练）。
+                  </Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} flexWrap="wrap" gap={2} alignItems={{ sm: 'center' }}>
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={ensembleBranchPriorAuto}
+                          onChange={(e) => setEnsembleBranchPriorAuto(e.target.checked)}
+                        />
                       }
-                    >
-                      全选
-                    </Button>
-                    <Button
-                      variant="outlined"
+                      label="自动从 Dashboard 队列 C-index 填先验（ensembleBranchPriorAuto）"
+                    />
+                    <TextField
                       size="small"
-                      disabled={loading}
-                      onClick={() =>
-                        setAblationChecks(Object.fromEntries(ENSEMBLE_ABLATION_PRESETS.map((x) => [x.id, false])))
-                      }
-                    >
-                      全不选
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="secondary"
-                      size="small"
-                      disabled={
-                        loading ||
-                        !ENSEMBLE_ABLATION_PRESETS.some((p) => ablationChecks[p.id])
-                      }
-                      onClick={submitEnsembleAblations}
-                    >
-                      提交所选消融（
-                      {ENSEMBLE_ABLATION_PRESETS.filter((p) => ablationChecks[p.id]).length} 项）
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="secondary"
-                      size="small"
-                      disabled={loading}
-                      onClick={submitLeaveOneOutBatch}
-                    >
-                      留一法入队（5 项）
-                    </Button>
+                      label="先验温度 ensembleBranchPriorTemperature"
+                      type="number"
+                      value={ensembleBranchPriorTemperature}
+                      onChange={(e) => setEnsembleBranchPriorTemperature(e.target.value)}
+                      sx={{ minWidth: 220 }}
+                      inputProps={{ min: 0.000001, step: 0.05 }}
+                      helperText="留空则不传；小于 1 更突出高 C-index 分支"
+                    />
                   </Stack>
                 </Box>
               </>
@@ -851,7 +824,7 @@ export default function Training() {
                     #{idx + 1} {q.modelType} — {q.cancer} — k:{q.kFolds ?? '—'} — epochs:{q.maxEpochs} — wd:
                     {q.weightDecay ?? '—'} — 早停:{q.earlyStopping ? '是' : '否'} — repeat:{q.repeatTotal ?? 1} — seed:
                     {q.seed ?? '—'}
-                    {q.finetuneEnsemble ? ' — finetune' : ''} — queuedAt:{q.queuedAt || '—'}
+                    {q.finetuneEnsemble ? ' — 微调(旧)' : ''} — queuedAt:{q.queuedAt || '—'}
                   </Typography>
                   <Tooltip title="从队列移除（仅排队任务）">
                     <span>
@@ -1018,10 +991,17 @@ export default function Training() {
                   status: {task.status}；progress: {task.progress ?? '—'}%；epoch: {task.epoch ?? '—'}；cIndex:{' '}
                   {task.cIndex ?? '—'}
                 </Typography>
-                {String(task.modelType || '') === 'EnsembleFeature' && (
+                {String(task.modelType || '') === 'EnsembleDecision' && (
                   <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    EnsembleFeature · 基线权重由后端按 best_models/tasks 自动解析（或命令行 --ensemble_ckpt_dir）
-                    {task.finetuneEnsemble ? ' · 端到端微调' : ' · 冻结基模型（默认）'}
+                    EnsembleDecision · 固定规则融合（不训练融合层）· decisionFusion: {task.decisionFusion ?? '—'}
+                    {task.decisionBranchWeights ? (
+                      <>
+                        {' '}
+                        · decisionBranchWeights:{' '}
+                        <code style={{ wordBreak: 'break-all' }}>{String(task.decisionBranchWeights)}</code>
+                      </>
+                    ) : null}{' '}
+                    · 基线由 best_models.json / tasks.json 自动解析
                   </Typography>
                 )}
                 {task.seed != null && (

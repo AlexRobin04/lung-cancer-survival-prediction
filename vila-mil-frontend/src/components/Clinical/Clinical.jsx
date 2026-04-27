@@ -44,7 +44,15 @@ export default function Clinical() {
   const fileRef = useRef(null)
   /** 上传成功后保留预览（blob URL 由本组件 revoke） */
   const persistedRasterRef = useRef(null)
+  /** WSI 缩略图预览（blob URL 由本组件 revoke） */
+  const generatedPreviewRef = useRef(null)
+  /** 已绑定病例预览（blob URL 由本组件 revoke） */
+  const boundCasePreviewRef = useRef(null)
   const [persistedRasterPreview, setPersistedRasterPreview] = useState(null)
+  const [generatedPreview, setGeneratedPreview] = useState(null)
+  const [boundCasePreview, setBoundCasePreview] = useState(null)
+  const [boundCasePreviewBusy, setBoundCasePreviewBusy] = useState(false)
+  const [previewBusy, setPreviewBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [cases, setCases] = useState([])
@@ -58,7 +66,8 @@ export default function Clinical() {
   const [editStatus, setEditStatus] = useState('0')
   const [selectedF20, setSelectedF20] = useState('')
   const [selectedF10, setSelectedF10] = useState('')
-  const [assocMode, setAssocMode] = useState('h5') // h5 | raster | trident
+  const [assocMode, setAssocMode] = useState('h5') // h5 | wsi
+  const [genMode, setGenMode] = useState('quick') // quick | formal
   const [rasterFile, setRasterFile] = useState(null)
   const [tridentMpp, setTridentMpp] = useState('0.25')
   const [associating, setAssociating] = useState(false)
@@ -73,12 +82,92 @@ export default function Clinical() {
   }, [persistedRasterPreview])
 
   useEffect(() => {
+    generatedPreviewRef.current = generatedPreview
+  }, [generatedPreview])
+
+  useEffect(() => {
+    boundCasePreviewRef.current = boundCasePreview
+  }, [boundCasePreview])
+
+  useEffect(() => {
     return () => {
       if (persistedRasterRef.current?.url) {
         URL.revokeObjectURL(persistedRasterRef.current.url)
       }
+      if (generatedPreviewRef.current?.url) {
+        URL.revokeObjectURL(generatedPreviewRef.current.url)
+      }
+      if (boundCasePreviewRef.current?.url) {
+        URL.revokeObjectURL(boundCasePreviewRef.current.url)
+      }
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setBoundCasePreview((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url)
+      return null
+    })
+    if (!selectedCaseId) {
+      setBoundCasePreviewBusy(false)
+      return undefined
+    }
+    ;(async () => {
+      try {
+        setBoundCasePreviewBusy(true)
+        const blob = await clinicalApi.getCasePreview(selectedCaseId)
+        if (cancelled) return
+        const url = URL.createObjectURL(blob)
+        setBoundCasePreview({ url, name: `${selectedCaseId}（已绑定预览）` })
+      } catch {
+        if (cancelled) return
+        setBoundCasePreview(null)
+      } finally {
+        if (!cancelled) setBoundCasePreviewBusy(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCaseId])
+
+  useEffect(() => {
+    let cancelled = false
+    const ext = String(rasterFile?.name || '')
+      .toLowerCase()
+      .split('.')
+      .pop()
+    const wsiExts = new Set(['svs', 'ndpi', 'mrxs', 'scn'])
+    const isWsiLike = Boolean(ext && wsiExts.has(ext))
+
+    setGeneratedPreview((prev) => {
+      if (prev?.url) URL.revokeObjectURL(prev.url)
+      return null
+    })
+    setPreviewBusy(false)
+
+    if (!rasterFile || !isWsiLike) return undefined
+
+    ;(async () => {
+      try {
+        setPreviewBusy(true)
+        const blob = await clinicalApi.previewWsi(rasterFile, { maxSide: 1800 })
+        if (cancelled) return
+        const url = URL.createObjectURL(blob)
+        setGeneratedPreview({ url, name: `${rasterFile.name}（缩略预览）` })
+      } catch (e) {
+        if (cancelled) return
+        setError(e?.response?.data?.message || e.message || 'WSI 预览生成失败')
+      } finally {
+        if (!cancelled) setPreviewBusy(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [rasterFile, assocMode])
 
   useEffect(() => {
     if (!selectedCase) {
@@ -218,7 +307,8 @@ export default function Clinical() {
       setAssociateProgress((p) => (p < target ? p + 2 : p))
     }, 600)
     try {
-      const extractor = assocMode === 'trident' ? 'trident' : 'raster'
+      const extractor = genMode === 'formal' ? 'trident' : 'raster'
+      const quick = genMode === 'quick'
       if (extractor === 'trident' && rasterFile && /\.(png|jpe?g)$/i.test(rasterFile.name || '') && !(Number(tridentMpp) > 0)) {
         setError('TRIDENT 处理 PNG/JPEG 需填写 mpp（如 0.25）')
         return
@@ -228,9 +318,10 @@ export default function Clinical() {
         cancer: selectedCancer,
         file: rasterFile,
         extractor,
+        quick,
         mpp: extractor === 'trident' ? tridentMpp : undefined,
       })
-      setNotice(extractor === 'trident' ? '已通过 TRIDENT 生成特征并关联' : '已从图像生成特征并关联')
+      setNotice(extractor === 'trident' ? '已通过 TRIDENT 生成特征并关联' : '已通过快速近似流程生成特征并关联')
       setAssociateProgress(100)
       if (rasterFile) {
         setPersistedRasterPreview((prev) => {
@@ -478,7 +569,7 @@ export default function Clinical() {
               绑定 MIL 所需双尺度 H5
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              推理只读 20× 与 10× 特征。可选：在数据管理页已上传的 H5，或在此上传图像/WSI 由后端生成特征（ResNet/TRIDENT）。
+              推理只读 20× 与 10× 特征。可选：在数据管理页已上传的 H5，或在此上传 WSI 由后端生成特征。
             </Typography>
 
             <Divider sx={{ mb: 2 }} />
@@ -509,8 +600,7 @@ export default function Clinical() {
               disabled={!selectedCaseId || associating}
             >
               <ToggleButton value="h5">已有 H5 文件</ToggleButton>
-              <ToggleButton value="raster">从图像生成（ResNet）</ToggleButton>
-              <ToggleButton value="trident">从 WSI 生成（TRIDENT）</ToggleButton>
+              <ToggleButton value="wsi">从 WSI 生成</ToggleButton>
             </ToggleButtonGroup>
 
             {assocMode === 'h5' && (
@@ -570,8 +660,19 @@ export default function Clinical() {
               </Box>
             )}
 
-            {(assocMode === 'raster' || assocMode === 'trident') && (
+            {assocMode === 'wsi' && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <ToggleButtonGroup
+                  value={genMode}
+                  exclusive
+                  size="small"
+                  fullWidth
+                  onChange={(_, v) => v && setGenMode(v)}
+                  disabled={!selectedCaseId || associating}
+                >
+                  <ToggleButton value="quick">快速预览（只跑近似）</ToggleButton>
+                  <ToggleButton value="formal">正式预测（TRIDENT）</ToggleButton>
+                </ToggleButtonGroup>
                 {associating && (
                   <Box sx={{ mb: 0.5 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.6 }}>
@@ -580,13 +681,13 @@ export default function Clinical() {
                     <LinearProgress variant="determinate" value={Math.max(2, Math.min(100, associateProgress))} />
                   </Box>
                 )}
-                {assocMode === 'trident' ? (
+                {genMode === 'formal' ? (
                   <Alert severity="info" sx={{ py: 0.5 }}>
-                    使用 TRIDENT 提取双尺度 H5（20x/10x）。建议上传 WSI（如 .svs/.ndpi/.mrxs/.scn/.tiff）。
+                    正式预测 = TRIDENT 全量特征提取（20x/10x），耗时更长但结果更正式。
                   </Alert>
                 ) : (
                   <Alert severity="warning" sx={{ py: 0.5 }}>
-                    ResNet 在线特征路径仅用于流程验证，与标准病理特征分布可能不一致。
+                    快速预览 ≈ 低采样近似（先缩略再少量采样），速度更快，仅用于快速查看趋势。
                   </Alert>
                 )}
                 <FormControl fullWidth size="small">
@@ -604,7 +705,7 @@ export default function Clinical() {
                     ))}
                   </Select>
                 </FormControl>
-                {assocMode === 'trident' && (
+                {genMode === 'formal' && (
                   <TextField
                     size="small"
                     label="MPP（可选，PNG/JPEG 必填）"
@@ -615,18 +716,18 @@ export default function Clinical() {
                   />
                 )}
                 <Button component="label" variant="outlined" disabled={!selectedCaseId || associating}>
-                  {assocMode === 'trident' ? '选择 WSI / 图像文件' : '选择图像（PNG / JPEG …）'}
+                  选择 WSI 文件
                   <input
                     type="file"
                     hidden
-                    accept={
-                      assocMode === 'trident'
-                        ? '.svs,.ndpi,.mrxs,.scn,.tif,.tiff,image/png,image/jpeg'
-                        : 'image/png,image/jpeg,image/webp,image/bmp,.tif,.tiff'
-                    }
+                    accept=".svs,.ndpi,.mrxs,.scn,.tif,.tiff"
                     onChange={(e) => {
                       const f = e.target.files?.[0] || null
                       setPersistedRasterPreview((prev) => {
+                        if (prev?.url) URL.revokeObjectURL(prev.url)
+                        return null
+                      })
+                      setGeneratedPreview((prev) => {
                         if (prev?.url) URL.revokeObjectURL(prev.url)
                         return null
                       })
@@ -634,18 +735,23 @@ export default function Clinical() {
                     }}
                   />
                 </Button>
+                {previewBusy && (
+                  <Typography variant="body2" color="text.secondary">
+                    正在生成 WSI 缩略预览...
+                  </Typography>
+                )}
                 {!rasterFile && !persistedRasterPreview && (
                   <Typography variant="body2" color="text.secondary">
                     未选择文件
                   </Typography>
                 )}
-                <RasterPreview file={rasterFile} persisted={persistedRasterPreview} />
+                <RasterPreview file={rasterFile} persisted={persistedRasterPreview} generated={generatedPreview} />
                 <Button
                   variant="contained"
                   onClick={associateFeaturesFromUpload}
                   disabled={!selectedCaseId || associating || !rasterFile}
                 >
-                  {associating ? <CircularProgress size={20} color="inherit" /> : assocMode === 'trident' ? '上传并用 TRIDENT 生成' : '上传并生成特征'}
+                  {associating ? <CircularProgress size={20} color="inherit" /> : genMode === 'formal' ? '上传并正式预测（TRIDENT）' : '上传并快速预览'}
                 </Button>
               </Box>
             )}
@@ -689,6 +795,22 @@ export default function Clinical() {
                       </>
                     ) : null}
                   </Typography>
+                </Box>
+                <Box sx={{ mt: 1.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    已绑定病例图片预览
+                  </Typography>
+                  {boundCasePreviewBusy ? (
+                    <Typography variant="body2" color="text.secondary">
+                      正在加载病例预览...
+                    </Typography>
+                  ) : boundCasePreview ? (
+                    <RasterPreview file={null} persisted={boundCasePreview} />
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      该病例暂无可用预览图
+                    </Typography>
+                  )}
                 </Box>
               </>
             ) : (

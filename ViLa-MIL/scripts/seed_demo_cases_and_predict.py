@@ -14,7 +14,7 @@ API = os.environ.get("VILAMIL_API", "http://127.0.0.1:8000/api").rstrip("/")
 F20 = "1eeae5e8-4329-4f86-be12-a0fe924e24b0"
 F10 = "b2d017f2-5bc8-4c1e-a2c8-9a60a3acf07e"
 
-# 本地 result/api_runs 下存在 checkpoint 的 LUSC 已完成任务（勿用 EnsembleFeature：需 torch_geometric）
+# 本地 result/api_runs 下存在 checkpoint 的 LUSC 已完成任务（勿选依赖过重或未装全的单模）
 TASK_ID = os.environ.get("VILAMIL_PREDICT_TASK_ID", "2461292b-fec9-4193-a244-83b4d8ec7b58")  # DSMIL LUSC
 
 CASES: list[tuple[str, float, int]] = [

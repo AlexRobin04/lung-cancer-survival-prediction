@@ -72,6 +72,7 @@ def build_dual_scale_h5_from_image(
     patch_size: int = 256,
     stride: int = 256,
     max_patches: int = 192,
+    max_side: int = 4096,
     device: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -81,7 +82,7 @@ def build_dual_scale_h5_from_image(
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
     model, tfm = _get_resnet(dev)
 
-    base = _prepare_base_image(image_path)
+    base = _prepare_base_image(image_path, max_side=max_side)
     w0, h0 = base.size
     low = base.resize((max(1, w0 // 2), max(1, h0 // 2)), Image.Resampling.BILINEAR)
 

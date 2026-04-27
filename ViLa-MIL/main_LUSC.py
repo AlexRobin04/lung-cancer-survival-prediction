@@ -61,7 +61,18 @@ parser.add_argument("--drop_out", action="store_true", default=True, help="enabl
 parser.add_argument(
     "--model_type",
     type=str,
-    choices=["ViLa_MIL", "TransMIL", "AMIL", "WiKG", "RRTMIL", "PatchGCN", "surformer", "DSMIL", "S4MIL", "EnsembleFeature"],
+    choices=[
+        "ViLa_MIL",
+        "TransMIL",
+        "AMIL",
+        "WiKG",
+        "RRTMIL",
+        "PatchGCN",
+        "surformer",
+        "DSMIL",
+        "S4MIL",
+        "EnsembleDecision",
+    ],
     default="RRTMIL",
     help="type of model",
 )
@@ -80,13 +91,6 @@ parser.add_argument(
     default="",
     help="path to conch.pth; empty means use CONCH_CKPT_PATH or ckpt/conch.pth",
 )
-parser.add_argument("--freeze_base", action="store_true", default=True, help="freeze 5 baselines when training EnsembleFeature")
-parser.add_argument(
-    "--finetune_ensemble",
-    action="store_true",
-    default=False,
-    help="EnsembleFeature: unfreeze the 5 baseline MIL modules for end-to-end fine-tuning",
-)
 parser.add_argument(
     "--ensemble_ckpt_dir",
     type=str,
@@ -97,32 +101,72 @@ parser.add_argument(
     "--ensemble_best_models_json",
     type=str,
     default=None,
-    help="optional: override path to best_models.json for EnsembleFeature auto ckpt",
+    help="optional: override path to best_models.json for EnsembleDecision 五路基线自动解析",
 )
 parser.add_argument(
     "--ensemble_tasks_json",
     type=str,
     default=None,
-    help="optional: override path to tasks.json for EnsembleFeature auto ckpt",
+    help="optional: override path to tasks.json for EnsembleDecision 五路基线自动解析",
 )
 parser.add_argument(
     "--ensemble_disable_auto_ckpt",
     action="store_true",
     default=False,
-    help="EnsembleFeature: do not auto-resolve baseline checkpoints when ensemble_ckpt_dir is unset",
-)
-parser.add_argument(
-    "--ensemble_fusion",
-    type=str,
-    choices=["gate", "concat"],
-    default="gate",
-    help='EnsembleFeature: gate=门控加权融合对齐特征；concat=对齐后拼接再 MLP（消融）',
+    help="EnsembleDecision: 未指定 ensemble_ckpt_dir 时不从 best_models/tasks 自动解析五路基线权重",
 )
 parser.add_argument(
     "--ensemble_exclude",
     type=str,
     default="",
-    help="EnsembleFeature: 逗号分隔要掩码的基线键（RRTMIL,AMIL,WiKG,DSMIL,S4MIL），对齐后置零该路特征；不可写满五路",
+    help="EnsembleDecision: 逗号分隔要排除的基线；不可写满五路",
+)
+parser.add_argument(
+    "--ensemble_branch_prior",
+    type=str,
+    default="",
+    help="EnsembleDecision: 分支先验（如队列 C-index），用于 weighted 固定融合权重",
+)
+parser.add_argument(
+    "--ensemble_branch_prior_scale",
+    type=float,
+    default=1.25,
+    help="EnsembleDecision: 先验 logit 强度系数",
+)
+parser.add_argument(
+    "--ensemble_branch_prior_temperature",
+    type=float,
+    default=1.0,
+    help="EnsembleDecision: 有 branch_prior 时先验 logit 除以该温度",
+)
+parser.add_argument(
+    "--decision_fusion",
+    type=str,
+    choices=["avg_prob"],
+    default="avg_prob",
+    help=(
+        "EnsembleDecision: avg_prob=各基线输出概率逐类平均（简单可解释，默认推荐）。"
+    ),
+)
+parser.add_argument(
+    "--decision_branch_weights",
+    type=str,
+    default="",
+    help=(
+        "保留参数（兼容旧任务），当前 avg_prob 融合不使用该字段。"
+    ),
+)
+parser.add_argument(
+    "--ensemble_auto_tune_weights",
+    type=lambda x: str(x).strip().lower() in {"1", "true", "yes", "y", "on"},
+    default=True,
+    help="EnsembleDecision(weighted): 是否在验证集上自动搜索分支权重（优先 C-index）",
+)
+parser.add_argument(
+    "--ensemble_weight_search_trials",
+    type=int,
+    default=256,
+    help="EnsembleDecision 自动调权随机采样次数（Dirichlet 试探）",
 )
 
 args = parser.parse_args()
@@ -168,6 +212,12 @@ settings = {
     "weighted_sample": args.weighted_sample,
     "opt": args.opt,
 }
+if args.model_type == "EnsembleDecision":
+    settings["decision_fusion"] = args.decision_fusion
+    if getattr(args, "decision_branch_weights", "").strip():
+        settings["decision_branch_weights"] = args.decision_branch_weights.strip()
+    settings["ensemble_auto_tune_weights"] = bool(args.ensemble_auto_tune_weights)
+    settings["ensemble_weight_search_trials"] = int(args.ensemble_weight_search_trials)
 
 logging.info("\nLoad Dataset")
 

@@ -1,5 +1,5 @@
 """
-EnsembleFeature：自动解析五个基模型预训练权重路径。
+五路基线集成（如 EnsembleDecision）：自动解析五个基模型预训练权重路径。
 
 默认从 ViLa-MIL 根目录下的
   uploaded_features/best_models.json

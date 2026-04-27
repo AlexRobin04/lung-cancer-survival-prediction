@@ -160,17 +160,16 @@ export default function Settings() {
             <CardHeader title="平台介绍" titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }} />
             <CardContent>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                本系统面向「病理 patch 特征 + MIL」的生存风险分层演示：覆盖特征上传、训练、评估与预测。推理以<strong>双尺度（20× / 10×）H5</strong>为输入；图像/WSI 特征生成入口在 Clinical 页（支持 ResNet/TRIDENT），结果仅供科研流程验证。
+                本系统是一个以<strong>多模型集成（EnsembleDecision）</strong>为核心的病理生存风险预测平台：先训练多路 MIL 基线（如 RRTMIL、AMIL、WiKG、DSMIL、S4MIL），再在统一口径下进行集成推理与对比评估。推理输入采用<strong>双尺度（20× / 10×）H5</strong>；Clinical 支持由 WSI 在线生成特征，结果用于科研流程验证。
                 <br />
                 <br />
                 当前版本提供：
-                <br />- 癌种在 Training / Data / Clinical 等页面一致可选
-                <br />- Clinical 分栏：随访与特征关联分离，降低操作混淆
-                <br />- 特征与病例关联、随访字段（time / status）维护
-                <br />- 多模型训练、k-fold、日志与 checkpoint；训练侧资源与并发保护
-                <br />- 评估曲线、摘要、KM / log-rank
-                <br />- Prediction：仅按病例推理（读取病例已绑定特征），展示风险得分、三档分层与概率条形图
-                <br />- Prediction 任务下拉：自动做特征维度兼容性筛选/置灰提示，减少维度不匹配报错
+                <br />- 集成核心：EnsembleDecision（当前以概率融合为主），支持与 5 个基线模型同屏对比
+                <br />- 训练与评估：多模型 k-fold、日志与 checkpoint 管理；曲线面板支持基线与集成过程可视化
+                <br />- 集成展示：最优任务对比中可同时查看验证 Loss / 训练 Loss / 验证 AUC 的统一曲线
+                <br />- Clinical：随访管理 + 特征绑定分栏设计，支持“从 WSI 生成”（快速预览≈低采样近似，正式预测=TRIDENT 全量）
+                <br />- Prediction：按病例读取已绑定特征进行推理，展示风险得分、分层结果与概率分布
+                <br />- 兼容性保护：任务下拉自动执行特征维度校验，不匹配任务置灰提示
               </Typography>
               <Divider sx={{ my: 2 }} />
               <Typography
@@ -187,7 +186,8 @@ export default function Settings() {
                 })}
               >
                 <strong>使用前请知悉：</strong>
-                <br />- 常规预测请优先使用与训练同分布的 H5；图像/WSI 在线生成特征路径在 Clinical，主要用于流程验证，不作为临床依据。
+                <br />- 集成结果依赖各基线质量与覆盖范围；建议先保证单模型训练稳定，再观察 EnsembleDecision 的增益。
+                <br />- Clinical 中“快速预览”是近似流程（更快），“正式预测”走 TRIDENT 全量流程（更慢但更正式）。
                 <br />- Prediction 中 Task 仅显示已完成且含 checkpoint 的任务；界面不展示训练任务 UUID，需要时可将鼠标悬停在某一选项上查看。
                 <br />- 更换部署域名或端口时，在本页修改 API BaseURL；与 Nginx 同域反代时建议仍使用 <code>/api</code>。
               </Typography>
@@ -289,20 +289,20 @@ export default function Settings() {
                   })}
                 >
                   <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 700 }}>
-                    病理示意 PNG
+                    病理示例 WSI（SVS）
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    合成类 H&E 风格小图，用于 Clinical 右栏「从图像生成」联调；与 TCGA/CONCH 特征分布不同，仅验证链路。
+                    TCGA-LUSC 示例切片（.svs），用于 Clinical 右栏「从 WSI 生成」联调与快速/正式模式演示。
                   </Typography>
                   <Button
                     component="a"
-                    href={testSampleUrl('sample_pathology_synthetic.png')}
-                    download="sample_pathology_synthetic.png"
+                    href={testSampleUrl('sample_tcga_lusc_demo.svs')}
+                    download="sample_tcga_lusc_demo.svs"
                     variant="outlined"
                     size="small"
                     startIcon={<DownloadIcon />}
                   >
-                    下载 sample_pathology_synthetic.png
+                    下载 sample_tcga_lusc_demo.svs
                   </Button>
                 </Box>
                 <Divider flexItem />
@@ -321,7 +321,7 @@ export default function Settings() {
                   <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.75 }}>
                     ① 下载 CSV → Clinical 左栏导入 → 选中或新建与 CSV 一致的 caseId（如 DEMO_FLOW_001）。
                     <br />
-                    ② 下载 PNG → Clinical 右栏选「从图像生成」→ 上传 PNG →「上传并生成特征」（成功后预览会保留）。
+                    ② 下载 SVS → Clinical 右栏选「从 WSI 生成」→ 上传 SVS → 选择「快速预览」或「正式预测」。
                     <br />
                     ③ 打开 Prediction → 按病例选择该 caseId，并选择已有 checkpoint 的 Task → Predict。
                   </Typography>

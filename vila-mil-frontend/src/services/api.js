@@ -50,6 +50,11 @@ export const trainingApi = {
     const { data } = await client.post('/training/start', payload)
     return data
   },
+  /** EnsembleDecision：参数说明与示例 body，与 GET /api/config.ensembleDecisionTraining 同源 */
+  async ensembleOptions() {
+    const { data } = await client.get('/training/ensemble-options')
+    return data
+  },
   async best({ cancer, modelType, mode } = {}) {
     const { data } = await client.get('/training/best', { params: { cancer, modelType, mode } })
     return data
@@ -157,6 +162,13 @@ export const clinicalApi = {
     const { data } = await client.get(`/clinical/cases/${caseId}/feature-meta`)
     return data
   },
+  async getCasePreview(caseId) {
+    const { data } = await client.get(`/clinical/cases/${caseId}/preview`, {
+      responseType: 'blob',
+      timeout: 120000,
+    })
+    return data
+  },
   async deleteCase(caseId) {
     const { data } = await client.delete(`/clinical/cases/${caseId}`)
     return data
@@ -166,13 +178,14 @@ export const clinicalApi = {
     return data
   },
   /** 一次性为病例关联双尺度特征：JSON 传两个 fileId，或 multipart 传文件由后端生成 H5 */
-  async associateFeatures({ caseId, cancer, feature20FileId, feature10FileId, file, extractor = 'raster', mpp }) {
+  async associateFeatures({ caseId, cancer, feature20FileId, feature10FileId, file, extractor = 'raster', mpp, quick }) {
     if (file) {
       const fd = new FormData()
       fd.append('caseId', caseId)
       fd.append('cancer', cancer || 'LUSC')
       fd.append('file', file)
       fd.append('extractor', extractor)
+      if (quick !== undefined) fd.append('quick', quick ? 'true' : 'false')
       if (mpp !== undefined && mpp !== null && String(mpp).trim() !== '') fd.append('mpp', String(mpp))
       const { data } = await client.post('/clinical/cases/associate-features', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -185,6 +198,18 @@ export const clinicalApi = {
       cancer,
       feature20FileId,
       feature10FileId,
+    })
+    return data
+  },
+  /** 生成 WSI/图像缩略预览（返回 Blob） */
+  async previewWsi(file, { maxSide = 1600 } = {}) {
+    const fd = new FormData()
+    fd.append('file', file)
+    if (maxSide) fd.append('maxSide', String(maxSide))
+    const { data } = await client.post('/wsi/preview', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      responseType: 'blob',
+      timeout: 180000,
     })
     return data
   },
@@ -209,8 +234,13 @@ export const predictApi = {
     const { data } = await client.post('/predict', body)
     return data
   },
+  /** 对多个病例依次调用单条 /predict（items: { caseId, taskId, saveHistory? }[]） */
+  async predictBatch(items) {
+    const { data } = await client.post('/predict/batch', { items }, { timeout: 3_600_000 })
+    return data
+  },
   /** 上传文件，后端生成双尺度 H5 后推理（extractor=raster|trident） */
-  async predictFromRaster({ file, taskId, cancer, caseId, saveHistory = true, extractor = 'raster', mpp }) {
+  async predictFromRaster({ file, taskId, cancer, caseId, saveHistory = true, extractor = 'raster', mpp, quick }) {
     const fd = new FormData()
     fd.append('file', file)
     if (taskId) fd.append('taskId', taskId)
@@ -218,6 +248,7 @@ export const predictApi = {
     if (caseId) fd.append('caseId', caseId)
     fd.append('saveHistory', saveHistory ? 'true' : 'false')
     fd.append('extractor', extractor)
+    if (quick !== undefined) fd.append('quick', quick ? 'true' : 'false')
     if (mpp !== undefined && mpp !== null && String(mpp).trim() !== '') fd.append('mpp', String(mpp))
     const { data } = await client.post('/predict/from-raster', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },

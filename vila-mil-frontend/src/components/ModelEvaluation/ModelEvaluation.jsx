@@ -5,6 +5,7 @@ import {
   Button,
   Card,
   Checkbox,
+  Chip,
   CardContent,
   CardHeader,
   CircularProgress,
@@ -43,7 +44,7 @@ import { evaluationApi, trainingApi } from '../../services/api'
 import {
   buildTaskConfigSnapshot,
   ensembleActiveBranches,
-  formatFusionModeLabel,
+  formatDecisionFusionLabel,
 } from '../../utils/trainingTaskConfigSnapshot'
 
 const sectionCardSx = (accent, { mb = 3, mt } = {}) => (theme) => ({
@@ -92,14 +93,14 @@ const legendName = {
   trainError: '训练集 error',
   valError: '验证集 error',
 }
-const COMPARE_MODELS = ['RRTMIL', 'AMIL', 'WiKG', 'DSMIL', 'S4MIL', 'EnsembleFeature']
+const COMPARE_MODELS = ['RRTMIL', 'AMIL', 'WiKG', 'DSMIL', 'S4MIL', 'EnsembleDecision']
 const COMPARE_COLORS = {
   RRTMIL: '#1565c0',
   AMIL: '#2e7d32',
   WiKG: '#ef6c00',
   DSMIL: '#6a1b9a',
   S4MIL: '#00838f',
-  EnsembleFeature: '#c62828',
+  EnsembleDecision: '#c62828',
 }
 const COMPARE_DASH = {
   RRTMIL: '0',
@@ -107,7 +108,7 @@ const COMPARE_DASH = {
   WiKG: '2 2',
   DSMIL: '8 4',
   S4MIL: '10 4 2 4',
-  EnsembleFeature: '0',
+  EnsembleDecision: '0',
 }
 
 const toCsv = (rows, headers) => {
@@ -207,7 +208,7 @@ export default function ModelEvaluation() {
     return byLoss[0] || cands[0]
   }
 
-  /** 优先 completed 中 loss 最小；否则同一癌种+模型下任取最近一条（含 failed，便于 EnsembleFeature 出曲线） */
+  /** 优先 completed 中 loss 最小；否则同一癌种+模型下任取最近一条（含 failed，便于集成任务出曲线） */
   const pickBestRunForDisplay = (completedList, allRuns, cancer, modelType) => {
     const fromDone = pickBestCompletedRun(completedList, cancer, modelType)
     if (fromDone) return fromDone
@@ -384,9 +385,15 @@ export default function ModelEvaluation() {
       const k = `${c}__${m}`
       if (!map.has(k)) map.set(k, { key: k, cancer: c, modelType: m })
     }
-    return Array.from(map.values()).sort((a, b) =>
-      `${a.cancer}-${a.modelType}`.localeCompare(`${b.cancer}-${b.modelType}`)
-    )
+    return Array.from(map.values()).sort((a, b) => {
+      const ca = `${a.cancer}`.localeCompare(`${b.cancer}`)
+      if (ca !== 0) return ca
+      const ae = a.modelType === 'EnsembleDecision'
+      const be = b.modelType === 'EnsembleDecision'
+      if (ae && !be) return -1
+      if (!ae && be) return 1
+      return `${a.modelType}`.localeCompare(`${b.modelType}`)
+    })
   }, [runs])
   const luscKmChartData = useMemo(() => {
     const curves = luscKm?.curves || []
@@ -418,9 +425,24 @@ export default function ModelEvaluation() {
     return out
   }, [compareSeries, compareMonotonicDisplay])
 
+  const compareBestValAucMax = useMemo(() => {
+    let max = Number.NEGATIVE_INFINITY
+    for (const modelType of COMPARE_MODELS) {
+      const row = compareMeta.find((x) => x.modelType === modelType)
+      if (!row) continue
+      const s = row.summary || {}
+      const v = Number(s.bestValRocAuc ?? s.bestValCIndex)
+      if (Number.isFinite(v) && v > max) max = v
+    }
+    return Number.isFinite(max) && max > Number.NEGATIVE_INFINITY ? max : null
+  }, [compareMeta])
+
   useEffect(() => {
     if (selectMode !== 'best') return
-    if (!bestModelKey && bestModelOptions.length > 0) setBestModelKey(bestModelOptions[0].key)
+    if (!bestModelKey && bestModelOptions.length > 0) {
+      const ens = bestModelOptions.find((o) => o.modelType === 'EnsembleDecision')
+      setBestModelKey((ens || bestModelOptions[0]).key)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectMode, bestModelOptions])
 
@@ -694,38 +716,40 @@ export default function ModelEvaluation() {
                       </Typography>
                     </Grid>
                   ))}
-                  {String(taskConfigSnapshot.model) === 'EnsembleFeature' ? (
+                  {String(taskConfigSnapshot.model) === 'EnsembleDecision' ? (
                     <>
                       <Grid item xs={12}>
                         <Divider sx={{ my: 0.75 }} />
                       </Grid>
                       <Grid item xs={12}>
                         <Typography variant="caption" color="primary" sx={{ fontWeight: 700 }}>
-                          EnsembleFeature
+                          EnsembleDecision
                         </Typography>
                       </Grid>
                       <Grid item xs={6} sm={4} md={3}>
                         <Typography variant="caption" color="text.secondary" display="block">
-                          融合方式
+                          decisionFusion
                         </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {formatFusionModeLabel(taskConfigSnapshot.ensembleFusion)}
+                          {formatDecisionFusionLabel(taskConfigSnapshot.decisionFusion)}
                         </Typography>
                       </Grid>
-                      <Grid item xs={6} sm={4} md={3}>
-                        <Typography variant="caption" color="text.secondary" display="block">
-                          finetuneEnsemble
-                        </Typography>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 600, fontFamily: 'ui-monospace, Menlo, monospace' }}
-                        >
-                          {String(taskConfigSnapshot.finetuneEnsemble)}
-                        </Typography>
-                      </Grid>
+                      {taskConfigSnapshot.decisionBranchWeights ? (
+                        <Grid item xs={12} sm={8} md={9}>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            decisionBranchWeights
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 600, fontFamily: 'ui-monospace, Menlo, monospace', wordBreak: 'break-all' }}
+                          >
+                            {String(taskConfigSnapshot.decisionBranchWeights)}
+                          </Typography>
+                        </Grid>
+                      ) : null}
                       <Grid item xs={12} sm={8} md={6}>
                         <Typography variant="caption" color="text.secondary" display="block">
-                          参与融合的基线
+                          参与决策融合的基线
                         </Typography>
                         <Typography variant="body2" sx={{ fontWeight: 700 }}>
                           {(taskConfigSnapshot.ensembleActiveBranches || ensembleActiveBranches(taskConfigSnapshot.ensembleExclude)).join('、')}
@@ -1108,7 +1132,7 @@ export default function ModelEvaluation() {
 
       <Card sx={sectionCardSx('#5d4037')}>
         <CardHeader
-          title="最优任务对比（5基模型 + EnsembleFeature）"
+          title="最优任务对比（5基模型 + EnsembleDecision）"
           titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
           subheader="同一癌种下，自动挑选每个模型最佳任务并在一张图比较验证集 Loss 曲线"
           action={
@@ -1216,8 +1240,10 @@ export default function ModelEvaluation() {
                         dataKey={`${m}_${compareMetric}`}
                         name={m}
                         stroke={COMPARE_COLORS[m] || '#333'}
-                        strokeWidth={m === 'EnsembleFeature' ? 3 : 2}
+                        strokeWidth={1}
+                        strokeOpacity={m === 'EnsembleDecision' ? 0.85 : 0.95}
                         strokeDasharray={COMPARE_DASH[m] || '0'}
+                        connectNulls
                         dot={false}
                         activeDot={{ r: 3 }}
                       />
@@ -1228,6 +1254,9 @@ export default function ModelEvaluation() {
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                 对比任务：
                 {compareMeta.map((m) => ` ${m.modelType}(${m.taskId.slice(0, 8)}...)`).join('；')}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                注：EnsembleDecision 为 fold 级评估点（非逐 epoch 训练），已启用跨空值连线展示过程趋势。
               </Typography>
               {compareMonotonicDisplay && (
                 <Typography variant="caption" color="warning.main" sx={{ mt: 0.5, display: 'block' }}>
@@ -1241,9 +1270,9 @@ export default function ModelEvaluation() {
 
       <Card sx={sectionCardSx('#6d4c41')}>
         <CardHeader
-          title="最优 5 基模型 + EnsembleFeature 指标总览"
+          title="最优 5 基模型 + EnsembleDecision 指标总览"
           titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
-          subheader="展示当前癌种下 5 个基模型 + EnsembleFeature 的最佳任务关键指标"
+          subheader="展示当前癌种下 5 个基模型 + EnsembleDecision 的最佳任务关键指标"
         />
         <CardContent>
           {compareLoading ? (
@@ -1291,9 +1320,25 @@ export default function ModelEvaluation() {
                       )
                     }
                     const s = row.summary || {}
+                    const bestValAuc = s.bestValRocAuc ?? s.bestValCIndex
+                    const bestValAucNum = Number(bestValAuc)
+                    const isValAucBest =
+                      compareBestValAucMax != null &&
+                      Number.isFinite(bestValAucNum) &&
+                      Math.abs(bestValAucNum - compareBestValAucMax) <= 1e-6
                     return (
                       <TableRow key={modelType}>
-                        <TableCell sx={{ fontWeight: modelType === 'EnsembleFeature' ? 700 : 500 }}>{modelType}</TableCell>
+                        <TableCell sx={{ fontWeight: modelType === 'EnsembleDecision' ? 700 : 500 }}>
+                          <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
+                            <span>{modelType}</span>
+                            {modelType === 'EnsembleDecision' ? (
+                              <Chip size="small" variant="outlined" label="本文方法" sx={{ height: 22 }} />
+                            ) : null}
+                            {isValAucBest ? (
+                              <Chip size="small" color="success" label="验证 AUC 最优" sx={{ height: 22 }} />
+                            ) : null}
+                          </Stack>
+                        </TableCell>
                         <TableCell>
                           <code>{String(row.taskId || '').slice(0, 12)}...</code>
                         </TableCell>
@@ -1311,7 +1356,7 @@ export default function ModelEvaluation() {
             </TableContainer>
           )}
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            注：EnsembleFeature 与单模型任务相同，由该任务训练日志解析曲线与指标；若日志字段缺失，部分列可能显示为「—」。
+            注：EnsembleDecision 与单模型任务相同，由该任务训练日志解析曲线与指标；若日志字段缺失，部分列可能显示为「—」。
           </Typography>
         </CardContent>
       </Card>

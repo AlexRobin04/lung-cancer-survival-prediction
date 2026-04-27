@@ -36,7 +36,7 @@ import { sanitizeTrainingLogContent } from '../../utils/trainingLogSanitize'
 import {
   buildTaskConfigSnapshot,
   ensembleActiveBranches,
-  formatFusionModeLabel,
+  formatDecisionFusionLabel,
 } from '../../utils/trainingTaskConfigSnapshot'
 
 const nowSec = () => Date.now() / 1000
@@ -375,14 +375,18 @@ export default function Dashboard() {
             {cohortCIndexAll ? (
               <Box sx={{ mt: 0.75, mb: 1 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.5 }}>
-                  队列 C-index（全部预测合并）：
+                  队列 C-index（按 task 统计；Predict 页见各任务）：
                   {cohortCIndexAll.cIndex != null
                     ? Number(cohortCIndexAll.cIndex).toFixed(4)
                     : cohortCIndexAll.cIndexSuppressedZh
                       ? '—'
                       : '—（可比样本不足）'}
-                  ，可用病例 n={cohortCIndexAll.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
-                  {cohortCIndexAll.comparablePairs ?? '—'}
+                  {cohortCIndexAll.cIndex != null ? (
+                    <>
+                      ，可用病例 n={cohortCIndexAll.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
+                      {cohortCIndexAll.comparablePairs ?? '—'}
+                    </>
+                  ) : null}
                 </Typography>
                 {cohortCIndexAll.cIndexSuppressedZh ? (
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.45 }}>
@@ -643,9 +647,12 @@ export default function Dashboard() {
                   </Grid>
                   <Grid item xs={12} md={4}>
                     <Typography variant="body2" color="text.secondary">
-                      C-Index
+                      验证集 AUC（训练日志）
                     </Typography>
                     <Typography variant="body1">{selectedTask.cIndex ?? '—'}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                      与 Predict 页「队列生存 C-index」不是同一指标；后者由 riskScore + 随访计算。
+                    </Typography>
                   </Grid>
                   <Grid item xs={12} md={4}>
                     <Typography variant="body2" color="text.secondary">
@@ -673,7 +680,7 @@ export default function Dashboard() {
                 {(() => {
                   const cfg = buildTaskConfigSnapshot(selectedTask)
                   if (!cfg) return null
-                  const fusionLabel = formatFusionModeLabel(cfg.ensembleFusion)
+                  const decisionLabel = formatDecisionFusionLabel(cfg.decisionFusion)
                   const kv = (label, val) => (
                     <Grid item xs={12} sm={6} md={4} key={label}>
                       <Typography variant="caption" color="text.secondary" display="block">
@@ -718,23 +725,20 @@ export default function Dashboard() {
                           {cfg.repeatTotal != null && Number(cfg.repeatTotal) > 1
                             ? kv('重复训练轮次 (repeat)', String(cfg.repeatTotal))
                             : null}
-                          {String(cfg.model) === 'EnsembleFeature' ? (
+                          {String(cfg.model) === 'EnsembleDecision' ? (
                             <>
                               <Grid item xs={12}>
                                 <Divider sx={{ my: 0.5 }} />
                               </Grid>
                               <Grid item xs={12}>
                                 <Typography variant="caption" color="primary" sx={{ fontWeight: 700 }}>
-                                  EnsembleFeature 消融选项
+                                  EnsembleDecision（决策级融合）
                                 </Typography>
                               </Grid>
-                              {kv('融合方式', fusionLabel)}
-                              {kv(
-                                'finetuneEnsemble',
-                                <Box component="span" sx={{ fontFamily: 'ui-monospace, monospace', fontWeight: 600 }}>
-                                  {String(cfg.finetuneEnsemble)}
-                                </Box>
-                              )}
+                              {kv('decisionFusion', decisionLabel)}
+                              {cfg.decisionBranchWeights
+                                ? kv('decisionBranchWeights', String(cfg.decisionBranchWeights))
+                                : null}
                               {(() => {
                                 const ex = cfg.ensembleExclude || []
                                 const active = cfg.ensembleActiveBranches || ensembleActiveBranches(ex)
@@ -747,7 +751,7 @@ export default function Dashboard() {
                                 return (
                                   <Grid item xs={12} md={8} key="ensembleBranches">
                                     <Typography variant="caption" color="text.secondary" display="block">
-                                      参与融合的基线（与训练页勾选「包含」一致，由 ensembleExclude 反推）
+                                      参与决策融合的基线（与训练页勾选一致，由 ensembleExclude 反推）
                                     </Typography>
                                     <Typography variant="body2" sx={{ fontWeight: 700, mt: 0.25 }}>
                                       {activeLine}

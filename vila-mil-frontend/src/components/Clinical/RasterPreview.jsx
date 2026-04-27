@@ -12,8 +12,9 @@ const ZOOM_STEP = 0.05
  * 本地病理图像预览：固定外框 + 内部可滚动，支持滑块/按钮缩放。
  * @param {File | null} file - 当前选中的文件（优先显示）
  * @param {{ url: string, name: string } | null} persisted - 上传成功后保留的预览（parent 持有 url 并负责 revoke）
+ * @param {{ url: string, name: string } | null} generated - 针对 WSI 生成的缩略图预览（parent 持有 url 并负责 revoke）
  */
-export default function RasterPreview({ file, persisted = null }) {
+export default function RasterPreview({ file, persisted = null, generated = null }) {
   const [fileObjectUrl, setFileObjectUrl] = useState(null)
   const [zoom, setZoom] = useState(1)
   const scrollRef = useRef(null)
@@ -28,8 +29,8 @@ export default function RasterPreview({ file, persisted = null }) {
     return () => URL.revokeObjectURL(url)
   }, [file])
 
-  const displayUrl = fileObjectUrl || persisted?.url || null
-  const displayName = file?.name ?? persisted?.name ?? ''
+  const displayUrl = generated?.url || fileObjectUrl || persisted?.url || null
+  const displayName = generated?.name ?? file?.name ?? persisted?.name ?? ''
   const isPersistedOnly = !file && !!persisted?.url
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function RasterPreview({ file, persisted = null }) {
       scrollRef.current.scrollTop = 0
       scrollRef.current.scrollLeft = 0
     }
-  }, [file, persisted?.url])
+  }, [file, persisted?.url, generated?.url])
 
   useEffect(() => {
     const el = scrollRef.current

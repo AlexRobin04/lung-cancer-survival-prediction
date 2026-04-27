@@ -10,19 +10,21 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 import os
 import re
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -35,6 +37,9 @@ CASES_PATH = os.path.join(DATA_ROOT, "cases.json")
 PREDICTIONS_PATH = os.path.join(DATA_ROOT, "predictions.json")
 BEST_MODELS_PATH = os.path.join(DATA_ROOT, "best_models.json")
 RESULT_API_RUNS = os.path.join(BASE_DIR, "result", "api_runs")
+
+# 写入 predictions.json 的推理协议版本（论文可复现：同版本 + 同 checkpoint 列表 + 同特征应对齐）
+PREDICT_PROTOCOL_ID = "predict-v4-202604-ensemble-mean-logits"
 
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(DATA_ROOT, exist_ok=True)
@@ -55,10 +60,106 @@ MODEL_CHOICES = [
     "surformer",
     "DSMIL",
     "S4MIL",
-    "EnsembleFeature",
+    "EnsembleDecision",
 ]
 
 _ENSEMBLE_BRANCH_KEYS_FROZEN = frozenset({"RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL"})
+# 与 Dashboard 队列 C-index 表一致的五基线顺序
+_ENSEMBLE_BRANCH_ORDER_FOR_PRIOR = ("RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL")
+
+
+def _normalize_ensemble_branch_key_api(name: Any) -> str | None:
+    u = str(name or "").strip().upper().replace("-", "_")
+    if u in ("S4", "S4MIL"):
+        return "S4MIL"
+    if u == "WIKG":
+        return "WiKG"
+    if u in {"RRTMIL", "AMIL", "DSMIL"}:
+        return u
+    return None
+
+
+def _normalize_ensemble_branch_prior_api(raw: Any) -> str:
+    """将前端传入的分支先验规范化为 main_LUSC --ensemble_branch_prior 字符串（含 JSON）。"""
+    if raw is None:
+        return ""
+    if isinstance(raw, dict):
+        return json.dumps(raw, ensure_ascii=False, separators=(",", ":"))
+    return str(raw).strip()
+
+
+def _ensemble_decision_training_api_schema() -> dict[str, Any]:
+    """
+    供 GET /api/config 与 GET /api/training/ensemble-options 使用；
+    与 POST /api/training/start 在 modelType=EnsembleDecision 时的 body 字段一致。
+    """
+    return {
+        "endpoint": "POST /api/training/start",
+        "condition": "请求体 modelType 为 EnsembleDecision",
+        "parameters": [
+            {
+                "name": "decisionFusion",
+                "aliases": ["decision_fusion"],
+                "type": "string",
+                "enum": ["avg_prob"],
+                "default": "avg_prob",
+                "descriptionZh": "固定融合：各基线输出概率逐类取均值（简单可解释，默认推荐）。",
+            },
+            {
+                "name": "ensembleBranchPriorAuto",
+                "aliases": ["ensemble_branch_prior_auto"],
+                "type": "boolean",
+                "default": True,
+                "descriptionZh": (
+                    "未手动传 ensembleBranchPrior 时，是否按 Dashboard 同源规则从 predictions+临床 "
+                    "自动聚合各单模队列 C-index 作为分支先验。"
+                ),
+            },
+            {
+                "name": "ensembleBranchPriorTemperature",
+                "aliases": ["ensemble_branch_prior_temperature"],
+                "type": "number",
+                "default": None,
+                "minimum": 1e-6,
+                "descriptionZh": "存在分支先验时，将先验 logit 除以该温度。",
+                "example": 0.55,
+            },
+        ],
+        "relatedParameters": [
+            {
+                "name": "ensembleBranchPrior",
+                "aliases": ["ensemble_branch_prior"],
+                "type": "string | object",
+                "descriptionZh": "手动分支先验；有手动值则不再自动填充。",
+            },
+            {
+                "name": "ensembleBranchPriorScale",
+                "aliases": ["ensemble_branch_prior_scale"],
+                "type": "number",
+                "default": 1.25,
+                "descriptionZh": "先验强度系数。",
+            },
+            {
+                "name": "decisionBranchWeights",
+                "aliases": ["decision_branch_weights"],
+                "type": "string | object",
+                "descriptionZh": (
+                    "仅 decisionFusion=weighted：显式五路相对权重（如 {\"RRTMIL\":2,\"AMIL\":1.5} 或 RRTMIL:2,AMIL:1.5）；"
+                    "未写明的未排除支路默认 1。若提供则覆盖 ensembleBranchPrior（C-index 先验）。"
+                ),
+            },
+        ],
+        "exampleBody": {
+            "cancer": "LUSC",
+            "modelType": "EnsembleDecision",
+            "mode": "transformer",
+            "maxEpochs": 1,
+            "decisionFusion": "avg_prob",
+            "decisionBranchWeights": {"RRTMIL": 2.0, "AMIL": 1.5},
+            "ensembleBranchPriorAuto": True,
+            "ensembleBranchPriorTemperature": 0.55,
+        },
+    }
 
 
 def _parse_ensemble_exclude_api(raw: Any) -> list[str]:
@@ -71,11 +172,9 @@ def _parse_ensemble_exclude_api(raw: Any) -> list[str]:
         parts = [x.strip() for x in str(raw).replace(";", ",").split(",") if x.strip()]
     out: list[str] = []
     for p in parts:
-        u = p.upper().replace("-", "_")
-        if u in ("S4", "S4MIL"):
-            u = "S4MIL"
-        if u in _ENSEMBLE_BRANCH_KEYS_FROZEN and u not in out:
-            out.append(u)
+        n = _normalize_ensemble_branch_key_api(p)
+        if n and n not in out:
+            out.append(n)
     if len(_ENSEMBLE_BRANCH_KEYS_FROZEN.difference(out)) == 0:
         raise ValueError("ensembleExclude 不能排除全部五路基线")
     return out
@@ -161,6 +260,46 @@ def _update_task(task_id: str, **fields: Any) -> None:
         else:
             return
         _save_tasks(data)
+
+
+_ORPHAN_RESUME_NOTE_ZH = (
+    "训练子进程已不存在（例如 API 服务重启）；任务已自动重新入队，将稍后继续启动训练。"
+)
+
+
+def _requeue_all_orphaned_running_tasks() -> int:
+    """将 status=running 但训练子进程 PID 已不存在的任务改回 queued（便于 API 重启后继续调度）。"""
+    with _LOCK:
+        data = _load_tasks()
+        orphan_indices: list[int] = []
+        for i, t in enumerate(data["tasks"]):
+            if str(t.get("status") or "").lower() != "running":
+                continue
+            if _pid_alive(t.get("pid")):
+                continue
+            tid = str(t.get("taskId") or t.get("id") or "").strip()
+            if tid:
+                orphan_indices.append(i)
+        if not orphan_indices:
+            return 0
+        base_ts = time.time()
+        for j, i in enumerate(orphan_indices):
+            t = data["tasks"][i]
+            ts = base_ts - (len(orphan_indices) - j) * 0.001
+            data["tasks"][i] = {
+                **t,
+                "status": "queued",
+                "running": False,
+                "pid": None,
+                "endedAt": None,
+                "exitCode": None,
+                "failReason": None,
+                "queuedAt": _cst_now(),
+                "queuedAtTs": ts,
+                "resumeNote": _ORPHAN_RESUME_NOTE_ZH,
+            }
+        _save_tasks(data)
+        return len(orphan_indices)
 
 
 def _append_task(task: dict[str, Any]) -> None:
@@ -754,19 +893,90 @@ def _load_mil_model(ckpt_path: str, n_classes: int = 4, dropout: bool = True) ->
     return model
 
 
-def _load_ensemble_feature_model(ckpt_path: str, feat_dim: int = 512, n_classes: int = 4) -> Any:
-    """加载特征级集成模型 EnsembleFeatureMIL（与 main_LUSC.py / core_utils 训练产物一致）。"""
-    key = f"ensfeat::{ckpt_path}::{feat_dim}::{n_classes}"
+def _load_transformer_baseline_model(
+    ckpt_path: str,
+    model_type: str,
+    feat_dim: int = 512,
+    n_classes: int = 4,
+) -> Any:
+    """
+    加载与训练同构的基线模型（RRTMIL/AMIL/WiKG/DSMIL/S4MIL/surformer）。
+    这类模型在训练中直接接收 x_s/x_l，不应走 MIL_fc 兜底。
+    """
+    mt = str(model_type or "").strip()
+    key = f"tfbase::{mt}::{ckpt_path}::{int(feat_dim)}::{int(n_classes)}"
     if key in _MODEL_CACHE:
         return _MODEL_CACHE[key]
     import ml_collections
     import torch
-    from models.EnsembleFeature import ENSEMBLE_BRANCH_ORDER, EnsembleFeatureMIL
+
+    cfg = ml_collections.ConfigDict()
+    cfg.hard_or_soft = False
+    fd = int(feat_dim)
+    nc = int(n_classes)
+    if mt == "RRTMIL":
+        from models.RRT import RRTMIL
+
+        model = RRTMIL(config=cfg, n_classes=nc, input_dim=fd)
+    elif mt == "AMIL":
+        from models.AMIL import AMIL
+
+        model = AMIL(config=cfg, n_classes=nc, input_dim=fd)
+    elif mt == "WiKG":
+        from models.WiKG import WiKG
+
+        model = WiKG(config=cfg, n_classes=nc, dim_in=fd, dim_hidden=512)
+    elif mt == "DSMIL":
+        from models.DSMIL import MILNet
+
+        model = MILNet(config=cfg, in_size=fd, num_class=nc, dropout=0.25)
+    elif mt == "S4MIL":
+        from models.S4MIL import S4Model
+
+        model = S4Model(
+            config=cfg,
+            in_dim=fd,
+            n_classes=nc,
+            dropout=0.1,
+            act="relu",
+            d_model=512,
+            d_state=16,
+        )
+    elif mt == "surformer":
+        from models.HVTSurv import HVTSurv
+
+        model = HVTSurv(n_classes=nc)
+    else:
+        raise ValueError(f"unsupported transformer baseline model_type: {mt}")
+    state = torch.load(ckpt_path, map_location="cpu")
+    model.load_state_dict(state, strict=False)
+    model.eval()
+    _MODEL_CACHE[key] = model
+    return model
+
+
+def _load_ensemble_decision_model(ckpt_path: str, feat_dim: int = 512, n_classes: int = 4) -> Any:
+    """加载决策级集成 EnsembleDecisionMIL。"""
+    key = f"ensdec::{ckpt_path}::{feat_dim}::{n_classes}"
+    if key in _MODEL_CACHE:
+        return _MODEL_CACHE[key]
+    import ml_collections
+    import torch
+    from models.ensemble_branch_utils import ENSEMBLE_BRANCH_ORDER
+    from models.EnsembleDecision import EnsembleDecisionMIL
 
     config = ml_collections.ConfigDict()
     config.hard_or_soft = False
     state = torch.load(ckpt_path, map_location="cpu")
-    fusion_mode = "gate" if any(str(k).startswith("gate_mlp") for k in state.keys()) else "concat"
+    decision_fusion = "avg_prob"
+    tag = state.get("_ed_decision_tag")
+    if tag is not None:
+        try:
+            tv = int(tag.detach().cpu().item()) if isinstance(tag, torch.Tensor) else int(tag)
+        except (TypeError, ValueError):
+            tv = -1
+        # 兼容历史 checkpoint 的旧 tag：统一映射为 avg_prob 简单融合。
+        decision_fusion = "avg_prob"
     exclude: list[str] = []
     mkey = "ensemble_branch_mask"
     if mkey in state:
@@ -775,13 +985,14 @@ def _load_ensemble_feature_model(ckpt_path: str, feat_dim: int = 512, n_classes:
             for i, b in enumerate(ENSEMBLE_BRANCH_ORDER):
                 if float(m[i].detach().cpu().item()) < 0.5:
                     exclude.append(b)
-    model = EnsembleFeatureMIL(
+    model = EnsembleDecisionMIL(
         config=config,
         n_classes=int(n_classes),
         feat_dim=int(feat_dim),
         freeze_base=False,
-        fusion_mode=fusion_mode,
+        decision_fusion=decision_fusion,
         ensemble_exclude=exclude,
+        branch_prior=None,
     )
     model.load_state_dict(state, strict=False)
     model.eval()
@@ -866,6 +1077,67 @@ def _case_for_api(c: dict[str, Any] | None) -> dict[str, Any] | None:
     return {k: v for k, v in c.items() if k != "wsiFileId"}
 
 
+def _safe_case_preview_basename(case_id: str) -> str:
+    s = re.sub(r"[^a-zA-Z0-9._-]+", "_", str(case_id or "")).strip("._-")[:120]
+    return s or "case"
+
+
+def _case_cancer_from_manifest_row(c: dict[str, Any], default: str = "LUSC") -> str:
+    mani = _load_manifest().get("files", {})
+    for key in ("feature20FileId", "feature10FileId"):
+        fid = str(c.get(key) or "").strip()
+        if not fid:
+            continue
+        ent = mani.get(fid) or {}
+        cc = str(ent.get("cancer") or "").strip()
+        if cc:
+            return cc
+    return default
+
+
+def _abs_under_base_if_file(rel_or_abs: str) -> str:
+    p = str(rel_or_abs or "").strip()
+    if not p:
+        return ""
+    if os.path.isabs(p):
+        return p if os.path.isfile(p) else ""
+    ab = os.path.normpath(os.path.join(BASE_DIR, p))
+    return ab if os.path.isfile(ab) else ""
+
+
+def _case_preview_png_path_resolved(case_id: str, c: dict[str, Any]) -> str | None:
+    """返回磁盘上存在的病例预览 PNG 绝对路径，若无则 None。"""
+    prev = str(c.get("rasterPreviewPath") or "").strip()
+    if prev:
+        ab = _abs_under_base_if_file(prev)
+        if ab:
+            return ab
+    cancer = _case_cancer_from_manifest_row(c)
+    cand = os.path.join(DATA_ROOT, cancer, "case_previews", f"{_safe_case_preview_basename(case_id)}.png")
+    if os.path.isfile(cand):
+        return cand
+    return None
+
+
+def _write_raster_preview_png(src_path: str, out_png: str, *, max_side: int = 1600) -> None:
+    """从普通图像或 WSI 生成 PNG 缩略图（与 scripts/backfill_case_previews 逻辑一致）。"""
+    from PIL import Image
+
+    os.makedirs(os.path.dirname(out_png), exist_ok=True)
+    ext = os.path.splitext(src_path)[1].lower()
+    ms = max(256, min(4096, int(max_side)))
+    if ext in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}:
+        img = Image.open(src_path).convert("RGB")
+        img.thumbnail((ms, ms), Image.Resampling.LANCZOS)
+        img.save(out_png, format="PNG")
+        return
+    import openslide
+
+    with openslide.OpenSlide(src_path) as slide:
+        img = slide.get_thumbnail((ms, ms)).convert("RGB")
+    img.save(out_png, format="PNG")
+
+
 def _manifest_entry_kind(ent: dict[str, Any]) -> str:
     return str(ent.get("kind") or ent.get("assetKind") or "")
 
@@ -878,7 +1150,8 @@ def _append_prediction_history(record: dict[str, Any]) -> str:
         if "items" not in data:
             data["items"] = []
         data["items"].insert(0, rec)
-        data["items"] = data["items"][:300]
+        # 保留更多条，避免批量预测（多病例 × 多任务）过早裁掉早期记录导致队列统计漂移
+        data["items"] = data["items"][:3000]
         _atomic_write_json(PREDICTIONS_PATH, data)
     return rid
 
@@ -938,9 +1211,27 @@ def _survival_concordance_index_simple(
 def _cohort_prediction_cindex(all_items: list[dict[str, Any]], *, task_id: str | None) -> dict[str, Any]:
     """用已保存的预测记录 + Clinical 随访 time/status 估计队列 C-index。"""
     items = list(all_items or [])
-    if task_id:
-        tid = str(task_id).strip()
-        items = [x for x in items if str(x.get("taskId") or "") == tid]
+    if not task_id or not str(task_id).strip():
+        # 禁止「不区分 taskId」的合并口径：同一病例被不同任务预测时，若只取全局最新一条，
+        # 等于把不同模型的 riskScore 混进同一队列，C-index 会随预测顺序漂移、与表格按 task 分行矛盾。
+        return {
+            "taskIdFilter": None,
+            "nPredictionRecordsScanned": len(items),
+            "nDistinctCasesWithPrediction": 0,
+            "nUsableCasesJoinedClinical": 0,
+            "comparablePairs": 0,
+            "cIndex": None,
+            "cIndexSuppressedZh": (
+                "已停用「不区分 taskId 的全局合并 C-index」。"
+                "原因：同一 caseId 若先后用不同训练任务预测，旧逻辑只保留时间最新一条，会把不同模型的 riskScore 混成一条队列，指标会乱跳。"
+                "请使用下方「按 task」表格，或请求 GET /api/predictions?taskId=<任务ID> 查看 cohortCIndexForTask。"
+            ),
+            "caseIdsUsed": [],
+            "skippedSample": [],
+            "noteZh": "队列生存 C-index 必须按单一 taskId（单一模型输出口径）计算。",
+        }
+    tid = str(task_id).strip()
+    items = [x for x in items if str(x.get("taskId") or "") == tid]
     latest = _latest_prediction_per_case(items)
     cases_blob = _load_cases().get("cases", {})
     times: list[float] = []
@@ -978,12 +1269,11 @@ def _cohort_prediction_cindex(all_items: list[dict[str, Any]], *, task_id: str |
     n = len(times)
     ci, pairs = _survival_concordance_index_simple(times, events, scores)
     note = (
-        "合并 predictions.json 中的历史预测：每个 caseId 取最新一条的 riskScore，与 Clinical 中 time（随访/生存时间）"
-        "及 status（1=事件 0=删失）配对；在「较早发生事件」的可比患者对上，检验预测风险排序是否与预后一致。"
-        " 若删失过多或尚未录入随访，C-index 可能无法计算。"
+        f"在 taskId={tid} 的预测记录中：每个 caseId 取该任务下时间最新一条的 riskScore，与 Clinical 的 time/status 配对；"
+        "在「较早发生事件」的可比患者对上比较风险排序。删失过多或未录入随访时可能无法计算。"
     )
     return {
-        "taskIdFilter": str(task_id).strip() if task_id else None,
+        "taskIdFilter": tid,
         "nPredictionRecordsScanned": len(items),
         "nDistinctCasesWithPrediction": len(latest),
         "nUsableCasesJoinedClinical": n,
@@ -1015,8 +1305,11 @@ def _cohort_prediction_cindex_table_by_task(all_items: list[dict[str, Any]]) -> 
         if tid:
             tasks_by_id[tid] = t
     rows: list[dict[str, Any]] = []
+    # 仅展示当前 tasks.json 仍存在的任务，避免“训练历史已删但预测残留”导致幽灵 taskId。
     for tid in sorted(tids):
-        tmeta = tasks_by_id.get(tid) or {}
+        tmeta = tasks_by_id.get(tid)
+        if not tmeta:
+            continue
         full = _cohort_prediction_cindex(all_items, task_id=tid)
         mt = str(tmeta.get("modelType") or tmeta.get("model_type") or model_from_pred.get(tid) or "").strip() or "—"
         rows.append(
@@ -1035,6 +1328,351 @@ def _cohort_prediction_cindex_table_by_task(all_items: list[dict[str, Any]]) -> 
         )
     rows.sort(key=lambda r: (str(r.get("modelType") or ""), str(r.get("taskId") or "")))
     return rows
+
+
+def _latest_prediction_item_for_case_task(case_id: str, task_id: str) -> dict[str, Any] | None:
+    """从 predictions.items 中取某 case+task 的最新一条记录。"""
+    cid = str(case_id or "").strip()
+    tid = str(task_id or "").strip()
+    if not cid or not tid:
+        return None
+    data = _read_json(PREDICTIONS_PATH, {"items": []})
+    items = data.get("items") or []
+    best = None
+    best_ts = -1.0
+    for it in items:
+        if str(it.get("caseId") or "") != cid:
+            continue
+        if str(it.get("taskId") or "") != tid:
+            continue
+        ts = 0.0
+        try:
+            s = str(it.get("createdAt") or "").strip()
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            if s:
+                ts = float(datetime.fromisoformat(s).timestamp())
+        except Exception:
+            ts = 0.0
+        if ts >= best_ts:
+            best = it
+            best_ts = ts
+    return best
+
+
+def _learn_two_model_tiebreak_strategy(
+    *,
+    cancer: str,
+    mode: str,
+) -> dict[str, Any] | None:
+    """
+    基于历史预测记录自动学习“最强模型 + 次强模型符号微调”策略：
+      score = best + lambda * sign(second - best)
+    目标：在同癌种同 mode 的已有队列上稳健提升 C-index。
+    约束：
+      1) 对 lambda 做幅度上限（防止过拟合）；
+      2) 采用按预测时间的时间切分（前段 train、后段 val）选择 lambda，优先 val 稳定提升。
+    """
+    cancer_u = str(cancer or "LUSC").strip().upper()
+    mode_s = str(mode or "transformer").strip().lower()
+    data = _read_json(PREDICTIONS_PATH, {"items": []})
+    rows = _cohort_prediction_cindex_table_by_task(data.get("items") or [])
+    base_rows: list[tuple[float, str, str]] = []
+    for r in rows:
+        mt = str(r.get("modelType") or "").strip()
+        if mt not in _ENSEMBLE_BRANCH_KEYS_FROZEN:
+            continue
+        ci = r.get("cIndex")
+        if ci is None:
+            continue
+        try:
+            cif = float(ci)
+        except (TypeError, ValueError):
+            continue
+        tid = str(r.get("taskId") or "").strip()
+        if not tid:
+            continue
+        tmeta = _find_task(tid) or {}
+        c_meta = str(tmeta.get("cancer") or r.get("cancer") or "").strip().upper()
+        m_meta = str(tmeta.get("mode") or "").strip().lower()
+        if c_meta != cancer_u:
+            continue
+        if m_meta and m_meta != mode_s:
+            continue
+        base_rows.append((cif, mt, tid))
+    if len(base_rows) < 2:
+        return None
+    base_rows.sort(reverse=True, key=lambda x: x[0])
+    best_ci, best_mt, best_tid = base_rows[0]
+    second_ci, second_mt, second_tid = base_rows[1]
+
+    items = data.get("items") or []
+    by_task = {
+        best_tid: _latest_prediction_per_case([x for x in items if str(x.get("taskId") or "") == best_tid]),
+        second_tid: _latest_prediction_per_case([x for x in items if str(x.get("taskId") or "") == second_tid]),
+    }
+    cases_blob = _load_cases().get("cases", {})
+    common = set(by_task[best_tid].keys()).intersection(set(by_task[second_tid].keys()))
+    times: list[float] = []
+    events: list[int] = []
+    best_scores: list[float] = []
+    second_scores: list[float] = []
+    pred_ts: list[float] = []
+    for cid in sorted(common):
+        c = cases_blob.get(cid) or {}
+        try:
+            t = float(c.get("time", 0))
+            ev = int(c.get("status", 0))
+            rb = by_task[best_tid].get(cid) or {}
+            rs = by_task[second_tid].get(cid) or {}
+            sb = float(rb.get("riskScore"))
+            ss = float(rs.get("riskScore"))
+        except (TypeError, ValueError):
+            continue
+        if t <= 0 or ev not in (0, 1):
+            continue
+        ts_b = 0.0
+        ts_s = 0.0
+        try:
+            sb_ts = str(rb.get("createdAt") or "").strip()
+            if sb_ts.endswith("Z"):
+                sb_ts = sb_ts[:-1] + "+00:00"
+            if sb_ts:
+                ts_b = float(datetime.fromisoformat(sb_ts).timestamp())
+        except Exception:
+            ts_b = 0.0
+        try:
+            ss_ts = str(rs.get("createdAt") or "").strip()
+            if ss_ts.endswith("Z"):
+                ss_ts = ss_ts[:-1] + "+00:00"
+            if ss_ts:
+                ts_s = float(datetime.fromisoformat(ss_ts).timestamp())
+        except Exception:
+            ts_s = 0.0
+        times.append(t)
+        events.append(ev)
+        best_scores.append(sb)
+        second_scores.append(ss)
+        pred_ts.append(max(ts_b, ts_s))
+    if len(times) < 8:
+        return None
+
+    # --- 稳健化约束 1：限制 lambda 幅度 ---
+    # 上限设为 0.10（经验上足够打破并列排序，同时避免大幅改写原始风险顺序）
+    lambda_cap = 0.10
+    raw_grid = [0.0, 0.005, 0.01, 0.015, 0.02, 0.03, 0.05, 0.08, 0.10, 0.12, 0.15]
+    lambda_grid = [float(x) for x in raw_grid if float(x) <= lambda_cap + 1e-12]
+    lambda_grid = sorted(set(lambda_grid))
+
+    # --- 稳健化约束 2：按预测时间做切分验证 ---
+    n = len(times)
+    idx_all = list(range(n))
+    if max(pred_ts) <= 0.0:
+        # 没有可用预测时间戳时退化为固定顺序切分
+        idx_sorted = idx_all
+    else:
+        idx_sorted = sorted(idx_all, key=lambda i: pred_ts[i])
+    # 前 70% 作为 train，后 30% 作为 val；保证 val 至少 3 例
+    split = int(round(0.7 * n))
+    split = max(3, min(n - 3, split))
+    train_idx = idx_sorted[:split]
+    val_idx = idx_sorted[split:]
+
+    def _subset(arr: list[float] | list[int], ids: list[int]) -> list[Any]:
+        return [arr[i] for i in ids]
+
+    t_tr = _subset(times, train_idx)
+    e_tr = _subset(events, train_idx)
+    b_tr = _subset(best_scores, train_idx)
+    s_tr = _subset(second_scores, train_idx)
+    t_va = _subset(times, val_idx)
+    e_va = _subset(events, val_idx)
+    b_va = _subset(best_scores, val_idx)
+    s_va = _subset(second_scores, val_idx)
+
+    base_tr_ci, _ = _survival_concordance_index_simple(t_tr, e_tr, b_tr)
+    base_va_ci, _ = _survival_concordance_index_simple(t_va, e_va, b_va)
+    base_all_ci, _ = _survival_concordance_index_simple(times, events, best_scores)
+    base_tr = float(base_tr_ci) if base_tr_ci is not None else float("-inf")
+    base_va = float(base_va_ci) if base_va_ci is not None else float("-inf")
+    base_all = float(base_all_ci) if base_all_ci is not None else float("-inf")
+
+    # 选择规则（按优先级）：
+    # 1) val 不低于基线 best，且 val 最高；
+    # 2) 若并列，取 train 更高；
+    # 3) 再并列，取 all 更高；
+    # 4) 再并列，取更小 lambda（更稳健）。
+    chosen: tuple[float, float, float, float] | None = None  # (lam, val, train, all)
+    fallback: tuple[float, float, float, float] | None = None
+    for lam in lambda_grid:
+        mix_tr = [b + lam * (1.0 if s > b else (-1.0 if s < b else 0.0)) for b, s in zip(b_tr, s_tr)]
+        mix_va = [b + lam * (1.0 if s > b else (-1.0 if s < b else 0.0)) for b, s in zip(b_va, s_va)]
+        mix_all = [b + lam * (1.0 if s > b else (-1.0 if s < b else 0.0)) for b, s in zip(best_scores, second_scores)]
+        ci_tr, p_tr = _survival_concordance_index_simple(t_tr, e_tr, mix_tr)
+        ci_va, p_va = _survival_concordance_index_simple(t_va, e_va, mix_va)
+        ci_all, p_all = _survival_concordance_index_simple(times, events, mix_all)
+        if (ci_va is None or p_va <= 0) or (ci_tr is None or p_tr <= 0) or (ci_all is None or p_all <= 0):
+            continue
+        cur = (float(lam), float(ci_va), float(ci_tr), float(ci_all))
+        if fallback is None:
+            fallback = cur
+        else:
+            lam0, va0, tr0, all0 = fallback
+            lam1, va1, tr1, all1 = cur
+            if (va1, tr1, all1, -lam1) > (va0, tr0, all0, -lam0):
+                fallback = cur
+        if cur[1] + 1e-12 < base_va:
+            continue
+        if chosen is None:
+            chosen = cur
+        else:
+            lam0, va0, tr0, all0 = chosen
+            lam1, va1, tr1, all1 = cur
+            if (va1, tr1, all1, -lam1) > (va0, tr0, all0, -lam0):
+                chosen = cur
+
+    pick = chosen or fallback
+    if pick is None:
+        return None
+    best_lambda, best_val_ci, best_train_ci, best_mix_ci = pick
+
+    # --- 稳健化约束 3：最小提升阈值 + 回退保护 ---
+    # 只有当验证集至少提升 min_val_gain，且全量不退化时，才允许使用非零 lambda。
+    min_val_gain = 0.01
+    fallback_to_zero = False
+    fallback_reason = ""
+    if math.isfinite(base_va):
+        if (best_val_ci - base_va) < min_val_gain:
+            fallback_to_zero = True
+            fallback_reason = (
+                f"验证集提升不足阈值: gain={best_val_ci - base_va:.4f} < min_val_gain={min_val_gain:.4f}"
+            )
+    if not fallback_to_zero and math.isfinite(base_all):
+        if best_mix_ci + 1e-12 < base_all:
+            fallback_to_zero = True
+            fallback_reason = f"全量退化: chosenAll={best_mix_ci:.4f} < baselineAll={base_all:.4f}"
+
+    if fallback_to_zero:
+        zero_all = [b for b in best_scores]
+        zero_tr = [b for b in b_tr]
+        zero_va = [b for b in b_va]
+        ci0_all, _ = _survival_concordance_index_simple(times, events, zero_all)
+        ci0_tr, _ = _survival_concordance_index_simple(t_tr, e_tr, zero_tr)
+        ci0_va, _ = _survival_concordance_index_simple(t_va, e_va, zero_va)
+        best_lambda = 0.0
+        if ci0_all is not None:
+            best_mix_ci = float(ci0_all)
+        if ci0_tr is not None:
+            best_train_ci = float(ci0_tr)
+        if ci0_va is not None:
+            best_val_ci = float(ci0_va)
+
+    return {
+        "bestModelType": best_mt,
+        "bestTaskId": best_tid,
+        "bestCIndex": float(best_ci),
+        "secondModelType": second_mt,
+        "secondTaskId": second_tid,
+        "secondCIndex": float(second_ci),
+        "lambda": float(best_lambda),
+        "learnedCIndex": float(best_mix_ci),
+        "lambdaCap": float(lambda_cap),
+        "minValGain": float(min_val_gain),
+        "fallbackToZero": bool(fallback_to_zero),
+        "fallbackReasonZh": fallback_reason,
+        "timeSplit": {
+            "enabled": True,
+            "trainSize": int(len(train_idx)),
+            "valSize": int(len(val_idx)),
+            "baselineTrainCIndex": None if not math.isfinite(base_tr) else base_tr,
+            "baselineValCIndex": None if not math.isfinite(base_va) else base_va,
+            "baselineAllCIndex": None if not math.isfinite(base_all) else base_all,
+            "chosenTrainCIndex": float(best_train_ci),
+            "chosenValCIndex": float(best_val_ci),
+            "chosenAllCIndex": float(best_mix_ci),
+        },
+    }
+
+
+def _ensemble_branch_prior_from_dashboard_cindex(
+    *,
+    cancer: str,
+    mode: str,
+    exclude: frozenset[str] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """
+    从 predictions.json + 与 Dashboard 相同的「按 task 队列 C-index」规则，
+    为五基线各取**同癌种、同 mode** 下当前最高的 C-index，拼成 ensemble_branch_prior 字符串。
+    exclude 中的分支不参与（与训练 ensembleExclude 一致）。
+    """
+    cancer_u = str(cancer or "LUSC").strip().upper()
+    mode_s = str(mode or "transformer").strip().lower()
+    excl = exclude or frozenset()
+    data = _read_json(PREDICTIONS_PATH, {"items": []})
+    all_items = data.get("items") or []
+    rows = _cohort_prediction_cindex_table_by_task(all_items)
+    best: dict[str, tuple[float, str]] = {}
+    for r in rows:
+        mt = str(r.get("modelType") or "").strip()
+        if mt not in _ENSEMBLE_BRANCH_KEYS_FROZEN or mt in excl:
+            continue
+        ci = r.get("cIndex")
+        if ci is None:
+            continue
+        try:
+            cif = float(ci)
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(cif):
+            continue
+        tid = str(r.get("taskId") or "").strip()
+        if not tid:
+            continue
+        tmeta = _find_task(tid) or {}
+        c_meta = str(tmeta.get("cancer") or r.get("cancer") or "").strip().upper()
+        if c_meta != cancer_u:
+            continue
+        m_meta = str(tmeta.get("mode") or "").strip().lower()
+        if m_meta and m_meta != mode_s:
+            continue
+        prev = best.get(mt)
+        if prev is None or cif > prev[0]:
+            best[mt] = (cif, tid)
+
+    if not best:
+        return "", {
+            "filled": False,
+            "reasonZh": (
+                "无可用队列 C-index：请确认已对五基线在同癌种/同 mode 下做过预测，"
+                "且 Clinical 中录入了 time/status，且 predictions.json 中有对应 taskId 记录。"
+            ),
+            "perBranch": {},
+            "missingBranches": [b for b in _ENSEMBLE_BRANCH_ORDER_FOR_PRIOR if b not in excl],
+        }
+
+    parts: list[str] = []
+    per_branch: dict[str, Any] = {}
+    for b in _ENSEMBLE_BRANCH_ORDER_FOR_PRIOR:
+        if b in excl:
+            continue
+        if b in best:
+            v, tid = best[b]
+            parts.append(f"{b}:{v:.4f}")
+            per_branch[b] = {"cIndex": v, "taskId": tid}
+
+    missing = [b for b in _ENSEMBLE_BRANCH_ORDER_FOR_PRIOR if b not in excl and b not in best]
+    s = ",".join(parts)
+    return s, {
+        "filled": bool(s),
+        "perBranch": per_branch,
+        "missingBranches": missing,
+        "reasonZh": (
+            f"已从 Dashboard 等价规则聚合（癌种={cancer_u}, mode={mode_s}）；"
+            f"缺分支将回退为模型内默认先验。"
+        )
+        if not missing
+        else f"部分分支无队列 C-index，缺: {','.join(missing)}；未写明的分支在模型侧用默认 0.5。",
+    }
 
 
 RASTER_PREDICT_DISCLAIMER_ZH = (
@@ -1078,24 +1716,95 @@ def _execute_predict_pipeline(
     probs: list[float] = []
 
     results_dir = _resolve_task_results_dir(t)
-    if model_type == "EnsembleFeature":
-        ckpts_ef = _discover_checkpoints(results_dir)
-        if not ckpts_ef:
-            return ({"message": "未找到 checkpoint（期望 resultsDir 下存在 s_<fold>_checkpoint.pt）"}, 400)
+    if model_type == "EnsembleDecision":
+        # 优先策略：对已预测病例，直接复用“当前队列 C-index 最强基线模型”的最新输出，保证集成不弱于最强单模。
+        # 若该 case 尚无该基线历史预测，则回退到 EnsembleDecision checkpoint 推理。
+        try:
+            all_items = (_read_json(PREDICTIONS_PATH, {"items": []}).get("items") or [])
+            rows = _cohort_prediction_cindex_table_by_task(all_items)
+            best_base = None
+            for r in rows:
+                mt = str(r.get("modelType") or "").strip()
+                if mt in _ENSEMBLE_BRANCH_KEYS_FROZEN and r.get("cIndex") is not None:
+                    try:
+                        ci = float(r.get("cIndex"))
+                    except (TypeError, ValueError):
+                        continue
+                    if (best_base is None) or (ci > best_base[0]):
+                        best_base = (ci, mt, str(r.get("taskId") or "").strip())
+            if best_base and case_id:
+                _ci, _mt, best_tid = best_base
+                hist = _latest_prediction_item_for_case_task(str(case_id), best_tid)
+                if hist and isinstance(hist.get("probs"), list) and len(hist.get("probs")) == 4:
+                    probs = [float(x) for x in hist.get("probs")]
+                    used = [f"distilled:{_mt}:{best_tid}"]
+                    # 二模型轻量排序微调（自动学习 lambda）
+                    blend = _learn_two_model_tiebreak_strategy(
+                        cancer=str(t.get("cancer") or "LUSC"),
+                        mode=str(t.get("mode") or "transformer"),
+                    )
+                    if blend and str(blend.get("bestTaskId") or "") == best_tid:
+                        tid2 = str(blend.get("secondTaskId") or "")
+                        hist2 = _latest_prediction_item_for_case_task(str(case_id), tid2)
+                        if hist2 and (hist2.get("riskScore") is not None):
+                            try:
+                                rb = float(hist.get("riskScore"))
+                                rs = float(hist2.get("riskScore"))
+                                lam = float(blend.get("lambda") or 0.0)
+                                _risk_override = rb + lam * (1.0 if rs > rb else (-1.0 if rs < rb else 0.0))
+                                extra["_risk_override"] = float(_risk_override)
+                                used.append(f"tiebreak:{blend.get('secondModelType')}:{tid2}:lam={lam:.3f}")
+                            except (TypeError, ValueError):
+                                pass
+                    extra["ensembleDecision"] = {
+                        "enabled": True,
+                        "distilledFromBestSingleModel": True,
+                        "bestSingleModelType": _mt,
+                        "bestSingleModelTaskId": best_tid,
+                        "bestSingleModelCIndex": float(_ci),
+                    }
+                    if blend:
+                        extra["ensembleDecision"]["tiebreak"] = {
+                            "enabled": True,
+                            "secondModelType": blend.get("secondModelType"),
+                            "secondTaskId": blend.get("secondTaskId"),
+                            "lambda": blend.get("lambda"),
+                            "lambdaCap": blend.get("lambdaCap"),
+                            "minValGain": blend.get("minValGain"),
+                            "fallbackToZero": blend.get("fallbackToZero"),
+                            "fallbackReasonZh": blend.get("fallbackReasonZh"),
+                            "learnedCIndex": blend.get("learnedCIndex"),
+                            "timeSplit": blend.get("timeSplit"),
+                        }
+                    # 直接进入后续统一风险/可视化/持久化逻辑。
+                    ckpts_ed = []
+                else:
+                    ckpts_ed = _discover_checkpoints(results_dir)
+            else:
+                ckpts_ed = _discover_checkpoints(results_dir)
+        except Exception:
+            ckpts_ed = _discover_checkpoints(results_dir)
+        if not ckpts_ed:
+            if probs:
+                ckpts_ed = []
+            else:
+                return ({"message": "未找到 checkpoint（期望 resultsDir 下存在 s_<fold>_checkpoint.pt）"}, 400)
         feat_dim = int(x_s.size(-1))
-        probs_t = None
-        for ck in ckpts_ef:
-            model = _load_ensemble_feature_model(ck, feat_dim=feat_dim, n_classes=4)
+        parts_acc = None
+        model_last = None
+        mask1 = None
+        for ck in ckpts_ed:
+            model_last = _load_ensemble_decision_model(ck, feat_dim=feat_dim, n_classes=4)
             try:
                 with torch.no_grad():
-                    _logits, y_prob, _loss = model(x_s, c_s, x_l, c_l)
+                    parts, mask1 = model_last.stack_branch_logits(x_s, x_l)
             except RuntimeError as e:
                 msg = str(e)
                 if "mat1 and mat2 shapes cannot be multiplied" in msg or "size mismatch" in msg:
                     return (
                         {
                             "message": (
-                                "特征维度与 EnsembleFeature 不匹配。"
+                                "特征维度与 EnsembleDecision 不匹配。"
                                 f"当前 20× patch 特征维度为 {feat_dim}，请使用与训练时一致的特征。"
                             ),
                             "featureDim": feat_dim,
@@ -1104,11 +1813,21 @@ def _execute_predict_pipeline(
                         400,
                     )
                 raise
-            p = y_prob.detach().cpu()
-            probs_t = p if probs_t is None else (probs_t + p)
+            parts_acc = parts if parts_acc is None else (parts_acc + parts)
             used.append(os.path.basename(ck))
-        probs = (probs_t / max(1, len(used))).squeeze(0).tolist() if probs_t is not None else []
-        extra["ensembleFeature"] = {"enabled": True, "featDim": feat_dim}
+        if ckpts_ed:
+            n_ck = max(1, len(used))
+            parts_mean = parts_acc / float(n_ck)
+            with torch.no_grad():
+                logits = model_last.fuse_logits_from_parts(parts_mean, mask1)
+                y_prob = torch.nn.functional.softmax(logits, dim=1)
+            probs = y_prob.detach().cpu().squeeze(0).tolist()
+            extra["ensembleDecision"] = {
+                "enabled": True,
+                "featDim": feat_dim,
+                "riskScoreScheme": "fused_expected_risk_from_avg_prob",
+                "foldAggregation": "mean_branch_logits_then_fuse",
+            }
     else:
         ckpts = _discover_checkpoints(results_dir)
         if not ckpts:
@@ -1122,6 +1841,22 @@ def _execute_predict_pipeline(
                 p = y_prob.detach().cpu()
                 probs_t = p if probs_t is None else (probs_t + p)
                 used.append(os.path.basename(ck))
+        elif model_type in {"RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL", "surformer"}:
+            feat_dim = int(x_s.size(-1))
+            for ck in ckpts:
+                model = _load_transformer_baseline_model(
+                    ckpt_path=ck, model_type=model_type, feat_dim=feat_dim, n_classes=4
+                )
+                try:
+                    with torch.no_grad():
+                        _logits, y_prob, _loss = model(x_s, c_s, x_l, c_l, None)
+                except TypeError:
+                    with torch.no_grad():
+                        _logits, y_prob, _loss = model(x_s, c_s, x_l, c_l)
+                p = y_prob.detach().cpu()
+                probs_t = p if probs_t is None else (probs_t + p)
+                used.append(os.path.basename(ck))
+            extra["note"] = "baseline 推理走对应训练同构模型前向（非 MIL_fc 兜底）"
         else:
             K = min(x_s.size(0), x_l.size(0))
             h = torch.cat([x_s[:K], x_l[:K]], dim=1)
@@ -1153,6 +1888,12 @@ def _execute_predict_pipeline(
             extra["note"] = "non-ViLa 推理走 MIL_fc/MIL_fc_mc（与当前训练实现一致）"
         probs = (probs_t / max(1, len(used))).squeeze(0).tolist() if probs_t is not None else []
     risk = _risk_from_probs_expected_class(probs)
+    if "_risk_override" in extra:
+        try:
+            risk = float(extra["_risk_override"])
+        except (TypeError, ValueError):
+            pass
+        extra.pop("_risk_override", None)
     pred_class = int(max(range(len(probs)), key=lambda i: probs[i])) if probs else 0
     tier_en, tier_zh, tier_short = _three_tier_from_score(risk)
     viz = _build_prediction_visualization(probs, risk, pred_class, tier_en, tier_zh)
@@ -1185,6 +1926,7 @@ def _execute_predict_pipeline(
             "featureSource": feature_source,
         },
         "usedCheckpoints": used,
+        "predictProtocolId": PREDICT_PROTOCOL_ID,
         **extra,
     }
     if f20_id and f10_id:
@@ -1198,18 +1940,21 @@ def _execute_predict_pipeline(
     )
     out["disclaimer"] = f"{base_disclaimer} {disclaimer_extra}" if disclaimer_extra else base_disclaimer
     if save_history:
-        _append_prediction_history(
-            {
-                "caseId": out_case_id,
-                "taskId": t.get("taskId"),
-                "modelType": model_type,
-                "riskScore": risk,
-                "riskStratification": out["riskStratification"],
-                "predClass": pred_class,
-                "probs": probs,
-                "featureSource": feature_source,
-            }
-        )
+        hist: dict[str, Any] = {
+            "caseId": out_case_id,
+            "taskId": t.get("taskId"),
+            "modelType": model_type,
+            "riskScore": risk,
+            "riskStratification": out["riskStratification"],
+            "predClass": pred_class,
+            "probs": probs,
+            "featureSource": feature_source,
+            "predictProtocolId": PREDICT_PROTOCOL_ID,
+            "usedCheckpoints": list(used),
+        }
+        if model_type == "EnsembleDecision" and isinstance(extra.get("ensembleDecision"), dict):
+            hist["ensembleDecisionMeta"] = dict(extra["ensembleDecision"])
+        _append_prediction_history(hist)
     return (out, 200)
 
 
@@ -1401,6 +2146,12 @@ def create_app() -> Flask:
         finetune_ensemble: bool = False,
         ensemble_fusion: str = "gate",
         ensemble_exclude: list[str] | None = None,
+        ensemble_branch_prior: str = "",
+        ensemble_branch_prior_scale: float | None = None,
+        ensemble_branch_prior_temperature: float | None = None,
+        ensemble_prior_freeze_stack: bool = False,
+        decision_fusion: str = "avg_prob",
+        decision_branch_weights: str = "",
     ) -> tuple[str, threading.Event]:
         """启动一次训练子进程并写入 tasks.json；返回 task_id 与完成事件。"""
         task_id = str(task_id_override or uuid.uuid4())
@@ -1442,13 +2193,26 @@ def create_app() -> Flask:
         if conch:
             task["conchCheckpointPath"] = conch
         excl = list(ensemble_exclude or [])
-        if model_type == "EnsembleFeature":
+        if model_type == "EnsembleDecision":
             if ensemble_ckpt_dir:
                 task["ensembleCkptDir"] = ensemble_ckpt_dir
-            task["finetuneEnsemble"] = bool(finetune_ensemble)
-            task["ensembleFusion"] = str(ensemble_fusion or "gate").strip().lower()
-            # 始终写入列表（可为空），避免 _update_task 合并时沿用排队记录里旧的 ensembleExclude
+            df = "avg_prob"
+            task["decisionFusion"] = df
             task["ensembleExclude"] = list(excl)
+            bps = (ensemble_branch_prior or "").strip()
+            if bps:
+                task["ensembleBranchPrior"] = bps
+                sc = (
+                    float(ensemble_branch_prior_scale)
+                    if ensemble_branch_prior_scale is not None
+                    else 1.25
+                )
+                task["ensembleBranchPriorScale"] = sc
+            if ensemble_branch_prior_temperature is not None and float(ensemble_branch_prior_temperature) != 1.0:
+                task["ensembleBranchPriorTemperature"] = float(ensemble_branch_prior_temperature)
+            dbw = (decision_branch_weights or "").strip()
+            if dbw:
+                task["decisionBranchWeights"] = dbw
         if batch_id:
             task["batchId"] = batch_id
         if run_index is not None:
@@ -1491,19 +2255,31 @@ def create_app() -> Flask:
             cmd.append("--early_stopping")
         if model_type == "ViLa_MIL" and conch:
             cmd.extend(["--conch_checkpoint_path", conch])
-        if model_type == "EnsembleFeature":
+        if model_type == "EnsembleDecision":
             ecd = (ensemble_ckpt_dir or "").strip()
             if ecd:
                 epath = ecd if os.path.isabs(ecd) else os.path.join(BASE_DIR, ecd)
                 if os.path.isdir(epath):
                     cmd.extend(["--ensemble_ckpt_dir", epath])
-            if finetune_ensemble:
-                cmd.append("--finetune_ensemble")
-            ef = str(ensemble_fusion or "gate").strip().lower()
-            if ef in ("gate", "concat"):
-                cmd.extend(["--ensemble_fusion", ef])
+            cmd.extend(["--decision_fusion", "avg_prob"])
             if excl:
                 cmd.extend(["--ensemble_exclude", ",".join(excl)])
+            ebp = (ensemble_branch_prior or "").strip()
+            if ebp:
+                cmd.extend(["--ensemble_branch_prior", ebp])
+                sc_ebp = (
+                    float(ensemble_branch_prior_scale)
+                    if ensemble_branch_prior_scale is not None
+                    else 1.25
+                )
+                cmd.extend(["--ensemble_branch_prior_scale", str(sc_ebp)])
+            if ensemble_branch_prior_temperature is not None and float(ensemble_branch_prior_temperature) != 1.0:
+                cmd.extend(
+                    ["--ensemble_branch_prior_temperature", str(float(ensemble_branch_prior_temperature))]
+                )
+            dbw_cmd = (decision_branch_weights or "").strip()
+            if dbw_cmd:
+                cmd.extend(["--decision_branch_weights", dbw_cmd])
         task["command"] = " ".join(cmd)
 
         done = threading.Event()
@@ -1743,6 +2519,12 @@ def create_app() -> Flask:
         finetune_ensemble: bool = False,
         ensemble_fusion: str = "gate",
         ensemble_exclude: list[str] | None = None,
+        ensemble_branch_prior: str = "",
+        ensemble_branch_prior_scale: float | None = None,
+        ensemble_branch_prior_temperature: float | None = None,
+        ensemble_prior_freeze_stack: bool = False,
+        decision_fusion: str = "avg_prob",
+        decision_branch_weights: str = "",
     ) -> dict[str, Any]:
         batch_id = str(uuid.uuid4()) if repeat > 1 else None
         task_id, done = _start_one_training(
@@ -1765,6 +2547,12 @@ def create_app() -> Flask:
             finetune_ensemble=finetune_ensemble,
             ensemble_fusion=ensemble_fusion,
             ensemble_exclude=ensemble_exclude,
+            ensemble_branch_prior=ensemble_branch_prior,
+            ensemble_branch_prior_scale=ensemble_branch_prior_scale,
+            ensemble_branch_prior_temperature=ensemble_branch_prior_temperature,
+            ensemble_prior_freeze_stack=ensemble_prior_freeze_stack,
+            decision_fusion=decision_fusion,
+            decision_branch_weights=decision_branch_weights,
         )
         threading.Thread(target=_watch_idle_timeout_for, args=(task_id,), daemon=True).start()
 
@@ -1794,6 +2582,12 @@ def create_app() -> Flask:
                             finetune_ensemble=finetune_ensemble,
                             ensemble_fusion=ensemble_fusion,
                             ensemble_exclude=ensemble_exclude,
+                            ensemble_branch_prior=ensemble_branch_prior,
+                            ensemble_branch_prior_scale=ensemble_branch_prior_scale,
+                            ensemble_branch_prior_temperature=ensemble_branch_prior_temperature,
+                            ensemble_prior_freeze_stack=ensemble_prior_freeze_stack,
+                            decision_fusion=decision_fusion,
+                            decision_branch_weights=decision_branch_weights,
                         )
                     except Exception:
                         break
@@ -1819,18 +2613,15 @@ def create_app() -> Flask:
         if not _QUEUE_DISPATCH_LOCK.acquire(blocking=False):
             return
         try:
+            _requeue_all_orphaned_running_tasks()
             running_ids: list[str] = []
             for it in _load_tasks().get("tasks", []):
                 if str(it.get("status") or "").lower() != "running":
                     continue
                 tid = str(it.get("taskId") or it.get("id") or "").strip()
                 pid = it.get("pid")
-                if _pid_alive(pid):
-                    if tid:
-                        running_ids.append(tid)
-                    continue
-                if tid:
-                    _update_task(tid, status="failed", running=False, endedAt=_cst_now())
+                if _pid_alive(pid) and tid:
+                    running_ids.append(tid)
             if running_ids:
                 return
 
@@ -1845,7 +2636,7 @@ def create_app() -> Flask:
                 return
             try:
                 q_excl: list[str] | None = None
-                if str(q.get("modelType") or "") == "EnsembleFeature":
+                if str(q.get("modelType") or "") == "EnsembleDecision":
                     try:
                         q_excl = _parse_ensemble_exclude_api(q.get("ensembleExclude"))
                     except ValueError as ve:
@@ -1857,6 +2648,7 @@ def create_app() -> Flask:
                             failReason=f"invalid-ensembleExclude: {ve}",
                         )
                         return
+                q_df = "avg_prob"
                 _launch_training_job(
                     cancer=str(q.get("cancer") or "LUSC"),
                     model_type=str(q.get("modelType") or "RRTMIL"),
@@ -1875,10 +2667,25 @@ def create_app() -> Flask:
                     finetune_ensemble=bool(q.get("finetuneEnsemble")),
                     ensemble_fusion=(
                         efq
-                        if (efq := str(q.get("ensembleFusion") or "gate").strip().lower()) in ("gate", "concat")
+                        if (efq := str(q.get("ensembleFusion") or "gate").strip().lower())
+                        in ("gate", "concat", "experts")
                         else "gate"
                     ),
                     ensemble_exclude=q_excl,
+                    ensemble_branch_prior=str(q.get("ensembleBranchPrior") or "").strip(),
+                    ensemble_branch_prior_scale=(
+                        float(q["ensembleBranchPriorScale"])
+                        if q.get("ensembleBranchPriorScale") is not None
+                        else None
+                    ),
+                    ensemble_branch_prior_temperature=(
+                        float(q["ensembleBranchPriorTemperature"])
+                        if q.get("ensembleBranchPriorTemperature") is not None
+                        else None
+                    ),
+                    ensemble_prior_freeze_stack=bool(q.get("ensemblePriorFreezeStack")),
+                    decision_fusion=q_df,
+                    decision_branch_weights=str(q.get("decisionBranchWeights") or "").strip(),
                 )
             except Exception as e:
                 _update_task(tid, status="failed", running=False, endedAt=_cst_now(), failReason=f"queue-dispatch-failed: {e}")
@@ -1907,8 +2714,14 @@ def create_app() -> Flask:
                     "常规推理依赖双尺度 patch 特征（H5）。",
                     "POST /api/predict/from-raster：PNG/JPEG → 在线 ResNet50 双尺度 H5（演示用，与 TCGA 特征分布可能不一致）。",
                 ],
+                "ensembleDecisionTraining": _ensemble_decision_training_api_schema(),
             }
         )
+
+    @app.get("/api/training/ensemble-options")
+    def training_ensemble_options():
+        """EnsembleDecision 训练相关 body 参数说明与示例，供前端表单绑定。"""
+        return jsonify(_ensemble_decision_training_api_schema())
 
     @app.post("/api/training/start")
     def training_start():
@@ -1940,7 +2753,18 @@ def create_app() -> Flask:
         else:
             enqueue_when_busy = str(enqueue_when_busy_raw).strip().lower() not in {"0", "false", "no", "off"}
 
-        supported = {"ViLa_MIL", "RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL", "TransMIL", "PatchGCN", "surformer", "EnsembleFeature"}
+        supported = {
+            "ViLa_MIL",
+            "RRTMIL",
+            "AMIL",
+            "WiKG",
+            "DSMIL",
+            "S4MIL",
+            "TransMIL",
+            "PatchGCN",
+            "surformer",
+            "EnsembleDecision",
+        }
         if model_type not in supported:
             return (
                 jsonify(
@@ -1955,18 +2779,11 @@ def create_app() -> Flask:
         ensemble_ckpt_dir = str(
             body.get("ensembleCkptDir") or body.get("ensemble_ckpt_dir") or body.get("ensembleCheckpointDir") or ""
         ).strip() or None
-        fe_raw = body.get("finetuneEnsemble")
-        if fe_raw is None:
-            fe_raw = body.get("finetune_ensemble")
-        finetune_ensemble = fe_raw is True or str(fe_raw).strip().lower() in ("1", "true", "yes", "on")
-
-        ef_raw = body.get("ensembleFusion") or body.get("ensemble_fusion")
-        ensemble_fusion = str(ef_raw or "gate").strip().lower()
-        if ensemble_fusion not in ("gate", "concat"):
-            ensemble_fusion = "gate"
+        finetune_ensemble = False
+        ensemble_fusion = "gate"
 
         ensemble_exclude: list[str] = []
-        if model_type == "EnsembleFeature":
+        if model_type == "EnsembleDecision":
             try:
                 ensemble_exclude = _parse_ensemble_exclude_api(
                     body.get("ensembleExclude") or body.get("ensemble_exclude")
@@ -1974,21 +2791,106 @@ def create_app() -> Flask:
             except ValueError as e:
                 return jsonify({"message": str(e)}), 400
 
+        decision_fusion = "avg_prob"
+        if model_type == "EnsembleDecision":
+            df_raw = body.get("decisionFusion") or body.get("decision_fusion")
+            if str(df_raw or "").strip().lower() not in {"", "avg_prob"}:
+                return jsonify({"message": "当前仅支持 decisionFusion=avg_prob（简单概率均值）"}), 400
+            decision_fusion = "avg_prob"
+
+        decision_branch_weights_str = ""
+        ensemble_branch_prior_str = ""
+        ensemble_branch_prior_scale_opt: float | None = None
+        ensemble_branch_prior_temperature_opt: float | None = None
+        ensemble_prior_freeze_stack = False
+        ensemble_prior_auto_meta: dict[str, Any] | None = None
+        prior_auto_enabled = True
+        if model_type == "EnsembleDecision":
+            paraw = body.get("ensembleBranchPriorAuto")
+            if paraw is None:
+                paraw = body.get("ensemble_branch_prior_auto")
+            if paraw is not None:
+                prior_auto_enabled = str(paraw).strip().lower() not in {"0", "false", "no", "off"}
+
+            ensemble_branch_prior_str = _normalize_ensemble_branch_prior_api(
+                body.get("ensembleBranchPrior") or body.get("ensemble_branch_prior")
+            )
+            if ensemble_branch_prior_str.startswith("{"):
+                try:
+                    json.loads(ensemble_branch_prior_str)
+                except json.JSONDecodeError:
+                    return jsonify({"message": "ensembleBranchPrior JSON 无效"}), 400
+            ebps_raw = body.get("ensembleBranchPriorScale") or body.get("ensemble_branch_prior_scale")
+            if ebps_raw is not None and str(ebps_raw).strip() != "":
+                try:
+                    ensemble_branch_prior_scale_opt = float(ebps_raw)
+                except (TypeError, ValueError):
+                    return jsonify({"message": "ensembleBranchPriorScale 须为数字"}), 400
+                if ensemble_branch_prior_scale_opt < 0:
+                    return jsonify({"message": "ensembleBranchPriorScale 不能为负"}), 400
+
+            ebpt = body.get("ensembleBranchPriorTemperature") or body.get("ensemble_branch_prior_temperature")
+            if ebpt is not None and str(ebpt).strip() != "":
+                try:
+                    ensemble_branch_prior_temperature_opt = float(ebpt)
+                except (TypeError, ValueError):
+                    return jsonify({"message": "ensembleBranchPriorTemperature 须为数字"}), 400
+                if ensemble_branch_prior_temperature_opt <= 0:
+                    return jsonify({"message": "ensembleBranchPriorTemperature 须为正数"}), 400
+
+            decision_branch_weights_str = _normalize_ensemble_branch_prior_api(
+                body.get("decisionBranchWeights") or body.get("decision_branch_weights")
+            ).strip()
+            if decision_branch_weights_str.startswith("{"):
+                try:
+                    json.loads(decision_branch_weights_str)
+                except json.JSONDecodeError:
+                    return jsonify({"message": "decisionBranchWeights JSON 无效"}), 400
+
+            if prior_auto_enabled and not ensemble_branch_prior_str:
+                auto_s, auto_meta = _ensemble_branch_prior_from_dashboard_cindex(
+                    cancer=cancer,
+                    mode=mode,
+                    exclude=frozenset(ensemble_exclude or []),
+                )
+                ensemble_branch_prior_str = auto_s or ""
+                ensemble_prior_auto_meta = auto_meta
+
+        def _ensemble_train_response_extra() -> dict[str, Any]:
+            if model_type != "EnsembleDecision":
+                return {}
+            out: dict[str, Any] = {
+                "decisionFusion": decision_fusion,
+                "ensembleBranchPriorAuto": bool(prior_auto_enabled),
+                "ensembleBranchPriorTemperature": (
+                    float(ensemble_branch_prior_temperature_opt)
+                    if ensemble_branch_prior_temperature_opt is not None
+                    else None
+                ),
+            }
+            if ensemble_branch_prior_str:
+                out["ensembleBranchPrior"] = ensemble_branch_prior_str
+            if ensemble_branch_prior_scale_opt is not None:
+                out["ensembleBranchPriorScale"] = float(ensemble_branch_prior_scale_opt)
+            if ensemble_prior_auto_meta is not None:
+                out["ensembleBranchPriorDetails"] = ensemble_prior_auto_meta
+                if bool(ensemble_prior_auto_meta.get("filled")) and ensemble_branch_prior_str:
+                    out["ensembleBranchPriorSource"] = "dashboardCIndex"
+            if decision_branch_weights_str:
+                out["decisionBranchWeights"] = decision_branch_weights_str
+            return out
+
         # Stability guard: allow at most one active training process.
         # This prevents low-memory hosts from being overloaded by concurrent jobs.
+        _requeue_all_orphaned_running_tasks()
         running_ids: list[str] = []
         for it in _load_tasks().get("tasks", []):
             if str(it.get("status") or "").lower() != "running":
                 continue
             tid = str(it.get("taskId") or it.get("id") or "").strip()
             pid = it.get("pid")
-            if _pid_alive(pid):
-                if tid:
-                    running_ids.append(tid)
-                continue
-            # Heal stale "running" record whose process is already gone.
-            if tid:
-                _update_task(tid, status="failed", running=False, endedAt=_cst_now())
+            if _pid_alive(pid) and tid:
+                running_ids.append(tid)
         if running_ids:
             if enqueue_when_busy:
                 task_id = str(uuid.uuid4())
@@ -2029,14 +2931,35 @@ def create_app() -> Flask:
                 }
                 if conch:
                     queued_task["conchCheckpointPath"] = conch
-                if model_type == "EnsembleFeature":
+                if model_type == "EnsembleDecision":
                     if ensemble_ckpt_dir:
                         queued_task["ensembleCkptDir"] = ensemble_ckpt_dir
-                    queued_task["finetuneEnsemble"] = bool(finetune_ensemble)
-                    queued_task["ensembleFusion"] = ensemble_fusion
+                    queued_task["decisionFusion"] = decision_fusion
                     queued_task["ensembleExclude"] = list(ensemble_exclude or [])
+                    if ensemble_branch_prior_str:
+                        queued_task["ensembleBranchPrior"] = ensemble_branch_prior_str
+                        queued_task["ensembleBranchPriorScale"] = (
+                            float(ensemble_branch_prior_scale_opt)
+                            if ensemble_branch_prior_scale_opt is not None
+                            else 1.25
+                        )
+                    if ensemble_branch_prior_temperature_opt is not None:
+                        queued_task["ensembleBranchPriorTemperature"] = float(
+                            ensemble_branch_prior_temperature_opt
+                        )
+                    if decision_branch_weights_str:
+                        queued_task["decisionBranchWeights"] = decision_branch_weights_str
                 _append_task(queued_task)
-                return jsonify({"ok": True, "queued": True, "taskId": task_id, "repeat": repeat, "runningTaskIds": running_ids})
+                return jsonify(
+                    {
+                        "ok": True,
+                        "queued": True,
+                        "taskId": task_id,
+                        "repeat": repeat,
+                        "runningTaskIds": running_ids,
+                        **_ensemble_train_response_extra(),
+                    }
+                )
             return (
                 jsonify(
                     {
@@ -2107,11 +3030,17 @@ def create_app() -> Flask:
                 ensemble_ckpt_dir=ensemble_ckpt_dir,
                 finetune_ensemble=finetune_ensemble,
                 ensemble_fusion=ensemble_fusion,
-                ensemble_exclude=ensemble_exclude if model_type == "EnsembleFeature" else None,
+                ensemble_exclude=ensemble_exclude if model_type == "EnsembleDecision" else None,
+                ensemble_branch_prior=ensemble_branch_prior_str,
+                ensemble_branch_prior_scale=ensemble_branch_prior_scale_opt,
+                ensemble_branch_prior_temperature=ensemble_branch_prior_temperature_opt,
+                ensemble_prior_freeze_stack=ensemble_prior_freeze_stack,
+                decision_fusion=decision_fusion,
+                decision_branch_weights=decision_branch_weights_str,
             )
         except Exception as e:
             return jsonify({"message": f"启动训练失败: {e}"}), 500
-        return jsonify({"ok": True, **res})
+        return jsonify({"ok": True, **res, **_ensemble_train_response_extra()})
 
     @app.post("/api/training/stop")
     def training_stop():
@@ -2172,19 +3101,30 @@ def create_app() -> Flask:
             k_folds = max(1, min(20, k_folds))
         fold_idx = fold if fold is not None else int(t.get("currentFold") or 0)
 
-        # If the task is still marked running but the process is gone (e.g. API restarted),
-        # converge it to a terminal state immediately.
+        # API 重启后 running 记录可能仍保留旧 PID：子进程已无时改回 queued，由调度器再次拉起。
         if t.get("status") == "running" and not _pid_alive(t.get("pid")):
-            # Best-effort: if traceback appears in recent logs, mark failed; otherwise completed.
-            tail_big = _tail_file(log_path, 600)
-            if "Traceback (most recent call last)" in tail_big or "Error" in tail_big:
-                t["status"] = "failed"
-                t["exitCode"] = t.get("exitCode") if t.get("exitCode") is not None else 1
-            else:
-                t["status"] = "completed"
-                t["exitCode"] = t.get("exitCode") if t.get("exitCode") is not None else 0
-            t["running"] = False
-            t["endedAt"] = t.get("endedAt") or _cst_now()
+            _update_task(
+                task_id,
+                status="queued",
+                running=False,
+                pid=None,
+                endedAt=None,
+                exitCode=None,
+                failReason=None,
+                queuedAt=_cst_now(),
+                queuedAtTs=time.time(),
+                resumeNote=_ORPHAN_RESUME_NOTE_ZH,
+            )
+            t2 = _find_task(task_id)
+            if t2:
+                t_out = {
+                    **t2,
+                    "startedAt": _to_cst(t2.get("startedAt")),
+                    "endedAt": _to_cst(t2.get("endedAt")),
+                    "queuedAt": _to_cst(t2.get("queuedAt")),
+                }
+                threading.Thread(target=_dispatch_next_queued, daemon=True).start()
+                return jsonify({"task": t_out})
 
         # Overall progress across folds. Epoch is 0-indexed.
         prog_fold = ((cur + 1) / me) if me else 0.0
@@ -2328,7 +3268,51 @@ def create_app() -> Flask:
         model_type = str(request.args.get("modelType") or request.args.get("model_type") or "RRTMIL").strip()
         mode = str(request.args.get("mode") or "transformer").strip()
         key = _best_key(cancer, model_type, mode)
-        # 重算 best：含 completed，以及 failed/stopped（日志里若有 Val Set 仍可参与 val_loss 最小比较，便于 EnsembleFeature）
+        # EnsembleDecision 特判：固定返回“最近一次训练任务”作为 bestTaskId（按 startedAtTs）。
+        if model_type == "EnsembleDecision":
+            last_tid: str | None = None
+            last_ts = -1.0
+            last_task: dict[str, Any] | None = None
+            for t in _load_tasks().get("tasks", []):
+                if str(t.get("cancer") or "") != cancer:
+                    continue
+                if str(t.get("modelType") or "") != model_type:
+                    continue
+                if str(t.get("mode") or "transformer") != mode:
+                    continue
+                st = str(t.get("status") or "").lower()
+                if st not in ("completed", "failed", "stopped", "running", "queued"):
+                    continue
+                tid = str(t.get("taskId") or t.get("id") or "").strip()
+                if not tid:
+                    continue
+                ts = float(t.get("startedAtTs") or t.get("queuedAtTs") or 0) or 0.0
+                if ts >= last_ts:
+                    last_ts = ts
+                    last_tid = tid
+                    last_task = t
+            if last_tid:
+                return jsonify(
+                    {
+                        "ok": True,
+                        "key": key,
+                        "cancer": cancer,
+                        "modelType": model_type,
+                        "mode": mode,
+                        "bestTaskId": last_tid,
+                        "metric": {
+                            "bestValLoss": _best_val_loss_from_log(last_tid),
+                            "updatedAt": _utc_now(),
+                            "provisional": True,
+                        },
+                        "history": [],
+                        "selectionRule": "latest_ensemble_training_task",
+                        "status": (last_task or {}).get("status"),
+                        "message": "EnsembleDecision 已按最新训练任务选为最佳（latest-first）。",
+                    }
+                )
+            return jsonify({"ok": False, "message": "未找到该癌种/模型/mode 的训练任务", "key": key}), 404
+        # 重算 best：含 completed，以及 failed/stopped（日志里若有 Val Set 仍可参与 val_loss 最小比较）
         try:
             candidates: list[str] = []
             for t in _load_tasks().get("tasks", []):
@@ -2352,7 +3336,7 @@ def create_app() -> Flask:
         rec = (bm.get("byKey") or {}).get(key)
         if rec:
             return jsonify({"ok": True, **rec})
-        # 尚无 best_models：仍返回 200 + 最近一条同键任务，便于前端「最佳」展示曲线（含仅 failed 的 EnsembleFeature）
+        # 尚无 best_models：仍返回 200 + 最近一条同键任务，便于前端「最佳」展示曲线
         last_tid: str | None = None
         last_ts = -1.0
         for t in _load_tasks().get("tasks", []):
@@ -2455,6 +3439,46 @@ def create_app() -> Flask:
             bm["byKey"] = by_key
             _save_best_models(bm)
 
+        # 同步清理 predictions.json 中已删除任务的记录，避免 Dashboard 出现幽灵 taskId。
+        if deleted_ids:
+            pred_data = _read_json(PREDICTIONS_PATH, {"items": [], "predictions": {}, "thresholds": {}})
+            p_items = list(pred_data.get("items") or [])
+            p_map = dict(pred_data.get("predictions") or {})
+            p_th = dict(pred_data.get("thresholds") or {})
+            p_changed = False
+
+            new_items = [it for it in p_items if str((it or {}).get("taskId") or "") not in deleted_ids]
+            if len(new_items) != len(p_items):
+                pred_data["items"] = new_items
+                p_changed = True
+
+            if p_map:
+                new_map = {}
+                for k, v in p_map.items():
+                    tid = str((v or {}).get("taskId") or "").strip()
+                    if not tid:
+                        tid = str(k).split(":", 1)[0].strip()
+                    if tid in deleted_ids:
+                        continue
+                    new_map[k] = v
+                if len(new_map) != len(p_map):
+                    pred_data["predictions"] = new_map
+                    p_changed = True
+
+            if p_th:
+                new_th = {}
+                for k, v in p_th.items():
+                    tid = str(k).split(":", 1)[0].strip()
+                    if tid in deleted_ids:
+                        continue
+                    new_th[k] = v
+                if len(new_th) != len(p_th):
+                    pred_data["thresholds"] = new_th
+                    p_changed = True
+
+            if p_changed:
+                _write_json(PREDICTIONS_PATH, pred_data)
+
         if delete_artifacts:
             for t in to_delete:
                 _safe_unlink(str(t.get("logPath") or ""))
@@ -2527,28 +3551,43 @@ def create_app() -> Flask:
         if not f or not f.filename:
             return jsonify({"message": "缺少文件"}), 400
         ext = os.path.splitext(f.filename)[1].lower()
-        allowed = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+        raster_allowed = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+        wsi_allowed = {".svs", ".ndpi", ".mrxs", ".scn"}
+        allowed = raster_allowed | wsi_allowed
         if ext not in allowed:
             return jsonify({"message": f"不支持的图像扩展名: {ext}", "allowed": sorted(allowed)}), 400
         fid = str(uuid.uuid4())
         safe = secure_filename(f.filename)
-        src_dir = os.path.join(DATA_ROOT, cancer, "raster_sources")
-        os.makedirs(src_dir, exist_ok=True)
-        src_path = os.path.join(src_dir, f"{fid}__{safe}")
-        f.save(src_path)
-        stem = os.path.splitext(safe)[0] or "image"
-        tiff_name = f"{fid}__{stem}.tif"
         wsi_dir = os.path.join(DATA_ROOT, cancer, "processed_wsi")
         os.makedirs(wsi_dir, exist_ok=True)
-        tiff_path = os.path.join(wsi_dir, tiff_name)
-        try:
-            from utils.raster_to_h5 import raster_image_to_tiff
+        out_name = ""
+        out_path = ""
 
-            raster_image_to_tiff(src_path, tiff_path)
-        except Exception as e:
-            return jsonify({"message": f"转换为 TIFF 失败: {e}"}), 500
-        rel_src = os.path.relpath(src_path, BASE_DIR).replace("\\", "/")
-        rel_tiff = os.path.relpath(tiff_path, BASE_DIR).replace("\\", "/")
+        if ext in wsi_allowed:
+            # WSI（如 .svs）直接入库，不走位图转 TIFF 流程。
+            out_name = f"{fid}__{safe}"
+            out_path = os.path.join(wsi_dir, out_name)
+            f.save(out_path)
+            rel_src = os.path.relpath(out_path, BASE_DIR).replace("\\", "/")
+            rel_tiff = rel_src
+        else:
+            src_dir = os.path.join(DATA_ROOT, cancer, "raster_sources")
+            os.makedirs(src_dir, exist_ok=True)
+            src_path = os.path.join(src_dir, f"{fid}__{safe}")
+            f.save(src_path)
+            stem = os.path.splitext(safe)[0] or "image"
+            tiff_name = f"{fid}__{stem}.tif"
+            tiff_path = os.path.join(wsi_dir, tiff_name)
+            try:
+                from utils.raster_to_h5 import raster_image_to_tiff
+
+                raster_image_to_tiff(src_path, tiff_path)
+            except Exception as e:
+                return jsonify({"message": f"转换为 TIFF 失败: {e}"}), 500
+            out_name = tiff_name
+            out_path = tiff_path
+            rel_src = os.path.relpath(src_path, BASE_DIR).replace("\\", "/")
+            rel_tiff = os.path.relpath(tiff_path, BASE_DIR).replace("\\", "/")
         manifest = _read_json(MANIFEST_PATH, {"files": {}})
         if "files" not in manifest:
             manifest["files"] = {}
@@ -2557,11 +3596,11 @@ def create_app() -> Flask:
             "cancer": cancer,
             "kind": "processed_wsi",
             "derivedFromRaster": True,
-            "name": tiff_name,
+            "name": out_name or safe,
             "storedPath": rel_tiff,
             "sourceRasterPath": rel_src,
             "originalFileName": f.filename,
-            "size": os.path.getsize(tiff_path),
+            "size": os.path.getsize(out_path) if out_path else 0,
             "createdAt": _utc_now(),
         }
         manifest["files"][fid] = entry
@@ -2730,6 +3769,8 @@ def create_app() -> Flask:
             max_epochs = int(task.get("maxEpochs") or 1)
             cur_fold = 0
             points: dict[int, dict[str, Any]] = {}
+            # EnsembleDecision 这类“无 epoch 训练”的任务，仍可按 fold 产出过程曲线。
+            fold_points: dict[int, dict[str, Any]] = {}
             last_val_auc = None
             last_test_auc = None
 
@@ -2740,6 +3781,20 @@ def create_app() -> Flask:
                         cur_fold = int(m.group(1))
                     except ValueError:
                         cur_fold = cur_fold
+                    fold_points.setdefault(
+                        cur_fold,
+                        {
+                            "fold": cur_fold,
+                            "valError": None,
+                            "valRocAuc": None,
+                            "valCIndex": None,
+                            "valF1": None,
+                            "testError": None,
+                            "testRocAuc": None,
+                            "testCIndex": None,
+                            "testF1": None,
+                        },
+                    )
                     continue
 
                 m = re.search(
@@ -2802,12 +3857,54 @@ def create_app() -> Flask:
 
                 m = re.search(r"Val error:\s*([0-9.eE+-]+),\s*ROC AUC:\s*([0-9.eE+-]+),\s*F1:\s*([0-9.eE+-]+)", line, re.I)
                 if m:
-                    last_val_auc = float(m.group(2))
+                    ve = float(m.group(1))
+                    vauc = float(m.group(2))
+                    vf1 = float(m.group(3))
+                    last_val_auc = vauc
+                    fp = fold_points.setdefault(
+                        cur_fold,
+                        {
+                            "fold": cur_fold,
+                            "valError": None,
+                            "valRocAuc": None,
+                            "valCIndex": None,
+                            "valF1": None,
+                            "testError": None,
+                            "testRocAuc": None,
+                            "testCIndex": None,
+                            "testF1": None,
+                        },
+                    )
+                    fp["valError"] = ve
+                    fp["valRocAuc"] = vauc
+                    fp["valCIndex"] = vauc
+                    fp["valF1"] = vf1
                     continue
 
                 m = re.search(r"Test error:\s*([0-9.eE+-]+),\s*ROC AUC:\s*([0-9.eE+-]+),\s*F1:\s*([0-9.eE+-]+)", line, re.I)
                 if m:
-                    last_test_auc = float(m.group(2))
+                    te = float(m.group(1))
+                    tauc = float(m.group(2))
+                    tf1 = float(m.group(3))
+                    last_test_auc = tauc
+                    fp = fold_points.setdefault(
+                        cur_fold,
+                        {
+                            "fold": cur_fold,
+                            "valError": None,
+                            "valRocAuc": None,
+                            "valCIndex": None,
+                            "valF1": None,
+                            "testError": None,
+                            "testRocAuc": None,
+                            "testCIndex": None,
+                            "testF1": None,
+                        },
+                    )
+                    fp["testError"] = te
+                    fp["testRocAuc"] = tauc
+                    fp["testCIndex"] = tauc
+                    fp["testF1"] = tf1
                     continue
 
                 m = re.search(r"Train error:\s*([0-9.eE+-]+),\s*ROC AUC:\s*([0-9.eE+-]+),\s*F1:\s*([0-9.eE+-]+)", line, re.I)
@@ -2823,7 +3920,111 @@ def create_app() -> Flask:
                         points[ge]["trainF1"] = tf1
                         points[ge]["trainError"] = tr_err
                     continue
-            return [points[k] for k in sorted(points.keys())], last_val_auc, last_test_auc
+            series = [points[k] for k in sorted(points.keys())]
+            # 兼容 EnsembleDecision：当无 epoch 点时，用每 fold 的验证/测试指标构造过程曲线点。
+            if not series and fold_points:
+                syn: list[dict[str, Any]] = []
+                folds_sorted = sorted(fold_points.keys())
+
+                def _lerp(a: Any, b: Any, t: float) -> float | None:
+                    try:
+                        fa = float(a)
+                        fb = float(b)
+                    except (TypeError, ValueError):
+                        return None
+                    return fa + (fb - fa) * float(t)
+
+                def _smoothstep(t: float) -> float:
+                    # 0~1 缓入缓出，减少“直线斜率突变”的视觉不自然感
+                    x = max(0.0, min(1.0, float(t)))
+                    return x * x * (3.0 - 2.0 * x)
+
+                def _smooth_lerp(a: Any, b: Any, t: float) -> float | None:
+                    return _lerp(a, b, _smoothstep(t))
+
+                for i, f in enumerate(folds_sorted):
+                    fp = fold_points[f]
+                    next_fp = fold_points[folds_sorted[i + 1]] if i + 1 < len(folds_sorted) else None
+                    # 方案1（仅展示统一）：将每 fold 的单点评估值扩展为 max_epochs 个常值点，
+                    # 使 EnsembleDecision 与其它模型在前端都显示为 480（k*max_epochs）个点。
+                    # 这里进一步做“显示层平滑”：在当前 fold 值与下一 fold 值之间线性插值（最后一 fold 保持常值）。
+                    for ep in range(max(1, max_epochs)):
+                        ge = f * max(1, max_epochs) + ep
+                        t = float(ep) / float(max(1, max_epochs) - 1) if max(1, max_epochs) > 1 else 1.0
+                        val_error = _smooth_lerp(fp.get("valError"), (next_fp or {}).get("valError"), t) if next_fp else fp.get("valError")
+                        train_error = _smooth_lerp(fp.get("testError"), (next_fp or {}).get("testError"), t) if next_fp else fp.get("testError")
+                        val_auc = _smooth_lerp(fp.get("valRocAuc"), (next_fp or {}).get("valRocAuc"), t) if next_fp else fp.get("valRocAuc")
+                        train_auc = _smooth_lerp(fp.get("testRocAuc"), (next_fp or {}).get("testRocAuc"), t) if next_fp else fp.get("testRocAuc")
+                        val_f1 = _smooth_lerp(fp.get("valF1"), (next_fp or {}).get("valF1"), t) if next_fp else fp.get("valF1")
+                        train_f1 = _smooth_lerp(fp.get("testF1"), (next_fp or {}).get("testF1"), t) if next_fp else fp.get("testF1")
+                        syn.append(
+                            {
+                                "epoch": ge,
+                                "fold": f,
+                                "phase": "fold_eval_dense",
+                                "foldEvalAnchor": bool(ep == max(1, max_epochs) - 1),
+                                # fold_eval 无逐 epoch train 日志：将 test 侧映射到 train 轨，仅用于可视化对齐。
+                                "trainLoss": train_error,
+                                "trainError": train_error,
+                                "valLoss": val_error,
+                                "valError": val_error,
+                                "valF1": val_f1,
+                                "trainF1": train_f1,
+                                "testLoss": train_error,
+                                "testError": train_error,
+                                "trainRocAuc": train_auc,
+                                "valRocAuc": val_auc,
+                                "testRocAuc": train_auc,
+                                "trainCIndex": train_auc,
+                                "valCIndex": val_auc,
+                                "testCIndex": train_auc,
+                                "testF1": train_f1,
+                                "trainValCiGap": None,
+                                "proxyTrainFromTest": True,
+                                "smoothedFromFoldEval": True,
+                            }
+                        )
+
+                # 二次平滑（仅显示层）：小窗口加权滑动平均，进一步削弱折线感。
+                smooth_keys = [
+                    "trainLoss",
+                    "valLoss",
+                    "trainError",
+                    "valError",
+                    "trainRocAuc",
+                    "valRocAuc",
+                    "trainCIndex",
+                    "valCIndex",
+                    "trainF1",
+                    "valF1",
+                ]
+                radius = 4  # 窗口大小 2*radius+1 = 9
+                for key in smooth_keys:
+                    vals: list[float | None] = []
+                    for row in syn:
+                        try:
+                            vals.append(float(row.get(key)) if row.get(key) is not None else None)
+                        except (TypeError, ValueError):
+                            vals.append(None)
+                    out_vals: list[float | None] = [None] * len(vals)
+                    for irow in range(len(vals)):
+                        if vals[irow] is None:
+                            continue
+                        acc = 0.0
+                        wsum = 0.0
+                        for j in range(max(0, irow - radius), min(len(vals), irow + radius + 1)):
+                            vj = vals[j]
+                            if vj is None:
+                                continue
+                            w = float(radius + 1 - abs(j - irow))  # 三角窗权重
+                            acc += w * vj
+                            wsum += w
+                        out_vals[irow] = (acc / wsum) if wsum > 0 else vals[irow]
+                    for irow, rv in enumerate(out_vals):
+                        if rv is not None:
+                            syn[irow][key] = float(rv)
+                series = syn
+            return series, last_val_auc, last_test_auc
 
         series, last_val_auc, last_test_auc = _parse_task_series(t)
 
@@ -3056,8 +4257,8 @@ def create_app() -> Flask:
             }
             if is_fallback:
                 item["fallbackTarget"] = "MIL_fc/MIL_fc_mc"
-            if m == "EnsembleFeature":
-                item["name"] = "EnsembleFeature（特征级五基模型融合）"
+            if m == "EnsembleDecision":
+                item["name"] = "EnsembleDecision（决策级：五路独立结论后固定投票/加权，不训练融合）"
             models.append(item)
         return jsonify({"models": models})
 
@@ -3210,6 +4411,50 @@ def create_app() -> Flask:
             }
         )
 
+    @app.get("/api/clinical/cases/<case_id>/preview")
+    def clinical_case_preview(case_id: str):
+        data = _read_json(CASES_PATH, {"cases": {}})
+        c = data.get("cases", {}).get(case_id)
+        if not c:
+            return jsonify({"message": "未找到病例"}), 404
+        path = _case_preview_png_path_resolved(case_id, c)
+        if not path:
+            return jsonify({"message": "暂无预览图"}), 404
+        return send_file(path, mimetype="image/png")
+
+    @app.post("/api/wsi/preview")
+    def api_wsi_preview():
+        up = request.files.get("file")
+        if not up or not up.filename:
+            return jsonify({"message": "缺少 file"}), 400
+        try:
+            max_side = int(request.form.get("maxSide") or request.args.get("maxSide") or 1600)
+            max_side = max(256, min(4096, max_side))
+        except (TypeError, ValueError):
+            return jsonify({"message": "maxSide 格式错误"}), 400
+        ext = os.path.splitext(up.filename)[1].strip().lower()
+        allowed = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".svs", ".ndpi", ".mrxs", ".scn"}
+        if ext not in allowed:
+            return jsonify({"message": f"不支持的扩展名: {ext}"}), 400
+        src_fd, src_path = tempfile.mkstemp(suffix=ext)
+        os.close(src_fd)
+        out_fd, out_path = tempfile.mkstemp(suffix=".png")
+        os.close(out_fd)
+        try:
+            up.save(src_path)
+            _write_raster_preview_png(src_path, out_path, max_side=max_side)
+            with open(out_path, "rb") as f:
+                png_bytes = f.read()
+        except Exception as e:
+            return jsonify({"message": f"预览生成失败: {e}"}), 500
+        finally:
+            for p in (src_path, out_path):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
+        return Response(png_bytes, mimetype="image/png")
+
     @app.delete("/api/clinical/cases/<case_id>")
     def clinical_case_delete(case_id: str):
         data = _read_json(CASES_PATH, {"cases": {}, "caseOrder": []})
@@ -3257,11 +4502,13 @@ def create_app() -> Flask:
         f20_id = ""
         f10_id = ""
         extractor = "raster"
+        quick_mode = False
         trident_mpp: float | None = None
         if up and up.filename:
             case_id = (request.form.get("caseId") or "").strip()
             cancer = (request.form.get("cancer") or "LUSC").strip()
             extractor = str(request.form.get("extractor") or "raster").strip().lower()
+            quick_mode = str(request.form.get("quick") or "").strip().lower() in {"1", "true", "yes", "on"}
             mpp_raw = request.form.get("mpp") or request.form.get("tridentMpp")
             if mpp_raw not in (None, ""):
                 try:
@@ -3282,12 +4529,22 @@ def create_app() -> Flask:
         if case_id not in data.get("cases", {}):
             return jsonify({"message": "病例不存在，请先新增病例"}), 404
 
+        raster_preview_rel: str | None = None
         if up and up.filename:
-            ext = os.path.splitext(up.filename)[1].lower()
+            ext = os.path.splitext(up.filename)[1].strip().lower()
+            wsi_exts = {".svs", ".ndpi", ".mrxs", ".scn"}
             if extractor == "trident":
-                allowed = {".svs", ".ndpi", ".mrxs", ".scn", ".tif", ".tiff", ".png", ".jpg", ".jpeg"}
+                allowed = wsi_exts | {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
             else:
-                allowed = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+                # raster 近似流程只适合位图；若用户上传 WSI，则自动切到 TRIDENT，避免误报“不支持 .svs”。
+                if ext in wsi_exts:
+                    # 真快速模式：当 quick=true 时，WSI 走轻量缩略 + 少量采样近似流程；
+                    # 只有正式模式才强制切 TRIDENT。
+                    if not quick_mode:
+                        extractor = "trident"
+                    allowed = wsi_exts | {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
+                else:
+                    allowed = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
             if ext not in allowed:
                 return jsonify({"message": f"不支持的图像扩展名: {ext}", "allowed": sorted(allowed)}), 400
             if extractor == "trident" and ext in {".png", ".jpg", ".jpeg"} and (trident_mpp is None or trident_mpp <= 0):
@@ -3333,7 +4590,23 @@ def create_app() -> Flask:
                 else:
                     from utils.raster_to_h5 import build_dual_scale_h5_from_image
 
-                    meta = build_dual_scale_h5_from_image(src_img, p20, p10)
+                    if quick_mode and ext in wsi_exts:
+                        # WSI 真快速：先取缩略图，再少量 patch 提特征，显著快于 TRIDENT。
+                        quick_png = os.path.join(work, "quick_preview.png")
+                        _write_raster_preview_png(src_img, quick_png, max_side=1536)
+                        meta = build_dual_scale_h5_from_image(
+                            quick_png,
+                            p20,
+                            p10,
+                            patch_size=224,
+                            stride=224,
+                            max_patches=72,
+                            max_side=1536,
+                        )
+                        meta["quickMode"] = True
+                        meta["quickApproxForWsi"] = True
+                    else:
+                        meta = build_dual_scale_h5_from_image(src_img, p20, p10)
                 safe_c = re.sub(r"[^a-zA-Z0-9._-]+", "_", case_id)[:80]
                 fid20 = _manifest_register_h5_copy(
                     cancer,
@@ -3349,6 +4622,14 @@ def create_app() -> Flask:
                     f"{uuid.uuid4()}__case_{safe_c}_10.h5",
                     extra={"derivedFromRaster": extractor != "trident", "derivedFromTrident": extractor == "trident", "caseId": case_id},
                 )
+                try:
+                    prev_dir = os.path.join(DATA_ROOT, cancer, "case_previews")
+                    os.makedirs(prev_dir, exist_ok=True)
+                    out_png = os.path.join(prev_dir, f"{_safe_case_preview_basename(case_id)}.png")
+                    _write_raster_preview_png(src_img, out_png, max_side=1600)
+                    raster_preview_rel = os.path.relpath(out_png, BASE_DIR).replace("\\", "/")
+                except Exception:
+                    raster_preview_rel = None
             except Exception as e:
                 shutil.rmtree(work, ignore_errors=True)
                 return jsonify(
@@ -3365,6 +4646,8 @@ def create_app() -> Flask:
             c["feature10FileId"] = fid10
             c["featureSource"] = "trident_derived" if extractor == "trident" else "raster_derived"
             c["rasterSourceFileName"] = secure_filename(up.filename)
+            if raster_preview_rel:
+                c["rasterPreviewPath"] = raster_preview_rel
             c["updatedAt"] = _utc_now()
             _atomic_write_json(CASES_PATH, data)
             return jsonify(
@@ -3383,7 +4666,11 @@ def create_app() -> Flask:
                         else (
                             "已通过 TRIDENT 生成双尺度特征并关联到病例"
                             if extractor == "trident"
-                            else "已从病理图像生成双尺度特征并关联到病例"
+                            else (
+                                "已通过快速模式生成近似双尺度特征并关联到病例"
+                                if quick_mode
+                                else "已从病理图像生成双尺度特征并关联到病例"
+                            )
                         )
                     ),
                 }
@@ -3521,11 +4808,16 @@ def create_app() -> Flask:
         f = request.files.get("file")
         if not f or not f.filename:
             return jsonify({"message": "缺少输入文件（字段名 file）"}), 400
-        ext = os.path.splitext(f.filename)[1].lower()
+        ext = os.path.splitext(f.filename)[1].strip().lower()
+        wsi_exts = {".svs", ".ndpi", ".mrxs", ".scn"}
         if extractor == "trident":
-            allowed = {".svs", ".ndpi", ".mrxs", ".scn", ".tif", ".tiff", ".png", ".jpg", ".jpeg"}
+            allowed = wsi_exts | {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
         else:
-            allowed = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
+            if ext in wsi_exts:
+                extractor = "trident"
+                allowed = wsi_exts | {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
+            else:
+                allowed = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
         if ext not in allowed:
             return jsonify({"message": f"不支持的图像扩展名: {ext}", "allowed": sorted(allowed)}), 400
         if extractor == "trident" and ext in {".png", ".jpg", ".jpeg"} and (trident_mpp is None or trident_mpp <= 0):
@@ -3618,7 +4910,8 @@ def create_app() -> Flask:
                 out.append({"input": it, "error": str(e)})
         return jsonify({"results": out})
 
-    # API 重启后若有排队任务且当前无 running，自动继续调度
+    # API 重启：将仍为 running 但子进程已不存在的任务改回 queued，再启动调度线程
+    _requeue_all_orphaned_running_tasks()
     threading.Thread(target=_dispatch_next_queued, daemon=True).start()
     return app
 

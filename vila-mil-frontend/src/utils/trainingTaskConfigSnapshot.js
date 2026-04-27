@@ -4,12 +4,14 @@ export const ENSEMBLE_BRANCH_IDS = ['RRTMIL', 'AMIL', 'WiKG', 'DSMIL', 'S4MIL']
 export const normalizeEnsembleExcludeKey = (name) => {
   const u = String(name).trim().toUpperCase().replace(/-/g, '_')
   if (u === 'S4') return 'S4MIL'
-  return u
+  if (u === 'WIKG') return 'WiKG'
+  if (u === 'RRTMIL' || u === 'AMIL' || u === 'DSMIL' || u === 'S4MIL') return u
+  return null
 }
 
 /** 未出现在 exclude 中的分支即参与（与训练页勾选「包含」一致） */
 export const ensembleActiveBranches = (excluded) => {
-  const ex = new Set((excluded || []).map(normalizeEnsembleExcludeKey))
+  const ex = new Set((excluded || []).map(normalizeEnsembleExcludeKey).filter(Boolean))
   return ENSEMBLE_BRANCH_IDS.filter((b) => ex.has(b) === false)
 }
 
@@ -18,6 +20,12 @@ export const formatFusionModeLabel = (fusion) => {
   if (f === 'gate') return '门控加权 (gate)'
   if (f === 'concat') return '对齐后拼接 (concat)'
   return fusion || '—'
+}
+
+export const formatDecisionFusionLabel = (v) => {
+  const f = v ? String(v).toLowerCase() : ''
+  if (f === 'avg_prob') return '简单概率均值 (avg_prob)'
+  return v || '—'
 }
 
 const parseCmdArg = (cmd, flag) => {
@@ -52,7 +60,12 @@ export const buildTaskConfigSnapshot = (task) => {
       ? task.earlyStopping
       : /\b--early_stopping\b/i.test(cmd)
   const fusionRaw = task.ensembleFusion || parseCmdArg(cmd, '--ensemble_fusion')
-  const fusion = fusionRaw ? String(fusionRaw).toLowerCase() : model === 'EnsembleFeature' ? 'gate' : ''
+  const fusion = fusionRaw ? String(fusionRaw).toLowerCase() : ''
+  const decisionRaw = task.decisionFusion || parseCmdArg(cmd, '--decision_fusion')
+  const decisionFusion = decisionRaw ? String(decisionRaw).toLowerCase() : ''
+  const dbwFromTask = task.decisionBranchWeights
+  const decisionBranchWeights =
+    dbwFromTask != null && String(dbwFromTask).trim() !== '' ? String(dbwFromTask).trim() : ''
   let exclude = []
   if (Array.isArray(task.ensembleExclude)) {
     exclude = task.ensembleExclude.map((s) => String(s).trim()).filter(Boolean)
@@ -96,6 +109,8 @@ export const buildTaskConfigSnapshot = (task) => {
     batchSize: task.batchSize,
     repeatTotal: task.repeatTotal ?? task.repeat,
     ensembleFusion: fusion,
+    decisionFusion,
+    decisionBranchWeights,
     finetuneEnsemble: finetune,
     ensembleExclude: exclude,
     ensembleExcludeFromCmd,

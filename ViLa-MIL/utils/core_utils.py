@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 import torch
 from utils.utils import *
@@ -73,7 +75,7 @@ class EarlyStopping:
         self.counter = 0
         self.best_score = None
         self.early_stop = False
-        self.val_loss_min = np.Inf
+        self.val_loss_min = np.inf
 
     def __call__(self, epoch, val_loss, model, ckpt_name = 'checkpoint.pt'):
 
@@ -98,6 +100,112 @@ class EarlyStopping:
             print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
         torch.save(model.state_dict(), ckpt_name)
         self.val_loss_min = val_loss
+
+
+def _ensemble_objective_from_parts(
+    parts: np.ndarray,
+    weights: np.ndarray,
+    n_classes: int,
+    surv_t: np.ndarray | None,
+    surv_e: np.ndarray | None,
+    labels: np.ndarray,
+) -> float:
+    """
+    给定缓存好的各支路 logits 与候选权重，返回目标分数（优先 C-index，否则 AUC）。
+    """
+    logits = np.tensordot(parts, weights, axes=([1], [0]))  # (N, K)
+    logits = logits - np.max(logits, axis=1, keepdims=True)
+    prob = np.exp(logits)
+    prob = prob / np.clip(np.sum(prob, axis=1, keepdims=True), 1e-12, None)
+    risk = np.dot(prob, np.arange(n_classes, dtype=np.float64))
+    if surv_t is not None and surv_e is not None and len(surv_t) >= 2:
+        cidx, pairs = _harrell_cindex_validation(surv_t, surv_e, risk)
+        if pairs > 0 and np.isfinite(cidx):
+            return float(cidx)
+    try:
+        if n_classes == 2:
+            return float(roc_auc_score(labels, prob[:, 1]))
+        return float(roc_auc_score(labels, prob, multi_class='ovr'))
+    except ValueError:
+        return float("-inf")
+
+
+def _auto_tune_ensemble_weights(model, val_loader, n_classes: int, max_trials: int = 256) -> tuple[np.ndarray | None, float]:
+    """
+    在验证集上为 EnsembleDecision(weighted) 自动搜索分支权重。
+    返回 (best_weights, best_score)；若不可调返回 (None, -inf)。
+    """
+    if getattr(model, "decision_fusion", "") != "weighted":
+        return None, float("-inf")
+    device = next(model.parameters()).device
+    parts_all: list[np.ndarray] = []
+    labels: list[int] = []
+    sd = getattr(val_loader.dataset, "slide_data", None)
+    has_surv = sd is not None and hasattr(sd, "columns") and "time" in sd.columns and "status" in sd.columns
+    surv_t: list[float] = []
+    surv_e: list[int] = []
+    with torch.no_grad():
+        for batch_idx, (data_s, coord_s, data_l, coords_l, label) in enumerate(val_loader):
+            data_s = data_s.to(device, non_blocking=True)
+            data_l = data_l.to(device, non_blocking=True)
+            p, _m = model.stack_branch_logits(data_s, data_l)
+            parts_all.append(p.squeeze(0).detach().cpu().numpy())  # (5, K)
+            labels.append(int(label.view(-1)[0].item()))
+            if has_surv:
+                try:
+                    row = sd.iloc[int(batch_idx)]
+                    t = float(row["time"])
+                    ev = int(row["status"])
+                    if t > 0 and ev in (0, 1):
+                        surv_t.append(t)
+                        surv_e.append(ev)
+                    else:
+                        has_surv = False
+                except (ValueError, TypeError, KeyError, IndexError):
+                    has_surv = False
+    if not parts_all:
+        return None, float("-inf")
+    parts_np = np.stack(parts_all, axis=0)  # (N,5,K)
+    labels_np = np.asarray(labels, dtype=np.int64)
+    surv_t_np = np.asarray(surv_t, dtype=np.float64) if has_surv and len(surv_t) == len(parts_all) else None
+    surv_e_np = np.asarray(surv_e, dtype=np.int64) if has_surv and len(surv_e) == len(parts_all) else None
+    mask = model.ensemble_branch_mask.detach().cpu().numpy().astype(np.float64)
+    active = np.where(mask > 0.5)[0]
+    if len(active) == 0:
+        return None, float("-inf")
+
+    candidates: list[np.ndarray] = []
+    # 当前模型权重
+    base_w = torch.softmax(
+        model.fusion_logits.detach().cpu().masked_fill(model.ensemble_branch_mask.cpu() < 0.5, -1e4), dim=-1
+    ).numpy().astype(np.float64)
+    candidates.append(base_w)
+    # 等权
+    eq = np.zeros_like(mask)
+    eq[active] = 1.0 / float(len(active))
+    candidates.append(eq)
+    # 单专家上限探测
+    for idx in active:
+        oh = np.zeros_like(mask)
+        oh[idx] = 1.0
+        candidates.append(oh)
+    # 随机 Dirichlet 采样
+    rng = np.random.default_rng(20260427)
+    alpha = np.ones(len(active), dtype=np.float64)
+    for _ in range(int(max_trials)):
+        s = rng.dirichlet(alpha)
+        w = np.zeros_like(mask)
+        w[active] = s
+        candidates.append(w)
+
+    best_score = float("-inf")
+    best_w = None
+    for w in candidates:
+        score = _ensemble_objective_from_parts(parts_np, w, n_classes, surv_t_np, surv_e_np, labels_np)
+        if score > best_score:
+            best_score = score
+            best_w = w
+    return best_w, float(best_score)
 
 def train(datasets, cur, args):
     """   
@@ -205,21 +313,31 @@ def train(datasets, cur, args):
                 d_state=16,
             )
             model.config = config
-        elif args.model_type == "EnsembleFeature":
-            from models.EnsembleFeature import EnsembleFeatureMIL, _parse_ensemble_exclude
-            freeze = bool(getattr(args, "freeze_base", True)) and not bool(getattr(args, "finetune_ensemble", False))
-            fusion_mode = str(getattr(args, "ensemble_fusion", "gate") or "gate").strip().lower()
-            if fusion_mode not in ("gate", "concat"):
-                fusion_mode = "gate"
+        elif args.model_type == "EnsembleDecision":
+            from models.EnsembleDecision import EnsembleDecisionMIL
+            from models.ensemble_branch_utils import _parse_ensemble_exclude
+
             excl = _parse_ensemble_exclude(getattr(args, "ensemble_exclude", "") or "")
-            model = EnsembleFeatureMIL(
-                config=config, n_classes=args.n_classes,
-                feat_dim=inferred_dim, freeze_base=freeze,
-                fusion_mode=fusion_mode,
+            df = str(getattr(args, "decision_fusion", "avg_prob") or "avg_prob").strip().lower()
+            if df != "avg_prob":
+                df = "avg_prob"
+            bp_raw = getattr(args, "ensemble_branch_prior", "") or ""
+            bp = str(bp_raw).strip() or None
+            dbw_raw = getattr(args, "decision_branch_weights", "") or ""
+            dbw = str(dbw_raw).strip() or None
+            model = EnsembleDecisionMIL(
+                config=config,
+                n_classes=args.n_classes,
+                feat_dim=inferred_dim,
+                freeze_base=True,
+                decision_fusion=df,
                 ensemble_exclude=excl,
+                branch_prior=bp,
+                branch_prior_scale=float(getattr(args, "ensemble_branch_prior_scale", 1.25)),
+                branch_prior_temperature=float(getattr(args, "ensemble_branch_prior_temperature", 1.0)),
+                decision_branch_weights=dbw,
             )
             model.config = config
-            # 基线预训练权重：1) 显式目录 ensemble_ckpt_dir；2) 否则从 uploaded_features/best_models.json + tasks.json 按当前折自动解析
             ckpt_dir = getattr(args, "ensemble_ckpt_dir", None)
             ckpt_names = {
                 "rrt_ckpt": "RRTMIL",
@@ -269,15 +387,13 @@ def train(datasets, cur, args):
                         device=device,
                     )
                     print(
-                        f"Loaded pre-trained baselines (auto, fold={cur}) from best_models.json + tasks.json "
-                        f"under {os.path.join(vila_root, 'uploaded_features')}"
+                        f"Loaded pre-trained baselines (auto, fold={cur}) for EnsembleDecision from "
+                        f"best_models.json + tasks.json under {os.path.join(vila_root, 'uploaded_features')}"
                     )
                 else:
                     print(
-                        "Warning: auto baseline checkpoint resolve failed "
-                        f"(fold={cur}). Need bestTaskId for RRTMIL/AMIL/WiKG/DSMIL/S4MIL under same cancer/mode "
-                        f"and s_{cur}_checkpoint.pt in each task resultsDir. "
-                        "Use --ensemble_ckpt_dir or train five baselines via platform first."
+                        "Warning: auto baseline checkpoint resolve failed for EnsembleDecision "
+                        f"(fold={cur}). Train five baselines or use --ensemble_ckpt_dir."
                     )
         elif args.model_type == "surformer":
             from models.HVTSurv import HVTSurv
@@ -305,6 +421,62 @@ def train(datasets, cur, args):
     print('Done!')
     print_network(model)
 
+    print('\nInit Loaders...', end=' ')
+    train_loader = get_split_loader(train_split, training=True, testing = args.testing, weighted = args.weighted_sample, mode=args.mode)
+    # For per-epoch train metrics (AUC/F1), use a deterministic order loader.
+    train_eval_loader = get_split_loader(train_split, training=False, testing=args.testing, weighted=False, mode=args.mode)
+    val_loader = get_split_loader(val_split,  testing = args.testing, mode=args.mode)
+    test_loader = get_split_loader(test_split, testing = args.testing, mode=args.mode)
+    print('Done!')
+
+    if args.model_type == "EnsembleDecision":
+        print(
+            "\nEnsembleDecision: 决策级融合不训练（五路基线已预训练，融合为固定规则）；"
+            "跳过优化与 epoch，直接验证/测试并写出 checkpoint。\n"
+        )
+        model.eval()
+        auto_tune = bool(getattr(args, "ensemble_auto_tune_weights", True))
+        has_manual_weights = bool(str(getattr(args, "decision_branch_weights", "") or "").strip())
+        if auto_tune and getattr(model, "decision_fusion", "") == "weighted" and not has_manual_weights:
+            best_w, best_score = _auto_tune_ensemble_weights(
+                model=model,
+                val_loader=val_loader,
+                n_classes=int(args.n_classes),
+                max_trials=int(getattr(args, "ensemble_weight_search_trials", 256)),
+            )
+            if best_w is not None:
+                model.set_decision_weights(torch.tensor(best_w, dtype=model.fusion_logits.dtype))
+                w_str = ", ".join([f"{x:.3f}" for x in best_w.tolist()])
+                print(
+                    "EnsembleDecision auto-tune(weights on val) done. "
+                    f"best_score={best_score:.4f}, weights=[{w_str}]"
+                )
+            else:
+                print("EnsembleDecision auto-tune skipped: no valid candidate from val set.")
+        ckpt_path = os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))
+        _, val_error, val_auc, _, val_f1 = summary(args.mode, model, val_loader, args.n_classes)
+        print('Val error: {:.4f}, ROC AUC: {:.4f}, F1: {:.4f}'.format(val_error, val_auc, val_f1))
+        results_dict, test_error, test_auc, acc_logger, test_f1 = summary(
+            args.mode, model, test_loader, args.n_classes
+        )
+        print('Test error: {:.4f}, ROC AUC: {:.4f}, F1: {:.4f}'.format(test_error, test_auc, test_f1))
+        each_class_acc = []
+        for i in range(args.n_classes):
+            acc, correct, count = acc_logger.get_summary(i)
+            each_class_acc.append(acc)
+            acc_str = "N/A" if acc is None else "{:.4f}".format(acc)
+            print('class {}: acc {}, correct {}/{}'.format(i, acc_str, correct, count))
+            if writer:
+                writer.add_scalar('final/test_class_{}_acc'.format(i), acc, 0)
+        if writer:
+            writer.add_scalar('final/val_error', val_error, 0)
+            writer.add_scalar('final/val_auc', val_auc, 0)
+            writer.add_scalar('final/test_error', test_error, 0)
+            writer.add_scalar('final/test_auc', test_auc, 0)
+            writer.close()
+        torch.save(model.state_dict(), ckpt_path)
+        return results_dict, test_auc, val_auc, 1 - test_error, 1 - val_error, each_class_acc, test_f1
+
     print('\nInit optimizer ...', end=' ')
     optimizer = get_optim(model, args)
     print('Done!')
@@ -319,14 +491,6 @@ def train(datasets, cur, args):
             optimizer, "min", factor=0.1, patience=10
         )
 
-    print('\nInit Loaders...', end=' ')
-    train_loader = get_split_loader(train_split, training=True, testing = args.testing, weighted = args.weighted_sample, mode=args.mode)
-    # For per-epoch train metrics (AUC/F1), use a deterministic order loader.
-    train_eval_loader = get_split_loader(train_split, training=False, testing=args.testing, weighted=False, mode=args.mode)
-    val_loader = get_split_loader(val_split,  testing = args.testing, mode=args.mode)
-    test_loader = get_split_loader(test_split, testing = args.testing, mode=args.mode)
-    print('Done!')
-
     print('\nSetup EarlyStopping...', end=' ')
     if args.early_stopping:
         early_stopping = EarlyStopping(patience=20, stop_epoch=80, verbose=True)
@@ -336,9 +500,18 @@ def train(datasets, cur, args):
 
     for epoch in range(args.max_epochs):
         train_loop(args, epoch, model, train_loader, optimizer, args.n_classes, writer, loss_fn)
-        stop = validate(cur, epoch, model, val_loader, args.n_classes, 
-            early_stopping, writer, loss_fn, args.results_dir)
-        if stop: 
+        stop, val_cidx_ep = validate(
+            cur,
+            epoch,
+            model,
+            val_loader,
+            args.n_classes,
+            early_stopping,
+            writer,
+            loss_fn,
+            args.results_dir,
+        )
+        if stop:
             break
         # Compute and print train-set metrics (ROC AUC/F1) for UI summary.
         try:
@@ -348,10 +521,10 @@ def train(datasets, cur, args):
             # Don't fail training if metrics computation fails; keep a clear log line.
             print(f'Train metrics failed: {e}')
 
-    if args.early_stopping: 
+    if args.early_stopping:
         model.load_state_dict(torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))))
-    else:
-        torch.save(model.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
+
+    torch.save(model.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
 
     _, val_error, val_auc, _, val_f1 = summary(args.mode, model, val_loader, args.n_classes)
     print('Val error: {:.4f}, ROC AUC: {:.4f}, F1: {:.4f}'.format(val_error, val_auc, val_f1))
@@ -389,7 +562,16 @@ def train_loop(args, epoch, model, loader, optimizer, n_classes, writer = None, 
     print('\n')
     for batch_idx, (data_s, coord_s, data_l, coords_l, label) in enumerate(loader):
         data_s, coord_s, data_l, coords_l, label = data_s.to(device), coord_s.to(device), data_l.to(device), coords_l.to(device), label.to(device)
-        if args.model_type in {"ViLa_MIL", "RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL", "surformer", "EnsembleFeature"}:
+        if args.model_type in {
+            "ViLa_MIL",
+            "RRTMIL",
+            "AMIL",
+            "WiKG",
+            "DSMIL",
+            "S4MIL",
+            "surformer",
+            "EnsembleDecision",
+        }:
             logits, Y_prob, loss = model(data_s, coord_s, data_l, coords_l, label)
             Y_hat = torch.topk(Y_prob, 1, dim=1)[1]
             if loss is None:
@@ -426,8 +608,45 @@ def train_loop(args, epoch, model, loader, optimizer, n_classes, writer = None, 
     if writer:
         writer.add_scalar('train/loss', train_loss, epoch)
         writer.add_scalar('train/error', train_error, epoch)
-   
-def validate(cur, epoch, model, loader, n_classes, early_stopping = None, writer = None, loss_fn = None, results_dir=None):
+
+
+def _harrell_cindex_validation(times: np.ndarray, events: np.ndarray, scores: np.ndarray) -> tuple[float, int]:
+    """
+    验证集 Harrell C-index（可比患者对：较早时间点为事件者；scores 越大风险越高）。
+    与队列预测 C-index 定义一致，便于用 val_cidx 筛选与随访更对齐的 checkpoint。
+    """
+    n = int(len(times))
+    if n < 2:
+        return float("nan"), 0
+    conc = ties = disc = 0
+    comparable = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            ti, tj = float(times[i]), float(times[j])
+            ei, ej = int(events[i]), int(events[j])
+            si, sj = float(scores[i]), float(scores[j])
+            if ti < tj and ei == 1:
+                comparable += 1
+                if si > sj:
+                    conc += 1
+                elif si < sj:
+                    disc += 1
+                else:
+                    ties += 1
+            elif tj < ti and ej == 1:
+                comparable += 1
+                if sj > si:
+                    conc += 1
+                elif sj < si:
+                    disc += 1
+                else:
+                    ties += 1
+    if comparable == 0:
+        return float("nan"), 0
+    return (conc + 0.5 * ties) / comparable, comparable
+
+
+def validate(cur, epoch, model, loader, n_classes, early_stopping = None, writer = None, loss_fn = None, results_dir=None) -> tuple[bool, float]:
     device=torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.eval()
     acc_logger = Accuracy_Logger(n_classes=n_classes)
@@ -439,6 +658,17 @@ def validate(cur, epoch, model, loader, n_classes, early_stopping = None, writer
 
     all_pred = []
     all_label = []
+    sd = getattr(loader.dataset, "slide_data", None)
+    has_surv = (
+        sd is not None
+        and hasattr(sd, "columns")
+        and "time" in sd.columns
+        and "status" in sd.columns
+        and len(loader) > 0
+    )
+    surv_t: list[float] = []
+    surv_e: list[int] = []
+    surv_r: list[float] = []
     with torch.no_grad():
         for batch_idx, (data_s, coord_s, data_l, coords_l, label) in enumerate(loader):
             data_s, coord_s, data_l, coords_l, label = data_s.to(device, non_blocking=True), coord_s.to(device, non_blocking=True), \
@@ -463,6 +693,21 @@ def validate(cur, epoch, model, loader, n_classes, early_stopping = None, writer
             val_error += error
             all_pred.append(int(Y_hat.view(-1)[0].item()))
             all_label.append(int(label.view(-1)[0].item()))
+            if has_surv:
+                try:
+                    row = sd.iloc[int(batch_idx)]
+                    t = float(row["time"])
+                    ev = int(row["status"])
+                    if t > 0 and ev in (0, 1):
+                        if n_classes == 2:
+                            rsk = float(prob[batch_idx, 1])
+                        else:
+                            rsk = float(np.dot(prob[batch_idx], np.arange(n_classes, dtype=np.float64)))
+                        surv_t.append(t)
+                        surv_e.append(ev)
+                        surv_r.append(rsk)
+                except (ValueError, TypeError, KeyError, IndexError):
+                    pass
 
     val_error /= len(loader)
     val_loss /= len(loader)
@@ -474,26 +719,45 @@ def validate(cur, epoch, model, loader, n_classes, early_stopping = None, writer
     else:
         auc = roc_auc_score(labels, prob, multi_class='ovr')
     
+    val_cidx, val_cidx_pairs = (float("nan"), 0)
+    if has_surv and len(surv_t) >= 2:
+        val_cidx, val_cidx_pairs = _harrell_cindex_validation(
+            np.asarray(surv_t, dtype=np.float64),
+            np.asarray(surv_e, dtype=np.int64),
+            np.asarray(surv_r, dtype=np.float64),
+        )
+
     if writer:
         writer.add_scalar('val/loss', val_loss, epoch)
         writer.add_scalar('val/auc', auc, epoch)
         writer.add_scalar('val/error', val_error, epoch)
+        if np.isfinite(val_cidx):
+            writer.add_scalar('val/c_index', float(val_cidx), epoch)
 
-    print('\nVal Set, val_loss: {:.4f}, val_error: {:.4f}, auc: {:.4f}, f1: {: .4f}'.format(val_loss, val_error, auc, val_f1))
+    val_cidx_token = "nan" if not np.isfinite(val_cidx) else f"{float(val_cidx):.4f}"
+    print(
+        "\nVal Set, val_loss: {:.4f}, val_error: {:.4f}, auc: {:.4f}, f1: {:.4f}, val_cidx: {}".format(
+            val_loss, val_error, auc, val_f1, val_cidx_token
+        )
+    )
     for i in range(n_classes):
         acc, correct, count = acc_logger.get_summary(i)
         acc_str = "N/A" if acc is None else "{:.4f}".format(acc)
         print('class {}: acc {}, correct {}/{}'.format(i, acc_str, correct, count))
 
+    val_cidx_float = float(val_cidx) if np.isfinite(val_cidx) else float("nan")
+
     if early_stopping:
         assert results_dir
-        early_stopping(epoch, val_error, model, ckpt_name = os.path.join(results_dir, "s_{}_checkpoint.pt".format(cur)))
-        
+        ckpt_name = os.path.join(results_dir, "s_{}_checkpoint.pt".format(cur))
+        es_monitor = val_error
+        early_stopping(epoch, es_monitor, model, ckpt_name=ckpt_name)
+
         if early_stopping.early_stop:
             print("Early stopping")
-            return True
+            return True, val_cidx_float
 
-    return False
+    return False, val_cidx_float
 
 def summary(mode, model, loader, n_classes):
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
