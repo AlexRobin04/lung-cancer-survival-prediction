@@ -8,33 +8,34 @@
 ## 1) 方法流程图（可直接粘贴）
 
 ```mermaid
-flowchart TD
-    A[输入病例特征 x] --> B[五路基线MIL前向<br/>RRTMIL / AMIL / WiKG / DSMIL / S4MIL]
-    B --> C[分支logits: z_b]
-    C --> D[分支概率: p_b = softmax(z_b)]
-    D --> E[avg_prob融合<br/>p_fused = Σ w_b p_b]
-    E --> F[基础风险: r_base = E[k|p_fused]]
+flowchart TB
+    subgraph S0["阶段一：基础融合"]
+      direction LR
+      A[输入特征 X] --> B[五路基线 MIL]
+      B --> C[分支 logits]
+      C --> D[概率映射 Softmax]
+      D --> E[avg_prob 融合]
+      E --> F[基础风险 r_base]
+    end
 
-    subgraph S1[在线策略增强]
-      G[历史队列C-index排序<br/>选最强best与次强second]
-      H{当前case有best历史预测?}
-      I[复用best概率<br/>p := p_best]
-      J[回退到p_fused]
-      K[轻量二次校准<br/>r = r_best + λ·sign(r_second-r_best)]
-      L{稳健门控通过?}
-      M[输出r(λ>0)]
-      N[回退λ=0<br/>输出r_best]
+    subgraph S1["阶段二：稳健增强"]
+      direction LR
+      G[历史排序<br/>best / second] --> H{best 历史预测可用?}
+      H -- 是 --> I[复用最强分支概率]
+      H -- 否 --> J[使用融合概率]
+      I --> K[轻量校准 r_lambda]
+      J --> K
+      K --> L{稳健门控}
+      L -- 通过 --> M[输出 r_lambda]
+      L -- 回退 --> N[输出 r_0]
     end
 
     F --> G
-    G --> H
-    H -- 是 --> I
-    H -- 否 --> J
-    I --> K
-    J --> K
-    K --> L
-    L -- 通过 --> M
-    L -- 不通过 --> N
+    M --> O[最终风险分数]
+    N --> O
+
+    P[门控条件：lambda 上限 / 时间切分验证 / 最小提升阈值]
+    L -. 约束 .-> P
 ```
 
 ---

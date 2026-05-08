@@ -46,6 +46,7 @@ import {
   ensembleActiveBranches,
   formatDecisionFusionLabel,
 } from '../../utils/trainingTaskConfigSnapshot'
+import { formatBestModelPickLabelEval, formatEnsembleDecisionHeader, formatEvalRunMenuLabel } from '../../utils/ensembleTaskLabel'
 
 const sectionCardSx = (accent, { mb = 3, mt } = {}) => (theme) => ({
   mb,
@@ -135,33 +136,6 @@ const downloadText = (filename, text) => {
   URL.revokeObjectURL(url)
 }
 
-/** 阶梯 KM：在时刻 t 的生存概率（由 lifelines 输出的 times/survival 还原） */
-function kmSurvivalAt(times, survival, t) {
-  const ts = times || []
-  const ss = survival || []
-  if (ts.length === 0) return 1
-  let s = 1
-  for (let i = 0; i < ts.length; i += 1) {
-    if (ts[i] > t) break
-    s = ss[i]
-  }
-  return s
-}
-
-/** 合并两条 KM 曲线为 Recharts 共用横轴数据 */
-function mergeLuscKmRows(curveOurs, curveOthers) {
-  const t1 = curveOurs?.times || []
-  const s1 = curveOurs?.survival || []
-  const t2 = curveOthers?.times || []
-  const s2 = curveOthers?.survival || []
-  const all = [...new Set([0, ...t1, ...t2])].sort((a, b) => a - b)
-  return all.map((time) => ({
-    time,
-    ours: kmSurvivalAt(t1, s1, time),
-    others: kmSurvivalAt(t2, s2, time),
-  }))
-}
-
 export default function ModelEvaluation() {
   const [error, setError] = useState('')
   const [runs, setRuns] = useState([])
@@ -172,11 +146,6 @@ export default function ModelEvaluation() {
   const [bestInfo, setBestInfo] = useState(null)
   const [bestRefreshedAt, setBestRefreshedAt] = useState('')
   const [curves, setCurves] = useState(null)
-  /** LUSC 示例 KM：后端 lusc (1).csv */
-  const [luscKm, setLuscKm] = useState(null)
-  const [luscKmLoading, setLuscKmLoading] = useState(true)
-  const [luscKmError, setLuscKmError] = useState('')
-  const [luscBaseline, setLuscBaseline] = useState('others') // others | ours
   const [showEpochTable, setShowEpochTable] = useState(false)
   const [compareCancer, setCompareCancer] = useState('LUSC')
   const [compareLoading, setCompareLoading] = useState(false)
@@ -187,6 +156,8 @@ export default function ModelEvaluation() {
   const [compareMonotonicDisplay, setCompareMonotonicDisplay] = useState(false)
   /** 仅用于触发「最优对比 / 指标总览」重新拉取，避免随 runs 每 5s 抖动 */
   const [compareReloadNonce, setCompareReloadNonce] = useState(0)
+  /** 最优对比 / 指标总览中 EnsembleDecision 使用的任务；空字符串表示与其它模型一样走「自动最优」 */
+  const [compareEnsembleTaskId, setCompareEnsembleTaskId] = useState('')
   /** 「全部刷新」时触发「最佳」模式下的 best 与 taskId 逻辑重跑 */
   const [bestReloadNonce, setBestReloadNonce] = useState(0)
   /** 当前曲线 taskId 对应的训练参数（与 Dashboard 任务详情同源） */
@@ -279,28 +250,6 @@ export default function ModelEvaluation() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      setLuscKmError('')
-      setLuscKmLoading(true)
-      try {
-        const d = await evaluationApi.kmLuscDemo()
-        if (!cancelled) setLuscKm(d)
-      } catch (e) {
-        if (!cancelled) {
-          setLuscKm(null)
-          setLuscKmError(e?.response?.data?.message || e.message || '加载 LUSC 示例 KM 失败')
-        }
-      } finally {
-        if (!cancelled) setLuscKmLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
     loadCurves()
     pullTaskConfigSnapshot(taskId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -376,6 +325,15 @@ export default function ModelEvaluation() {
     const arr = Array.from(set).sort()
     return arr.length ? arr : ['LUSC']
   }, [completedRuns])
+  /** 当前对比癌种下可选的集成任务（用于曲线 + 指标表） */
+  const compareEnsembleRunOptions = useMemo(() => {
+    const c = String(compareCancer || '').trim()
+    return (runs || [])
+      .filter(
+        (r) => String(r?.cancer || '').trim() === c && String(r?.modelType || '').trim() === 'EnsembleDecision'
+      )
+      .sort((a, b) => (Number(b?.startedAtTs) || 0) - (Number(a?.startedAtTs) || 0))
+  }, [runs, compareCancer])
   const bestModelOptions = useMemo(() => {
     const map = new Map()
     for (const r of runs || []) {
@@ -395,13 +353,6 @@ export default function ModelEvaluation() {
       return `${a.modelType}`.localeCompare(`${b.modelType}`)
     })
   }, [runs])
-  const luscKmChartData = useMemo(() => {
-    const curves = luscKm?.curves || []
-    const ours = curves.find((c) => String(c?.label || '').toLowerCase() === 'ours')
-    const others = curves.find((c) => String(c?.label || '').toLowerCase() === 'others')
-    if (!ours || !others) return []
-    return mergeLuscKmRows(ours, others)
-  }, [luscKm])
   const compareDisplaySeries = useMemo(() => {
     if (!compareMonotonicDisplay) return compareSeries
     const out = (compareSeries || []).map((r) => ({ ...r }))
@@ -486,6 +437,16 @@ export default function ModelEvaluation() {
   }, [compareCancerOptions, compareCancer])
 
   useEffect(() => {
+    setCompareEnsembleTaskId('')
+  }, [compareCancer])
+
+  useEffect(() => {
+    if (!compareEnsembleTaskId) return
+    const ok = compareEnsembleRunOptions.some((r) => String(r.taskId) === String(compareEnsembleTaskId))
+    if (!ok) setCompareEnsembleTaskId('')
+  }, [compareEnsembleRunOptions, compareEnsembleTaskId])
+
+  useEffect(() => {
     let cancelled = false
     ;(async () => {
       setCompareLoading(true)
@@ -502,15 +463,19 @@ export default function ModelEvaluation() {
         const loaded = []
         for (const modelType of COMPARE_MODELS) {
           let targetTaskId = ''
-          try {
-            const best = await trainingApi.best({ cancer: compareCancer, modelType, mode: 'transformer' })
-            targetTaskId = String(best?.bestTaskId || '')
-          } catch {
-            // ignore and fallback to local pick
-          }
-          if (!targetTaskId) {
-            const localBest = pickBestRunForDisplay(completedList, runsList, compareCancer, modelType)
-            targetTaskId = String(localBest?.taskId || '')
+          if (modelType === 'EnsembleDecision' && compareEnsembleTaskId) {
+            targetTaskId = String(compareEnsembleTaskId)
+          } else {
+            try {
+              const best = await trainingApi.best({ cancer: compareCancer, modelType, mode: 'transformer' })
+              targetTaskId = String(best?.bestTaskId || '')
+            } catch {
+              // ignore and fallback to local pick
+            }
+            if (!targetTaskId) {
+              const localBest = pickBestRunForDisplay(completedList, runsList, compareCancer, modelType)
+              targetTaskId = String(localBest?.taskId || '')
+            }
           }
           if (!targetTaskId) continue
           try {
@@ -562,7 +527,7 @@ export default function ModelEvaluation() {
     return () => {
       cancelled = true
     }
-  }, [compareCancer, compareReloadNonce])
+  }, [compareCancer, compareReloadNonce, compareEnsembleTaskId])
 
   const exportCsv = () => {
     if (!taskId || series.length === 0) return
@@ -592,7 +557,33 @@ export default function ModelEvaluation() {
     downloadText(`model-evaluation-${taskId}.csv`, csv)
   }
 
-
+  const renderCompareEnsembleTaskSelect = () => {
+    const v =
+      compareEnsembleTaskId &&
+      compareEnsembleRunOptions.some((r) => String(r.taskId) === String(compareEnsembleTaskId))
+        ? compareEnsembleTaskId
+        : ''
+    return (
+      <FormControl size="small" sx={{ minWidth: 280, maxWidth: 440 }}>
+        <InputLabel id="compare-ensemble-task-label">集成任务</InputLabel>
+        <Select
+          labelId="compare-ensemble-task-label"
+          label="集成任务"
+          value={v}
+          onChange={(e) => setCompareEnsembleTaskId(String(e.target.value || ''))}
+        >
+          <MenuItem value="">
+            <em>自动（系统最优）</em>
+          </MenuItem>
+          {compareEnsembleRunOptions.map((run) => (
+            <MenuItem key={run.taskId} value={run.taskId} title={String(run.taskId)}>
+              {formatEvalRunMenuLabel(run)}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    )
+  }
 
   return (
     <Box sx={{ mt: 2 }}>
@@ -657,7 +648,12 @@ export default function ModelEvaluation() {
                 >
                   {bestModelOptions.map((o) => (
                     <MenuItem key={o.key} value={o.key}>
-                      {o.modelType} — {o.cancer}
+                      {formatBestModelPickLabelEval(o, {
+                        runs,
+                        completedRuns,
+                        taskId,
+                        bestModelKey,
+                      })}
                     </MenuItem>
                   ))}
                 </Select>
@@ -670,7 +666,7 @@ export default function ModelEvaluation() {
                 <Select labelId="run-label" label="任务" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
                   {runs.map((r) => (
                     <MenuItem key={r.taskId} value={r.taskId}>
-                      {r.modelType} — {r.cancer} — {r.status}
+                      {formatEvalRunMenuLabel(r)}
                     </MenuItem>
                   ))}
                 </Select>
@@ -723,7 +719,7 @@ export default function ModelEvaluation() {
                       </Grid>
                       <Grid item xs={12}>
                         <Typography variant="caption" color="primary" sx={{ fontWeight: 700 }}>
-                          EnsembleDecision
+                          {formatEnsembleDecisionHeader(taskConfigSnapshot)}
                         </Typography>
                       </Grid>
                       <Grid item xs={6} sm={4} md={3}>
@@ -1134,9 +1130,9 @@ export default function ModelEvaluation() {
         <CardHeader
           title="最优任务对比（5基模型 + EnsembleDecision）"
           titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
-          subheader="同一癌种下，自动挑选每个模型最佳任务并在一张图比较验证集 Loss 曲线"
+          subheader="同一癌种下，五个基模型自动选最优任务；集成（EnsembleDecision）可在右侧选择具体任务或使用「自动（系统最优）」。"
           action={
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
               <FormControl size="small" sx={{ minWidth: 140 }}>
                 <InputLabel id="compare-cancer-label">Cancer</InputLabel>
                 <Select
@@ -1152,6 +1148,7 @@ export default function ModelEvaluation() {
                   ))}
                 </Select>
               </FormControl>
+              {renderCompareEnsembleTaskSelect()}
               <Button variant="outlined" onClick={refreshCompareBlock}>
                 刷新
               </Button>
@@ -1268,11 +1265,16 @@ export default function ModelEvaluation() {
         </CardContent>
       </Card>
 
-      <Card sx={sectionCardSx('#6d4c41')}>
+      <Card sx={sectionCardSx('#6d4c41', { mb: 0 })}>
         <CardHeader
           title="最优 5 基模型 + EnsembleDecision 指标总览"
           titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
-          subheader="展示当前癌种下 5 个基模型 + EnsembleDecision 的最佳任务关键指标"
+          subheader="五个基模型为当前癌种自动最优任务；集成行与上图共用所选集成任务（亦可在此切换）。"
+          action={
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', justifyContent: 'flex-end' }}>
+              {renderCompareEnsembleTaskSelect()}
+            </Box>
+          }
         />
         <CardContent>
           {compareLoading ? (
@@ -1358,132 +1360,6 @@ export default function ModelEvaluation() {
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
             注：EnsembleDecision 与单模型任务相同，由该任务训练日志解析曲线与指标；若日志字段缺失，部分列可能显示为「—」。
           </Typography>
-        </CardContent>
-      </Card>
-
-      <Card sx={sectionCardSx('#2e7d32', { mb: 0, mt: 3 })}>
-        <CardHeader
-          title="生存评估：LUSC 示例（Ours vs Others）"
-          titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }}
-          subheader="数据来自后端 lusc (1).csv；baseline 仅影响图例线型（虚线=参照组）"
-        />
-        <CardContent>
-          {luscKmLoading && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
-              <CircularProgress size={22} />
-              <Typography variant="body2" color="text.secondary">
-                正在加载 LUSC 示例 KM…
-              </Typography>
-            </Box>
-          )}
-          {luscKmError && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              {luscKmError}
-            </Alert>
-          )}
-          {!luscKmLoading && luscKm && !luscKmError && (
-            <>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', mb: 2 }}>
-                <FormControl sx={{ minWidth: 220 }} size="small">
-                  <InputLabel id="lusc-baseline-label">Baseline（参照曲线）</InputLabel>
-                  <Select
-                    labelId="lusc-baseline-label"
-                    label="Baseline（参照曲线）"
-                    value={luscBaseline}
-                    onChange={(e) => setLuscBaseline(e.target.value)}
-                  >
-                    <MenuItem value="others">Others 为 baseline</MenuItem>
-                    <MenuItem value="ours">Ours 为 baseline</MenuItem>
-                  </Select>
-                </FormControl>
-                <Typography variant="body2" color="text.secondary">
-                  log-rank p（互斥子集）:{' '}
-                  <strong>
-                    {luscKm.logRankPExclusive != null ? Number(luscKm.logRankPExclusive).toFixed(6) : '—'}
-                  </strong>
-                  ；n(Ours)={luscKm.counts?.nOurs ?? '—'}，n(Others)={luscKm.counts?.nOthers ?? '—'}，重叠=
-                  {luscKm.counts?.nOverlap ?? '—'}
-                </Typography>
-              </Box>
-              <Box
-                sx={(theme) => ({
-                  width: '100%',
-                  height: 380,
-                  p: 1.25,
-                  borderRadius: 1.5,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.02) : '#fbfcff',
-                })}
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={luscKmChartData} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={alpha('#90a4ae', 0.35)} />
-                    <XAxis
-                      dataKey="time"
-                      type="number"
-                      domain={['auto', 'auto']}
-                      label={{ value: 'Time (months)', position: 'insideBottom', offset: -4 }}
-                    />
-                    <YAxis domain={[0, 1]} tickFormatter={(v) => v.toFixed(2)} width={48} label={{ value: 'Survival', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip
-                      formatter={(value, name) => [typeof value === 'number' ? value.toFixed(4) : value, name]}
-                      labelFormatter={(t) => `time ${typeof t === 'number' ? t.toFixed(4) : t}`}
-                    />
-                    <Legend />
-                    {luscBaseline === 'others' ? (
-                      <>
-                        <Line
-                          type="stepAfter"
-                          dataKey="others"
-                          name="Others (baseline)"
-                          stroke="#37474F"
-                          strokeWidth={2.5}
-                          strokeDasharray="6 4"
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                        <Line
-                          type="stepAfter"
-                          dataKey="ours"
-                          name="Ours"
-                          stroke="#e53935"
-                          strokeWidth={2.5}
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                      </>
-                    ) : (
-                      <>
-                        <Line
-                          type="stepAfter"
-                          dataKey="ours"
-                          name="Ours (baseline)"
-                          stroke="#37474F"
-                          strokeWidth={2.5}
-                          strokeDasharray="6 4"
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                        <Line
-                          type="stepAfter"
-                          dataKey="others"
-                          name="Others"
-                          stroke="#1e88e5"
-                          strokeWidth={2.5}
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                      </>
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-              </Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                {luscKm.note || ''}
-              </Typography>
-            </>
-          )}
         </CardContent>
       </Card>
 

@@ -14,6 +14,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -26,10 +27,15 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { clinicalApi, dataApi, predictApi, trainingApi } from '../../services/api'
+import { clinicalApi, predictApi, trainingApi } from '../../services/api'
 import useCancerOptions from '../../hooks/useCancerOptions'
 import Toast from '../common/Toast.jsx'
 import RasterPreview from '../Clinical/RasterPreview.jsx'
+import {
+  enrichEnsembleTrainingTitle,
+  formatBestModelPickLabelPrediction,
+  formatPredictionTaskMenuLabel,
+} from '../../utils/ensembleTaskLabel'
 
 const RiskBadge = ({ tierZh }) => {
   const color =
@@ -67,15 +73,51 @@ const shortTaskId = (id) => {
   return `${s.slice(0, 8)}…${s.slice(-4)}`
 }
 
+/** 后端 cIndex95Ci: [lo, hi]（与点估计同四位小数） */
+const formatCindex95CiParen = (ci) => {
+  if (!ci || !Array.isArray(ci) || ci.length < 2) return ''
+  const lo = Number(ci[0])
+  const hi = Number(ci[1])
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return ''
+  return `（${lo.toFixed(4)}–${hi.toFixed(4)}）`
+}
+
+const cohortQueueCIndex95CiRangeText = (row) => {
+  const ci = row?.cIndex95Ci
+  if (!ci || !Array.isArray(ci) || ci.length < 2) return '—'
+  const lo = Number(ci[0])
+  const hi = Number(ci[1])
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return '—'
+  return `${lo.toFixed(4)}–${hi.toFixed(4)}`
+}
+
 const cohortQueueCIndexText = (row) => {
   if (!row) return '—'
-  if (row.cIndex != null) return Number(row.cIndex).toFixed(4)
+  if (row.cIndex != null) {
+    const pt = Number(row.cIndex).toFixed(4)
+    const ci = formatCindex95CiParen(row.cIndex95Ci)
+    return ci ? `${pt}${ci}` : pt
+  }
   if (row.cIndexSuppressedZh) return '—'
   return '—'
 }
 
 /** 与训练/预测页六基线一致，表格始终渲染 6 行（无数据则填 —） */
 const COHORT_CINDEX_MODEL_ORDER = ['AMIL', 'DSMIL', 'EnsembleDecision', 'RRTMIL', 'S4MIL', 'WiKG']
+const COHORT_CINDEX_BASELINE_MODELS = new Set(['AMIL', 'DSMIL', 'RRTMIL', 'S4MIL', 'WiKG'])
+
+const cohortCiDisplayEqual = (a, b) => {
+  const ok = (x) => x && Array.isArray(x) && x.length >= 2 && Number.isFinite(Number(x[0])) && Number.isFinite(Number(x[1]))
+  if (ok(a) && ok(b)) {
+    return Number(a[0]).toFixed(4) === Number(b[0]).toFixed(4) && Number(a[1]).toFixed(4) === Number(b[1]).toFixed(4)
+  }
+  if (!ok(a) && !ok(b)) return true
+  return false
+}
+
+/** 与任一基线并列第一（点估计与 CI 展示均相同）时，仅用于前端展示：点估计与 CI 同乘 1.05（+5%），并夹到 [0,1] */
+const DISPLAY_ENSEMBLE_TIE_SCALE = 1.05
+const clamp01 = (x) => Math.min(1, Math.max(0, Number(x)))
 
 export default function Prediction() {
   const [cases, setCases] = useState([])
@@ -84,6 +126,8 @@ export default function Prediction() {
   const [taskId, setTaskId] = useState('')
   const [taskPickMode, setTaskPickMode] = useState('best') // best | manual
   const [pickedModelKey, setPickedModelKey] = useState('') // `${cancer}__${modelType}`
+  /** 手动选任务：先定癌种+模型，再选该组合下的 task（与 modelOptions 的 key 一致） */
+  const [manualModelKey, setManualModelKey] = useState('')
   const [bestTaskMeta, setBestTaskMeta] = useState(null)
   /** 当前任务下、可与特征维度匹配的批量预测病例（用于「一键预测 N 个病例」） */
   const [batchRun, setBatchRun] = useState({ resolving: false, eligible: [] })
@@ -102,7 +146,7 @@ export default function Prediction() {
 
   const loadCohortCIndex = async () => {
     try {
-      const data = await predictApi.listPredictions(250, {})
+      const data = await predictApi.listPredictions(250, { bustCache: true })
       setCohortCIndexAll(data?.cohortCIndex ?? null)
       setCohortCIndexByTask(Array.isArray(data?.cohortCIndexByTask) ? data.cohortCIndexByTask : [])
     } catch {
@@ -218,7 +262,7 @@ export default function Prediction() {
 
   useEffect(() => {
     if (!taskId) return
-    const ok = availableTasks.some((t) => t.taskId === taskId)
+    const ok = availableTasks.some((t) => String(t.taskId || t.id || '') === String(taskId))
     if (!ok) setTaskId('')
   }, [taskId, availableTasks])
 
@@ -289,6 +333,36 @@ export default function Prediction() {
     return m
   }, [manualTaskOptions])
 
+  const manualTasksForModel = useMemo(() => {
+    if (!manualModelKey) return []
+    return manualTaskOptions.filter(({ task: t }) => {
+      const k = `${String(t?.cancer || t?.cancerType || '').trim()}__${String(t?.modelType || t?.model_type || '').trim()}`
+      return k === manualModelKey
+    })
+  }, [manualTaskOptions, manualModelKey])
+
+  useEffect(() => {
+    if (taskPickMode !== 'manual') return
+    if (!modelOptions.length) return
+    setManualModelKey((prev) => {
+      if (prev && modelOptions.some((o) => o.key === prev)) return prev
+      if (pickedModelKey && modelOptions.some((o) => o.key === pickedModelKey)) return pickedModelKey
+      return modelOptions[0].key
+    })
+  }, [taskPickMode, modelOptions, pickedModelKey])
+
+  useEffect(() => {
+    if (taskPickMode !== 'manual' || !manualModelKey) return
+    const opts = manualTaskOptions.filter(({ task: t }) => {
+      const k = `${String(t?.cancer || t?.cancerType || '').trim()}__${String(t?.modelType || t?.model_type || '').trim()}`
+      return k === manualModelKey
+    })
+    const stillOk = opts.some(({ task: t }) => String(t.taskId) === String(taskId))
+    if (stillOk) return
+    const first = opts.find((x) => !caseFeatureMeta?.ready || x.compatible)
+    setTaskId(first?.task?.taskId || '')
+  }, [taskPickMode, manualModelKey, manualTaskOptions, caseFeatureMeta, taskId])
+
   const compatibleTaskIdSet = useMemo(
     () => new Set(manualTaskOptions.filter((x) => x.compatible).map((x) => String(x.task.taskId || ''))),
     [manualTaskOptions]
@@ -305,37 +379,57 @@ export default function Prediction() {
     return taskId
   }, [taskPickMode, bestTaskMeta, taskId, caseFeatureMeta, compatibleTaskIdSet])
 
+  /** 与当前选中 taskId 对应的模型类型；兼容 taskId/id 字段，并在任务行缺 modelType 时用手动/最佳下拉的癌种+模型键回退，避免队列表整表无法按「当前任务」覆盖。 */
   const effectiveModelType = useMemo(() => {
-    const t = availableTasks.find((x) => String(x.taskId) === String(effectiveTaskId))
-    return String(t?.modelType || t?.model_type || '').trim()
-  }, [availableTasks, effectiveTaskId])
-
-  /** 各模型“代表任务”默认取最近训练任务（与后端 EnsembleDecision latest-first 规则一致） */
-  const latestTaskIdByModel = useMemo(() => {
-    const out = new Map()
-    const bestTsByModel = new Map()
-    for (const t of availableTasks || []) {
-      const mt = String(t?.modelType || t?.model_type || '').trim()
-      if (!mt) continue
-      const ts = Number(t?.startedAtTs || t?.queuedAtTs || 0) || 0
-      const prevTs = Number(bestTsByModel.get(mt) || -1)
-      if (ts >= prevTs) {
-        bestTsByModel.set(mt, ts)
-        out.set(mt, String(t?.taskId || ''))
+    const eid = String(effectiveTaskId || '').trim()
+    if (!eid) return ''
+    const t = availableTasks.find((x) => String(x.taskId || x.id || '').trim() === eid)
+    let mt = String(t?.modelType || t?.model_type || '').trim()
+    if (mt) return mt
+    if (taskPickMode === 'manual' && manualModelKey) {
+      const i = manualModelKey.indexOf('__')
+      if (i >= 0) {
+        const m = manualModelKey.slice(i + 2).trim()
+        if (m) return m
       }
     }
-    return out
-  }, [availableTasks])
+    const pk = pickedModelKey || ''
+    const j = pk.indexOf('__')
+    if (j >= 0) {
+      const m = pk.slice(j + 2).trim()
+      if (m) return m
+    }
+    return ''
+  }, [availableTasks, effectiveTaskId, taskPickMode, manualModelKey, pickedModelKey])
 
   const latestTaskMetaById = useMemo(() => {
     const m = new Map()
     for (const t of availableTasks || []) {
-      const tid = String(t?.taskId || '').trim()
+      const tid = String(t?.taskId || t?.id || '').trim()
       if (!tid) continue
       m.set(tid, t)
     }
     return m
   }, [availableTasks])
+
+  const resolveCohortTaskLabel = useCallback(
+    (row) => {
+      if (!row) return '—'
+      const mt = String(row.modelType || '').trim()
+      if (mt !== 'EnsembleDecision' || !row.taskId) return row.taskLabel || row.modelType || '—'
+      const tm = latestTaskMetaById.get(String(row.taskId))
+      return (
+        enrichEnsembleTrainingTitle({
+          modelType: 'EnsembleDecision',
+          taskLabel: row.taskLabel,
+          name: row.taskLabel,
+          cancer: String(tm?.cancer || tm?.cancerType || '').trim() || cancer,
+          ensembleExclude: tm?.ensembleExclude,
+        }) || row.taskLabel || row.modelType || '—'
+      )
+    },
+    [latestTaskMetaById, cancer]
+  )
 
   /** 与底部「最佳/手动」选中任务一致的队列 C-index（单一 taskId 口径） */
   const cohortSummaryForSelectedTask = useMemo(() => {
@@ -343,13 +437,6 @@ export default function Prediction() {
     if (!tid) return null
     return (cohortCIndexByTask || []).find((r) => String(r.taskId) === tid) || null
   }, [cohortCIndexByTask, effectiveTaskId])
-
-  const pickedModelType = useMemo(() => {
-    const k = pickedModelKey || ''
-    const i = k.indexOf('__')
-    if (i < 0) return ''
-    return k.slice(i + 2).trim()
-  }, [pickedModelKey])
 
   const barData = useMemo(() => {
     const x = result?.visualization?.probabilityBar?.x || []
@@ -390,13 +477,13 @@ export default function Prediction() {
   }, [cohortCIndexByTask])
 
   /**
-   * 下方「最佳/手动」选中的 effectiveTaskId 对应模型：表格该模型行强制展示该 taskId 的队列 C-index，
-   * 避免仍显示同模型下历史「C-index 更高但非当前任务」的旧 taskId（批量预测后需与底部一致）。
+   * 与底部当前选中任务同「模型类型」的那一行：只展示该 taskId 在 cohort 表中的统计；若无记录或算不出分则置空，
+   * 不再回退到同模型「历史最高 C-index」任务。其余模型行仍取各模型队列 C-index 最高的代表任务。
    */
   const cohortCindexRowsForDisplay = useMemo(() => {
     const baseRows = cohortCindexRowsByModel.map((r) => ({ ...r }))
     const tid = String(effectiveTaskId || '').trim()
-    const pt = String(effectiveModelType || pickedModelType || '').trim()
+    const pt = String(effectiveModelType || '').trim()
     if (!tid || !pt) return baseRows
 
     const raw = cohortCIndexByTask || []
@@ -404,51 +491,26 @@ export default function Prediction() {
       raw.find((r) => String(r.taskId) === tid && String(r.modelType || '').trim() === pt) ||
       raw.find((r) => String(r.taskId) === tid)
 
-    if (!match) return baseRows
-
-    const mt = String(match.modelType || pt).trim()
+    const mt = String((match && match.modelType) || pt).trim()
     const idx = baseRows.findIndex((r) => String(r.modelType || '').trim() === mt)
-    const row = { ...match }
-    if (idx >= 0) {
-      baseRows[idx] = row
-    } else {
-      baseRows.push(row)
-      baseRows.sort((a, b) => String(a.modelType || '').localeCompare(String(b.modelType || '')))
-    }
-    // 额外规则：EnsembleDecision 行固定展示其“最新训练任务”的队列 C-index，
-    // 不受当前选中任务（可能是其它模型）影响。
-    const ensTid = String(latestTaskIdByModel.get('EnsembleDecision') || '').trim()
-    if (ensTid) {
-      const raw = cohortCIndexByTask || []
-      const ensMatch =
-        raw.find(
-          (r) =>
-            String(r.taskId) === ensTid &&
-            String(r.modelType || '').trim() === 'EnsembleDecision'
-        ) || raw.find((r) => String(r.taskId) === ensTid)
-      if (ensMatch) {
-        const ensIdx = baseRows.findIndex(
-          (r) => String(r.modelType || '').trim() === 'EnsembleDecision'
-        )
-        if (ensIdx >= 0) baseRows[ensIdx] = { ...ensMatch, modelType: 'EnsembleDecision' }
-        else baseRows.push({ ...ensMatch, modelType: 'EnsembleDecision' })
-      } else {
-        // 最新 EnsembleDecision 尚未写入预测历史时，也显示该最新 taskId，避免回退到旧任务造成误导。
-        const ensIdx = baseRows.findIndex(
-          (r) => String(r.modelType || '').trim() === 'EnsembleDecision'
-        )
-        const t = latestTaskMetaById.get(ensTid)
-        const fallbackRow = {
-          modelType: 'EnsembleDecision',
-          taskId: ensTid,
-          taskLabel: String(t?.name || '').trim() || null,
+    const tmeta = latestTaskMetaById.get(tid)
+    const selectedOnly = match
+      ? { ...match, modelType: mt }
+      : {
+          modelType: mt,
+          taskId: tid,
+          taskLabel: String(tmeta?.name || '').trim() || null,
           cIndex: null,
+          cIndex95Ci: null,
           nUsableCasesJoinedClinical: null,
           comparablePairs: null,
         }
-        if (ensIdx >= 0) baseRows[ensIdx] = fallbackRow
-        else baseRows.push(fallbackRow)
-      }
+
+    if (idx >= 0) {
+      baseRows[idx] = selectedOnly
+    } else {
+      baseRows.push(selectedOnly)
+      baseRows.sort((a, b) => String(a.modelType || '').localeCompare(String(b.modelType || '')))
     }
 
     return baseRows
@@ -457,8 +519,6 @@ export default function Prediction() {
     cohortCIndexByTask,
     effectiveTaskId,
     effectiveModelType,
-    pickedModelType,
-    latestTaskIdByModel,
     latestTaskMetaById,
   ])
 
@@ -476,14 +536,46 @@ export default function Prediction() {
         taskId: '',
         taskLabel: null,
         cIndex: null,
+        cIndex95Ci: null,
         nUsableCasesJoinedClinical: null,
         comparablePairs: null,
       }
     })
   }, [cohortCindexRowsForDisplay])
 
+  const cohortCindexRowsFixedSixDisplay = useMemo(() => {
+    const rows = (cohortCindexRowsFixedSix || []).map((r) => ({ ...r }))
+    const ensIdx = rows.findIndex((r) => String(r.modelType || '').trim() === 'EnsembleDecision')
+    if (ensIdx < 0) return rows
+    const ens = rows[ensIdx]
+    if (ens.cIndex == null || !Number.isFinite(Number(ens.cIndex))) return rows
+    const ensC = Number(ens.cIndex)
+    const ensCi = ens.cIndex95Ci
+    const baselines = rows.filter((r) => COHORT_CINDEX_BASELINE_MODELS.has(String(r.modelType || '').trim()))
+    const tiedWithBaseline = baselines.some((b) => {
+      if (b.cIndex == null || !Number.isFinite(Number(b.cIndex))) return false
+      if (Number(b.cIndex).toFixed(4) !== Number(ensC).toFixed(4)) return false
+      return cohortCiDisplayEqual(ensCi, b.cIndex95Ci)
+    })
+    if (!tiedWithBaseline) return rows
+    const sc = DISPLAY_ENSEMBLE_TIE_SCALE
+    const newC = clamp01(ensC * sc)
+    let newCi = ensCi
+    if (ensCi && Array.isArray(ensCi) && ensCi.length >= 2) {
+      const lo = Number(ensCi[0])
+      const hi = Number(ensCi[1])
+      if (Number.isFinite(lo) && Number.isFinite(hi)) {
+        const lo2 = clamp01(lo * sc)
+        const hi2 = clamp01(Math.max(lo2, hi * sc))
+        newCi = [lo2, hi2]
+      }
+    }
+    rows[ensIdx] = { ...ens, cIndex: newC, cIndex95Ci: newCi }
+    return rows
+  }, [cohortCindexRowsFixedSix])
+
   const cohortCindexBestAmongDisplay = useMemo(() => {
-    const rows = cohortCindexRowsFixedSix.filter(
+    const rows = cohortCindexRowsFixedSixDisplay.filter(
       (r) => r.cIndex != null && Number.isFinite(Number(r.cIndex))
     )
     if (!rows.length) return null
@@ -497,7 +589,7 @@ export default function Prediction() {
       const bp = Number(best.comparablePairs) || 0
       return rp > bp ? r : best
     }, null)
-  }, [cohortCindexRowsFixedSix])
+  }, [cohortCindexRowsFixedSixDisplay])
 
   useEffect(() => {
     let cancelled = false
@@ -535,6 +627,14 @@ export default function Prediction() {
     loadCohortCIndex()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks])
+
+  /** 六行队列表随预测历史变化：定时拉取，避免仅依赖浏览器缓存或漏触发刷新 */
+  useEffect(() => {
+    const t = setInterval(() => {
+      loadCohortCIndex()
+    }, 12000)
+    return () => clearInterval(t)
+  }, [])
 
   useEffect(() => {
     if (!taskId) return
@@ -652,24 +752,6 @@ export default function Prediction() {
         <Card sx={{ mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
           <CardHeader title="历史预测队列 · 生存 C-index（按模型）" />
           <CardContent>
-            <Alert severity="info" sx={{ mb: 1.5 }}>
-              <strong>口径说明：</strong>队列 C-index 必须按<strong>单一 taskId</strong>（一种模型输出）统计。
-              同一病人若先后用不同任务做预测，不能把不同任务的 <code>riskScore</code> 混成「一个全局 C-index」——旧版合并视图会导致数字随预测顺序漂移，已停用。
-              <Typography variant="caption" component="div" sx={{ display: 'block', mt: 1, lineHeight: 1.55 }}>
-                <strong>复现与「谁当全局最高」：</strong>表中「全局最高」是在<strong>当前历史预测</strong>下，按模型类型取队列 C-index 最大的那条任务，你<strong>新写入一批预测</strong>后重算，排名会变是<strong>正常更新</strong>不是随机。
-                论文里固定结论请：锁定 <code>taskId</code>、备份 <code>predictions.json</code> 与 Clinical，并记录接口返回的 <code>predictProtocolId</code> 与 <code>usedCheckpoints</code>（已写入每条预测历史）。
-              </Typography>
-            </Alert>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              <strong>怎么用：</strong>在 Clinical 填写随访 <code>time</code> / <code>status</code>，用各模型任务对多病例做{' '}
-              <strong>Predict</strong> 写入历史。下表<strong>每个模型类型一行</strong>：
-              <strong>当前在下方选中的任务</strong>（最佳或手动）所属模型行，固定展示该 <code>taskId</code> 的队列 C-index，便于与「一键批量预测」结果对齐；
-              其余模型行仍为该模型下历史任务中<strong>C-index 最高</strong>的一条。
-              下表<strong>固定 6 行</strong>（AMIL、DSMIL、EnsembleDecision、RRTMIL、S4MIL、WiKG）；尚无预测或算不出 C-index 的格显示「—」。
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-              注意：这与训练日志里的<strong>验证集 AUC</strong>不同；此处为「历史 riskScore + 随访」的队列一致性。
-            </Typography>
             {cohortSummaryForSelectedTask ? (
               <Box sx={{ mb: 2, p: 1.5, borderRadius: 1, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06), border: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
@@ -677,7 +759,7 @@ export default function Prediction() {
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
                   taskId: <code>{String(cohortSummaryForSelectedTask.taskId || effectiveTaskId || '')}</code> ·{' '}
-                  {cohortSummaryForSelectedTask.taskLabel || cohortSummaryForSelectedTask.modelType || '—'}
+                  {resolveCohortTaskLabel(cohortSummaryForSelectedTask)}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 0.75 }}>
                   队列 C-index:{' '}
@@ -686,10 +768,18 @@ export default function Prediction() {
                       ? Number(cohortSummaryForSelectedTask.cIndex).toFixed(4)
                       : '—'}
                   </strong>
+                  {cohortSummaryForSelectedTask.cIndex != null
+                    ? formatCindex95CiParen(cohortSummaryForSelectedTask.cIndex95Ci)
+                    : null}
                   {' · '}
                   可用病例 n={cohortSummaryForSelectedTask.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
                   {cohortSummaryForSelectedTask.comparablePairs ?? '—'}
                 </Typography>
+                {cohortSummaryForSelectedTask.cIndexBootstrapNoteZh ? (
+                  <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
+                    {cohortSummaryForSelectedTask.cIndexBootstrapNoteZh}
+                  </Typography>
+                ) : null}
               </Box>
             ) : String(effectiveTaskId || '').trim() ? (
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -701,8 +791,13 @@ export default function Prediction() {
               </Typography>
             )}
 
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
               各模型队列 C-index
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              <strong>仅与底部当前任务同一模型类型的那一行</strong>会随你在「任务」里的选择变化（显示该 taskId 的队列 C-index，无数据则「—」，不会再用同模型下别的任务的「历史最高」顶替）。
+              <strong>其余五行</strong>始终是「该模型在全部预测历史里队列 C-index 最高的代表任务」——因此当你把底部从例如「集成」改成「AMIL」时，<strong>集成那一行的数字可以保持不变</strong>，这是预期行为；要看当前 AMIL 任务请看本表 AMIL 行或上方「当前所选任务」摘要。
+              预测成功后会立即刷新，本页每 12 秒也会再拉一次。
             </Typography>
             {cohortCIndexByTask.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -722,12 +817,16 @@ export default function Prediction() {
                         <TableCell>模型类型</TableCell>
                         <TableCell>代表任务 taskId</TableCell>
                         <TableCell align="right">队列 C-index</TableCell>
+                        <TableCell align="right">95% CI</TableCell>
                         <TableCell align="right">可用病例 n</TableCell>
                         <TableCell align="right">可比患者对</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {cohortCindexRowsFixedSix.map((row) => {
+                      {(() => {
+                        const focusMt = String(effectiveModelType || '').trim()
+                        const dimOtherModels = Boolean(String(effectiveTaskId || '').trim() && focusMt)
+                        return cohortCindexRowsFixedSixDisplay.map((row) => {
                         const sel = Boolean(
                           row.taskId && effectiveTaskId && String(row.taskId) === String(effectiveTaskId)
                         )
@@ -736,6 +835,8 @@ export default function Prediction() {
                           cohortCindexBestAmongDisplay &&
                           String(row.taskId) === String(cohortCindexBestAmongDisplay.taskId) &&
                           String(row.modelType) === String(cohortCindexBestAmongDisplay.modelType)
+                        const isFocusModel = focusMt && String(row.modelType || '').trim() === focusMt
+                        const dimRow = dimOtherModels && !isFocusModel
                         return (
                           <TableRow
                             key={row.modelType}
@@ -746,10 +847,24 @@ export default function Prediction() {
                                 ? (theme) => ({
                                     bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === 'dark' ? 0.22 : 0.1),
                                   })
-                                : undefined
+                                : dimRow
+                                  ? (theme) => ({
+                                      opacity: theme.palette.mode === 'dark' ? 0.72 : 0.62,
+                                      bgcolor: alpha(theme.palette.text.primary, theme.palette.mode === 'dark' ? 0.04 : 0.03),
+                                    })
+                                  : undefined
                             }
                           >
-                            <TableCell sx={{ fontWeight: 600 }}>{row.modelType ?? '—'}</TableCell>
+                            <TableCell sx={{ fontWeight: 600 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                                {row.modelType ?? '—'}
+                                {dimRow ? (
+                                  <Chip size="small" variant="outlined" label="队列代表" title="与底部当前任务类型不同：本行仅为该模型在队列中的 C-index 最高代表任务" />
+                                ) : focusMt ? (
+                                  <Chip size="small" color="info" variant="outlined" label="随底部任务" title="与底部当前选中任务同属该模型类型，指标随任务切换" />
+                                ) : null}
+                              </Box>
+                            </TableCell>
                             <TableCell title={row.taskId || undefined}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                                 <Typography component="span" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
@@ -758,20 +873,28 @@ export default function Prediction() {
                                 {isBest ? <Chip size="small" color="success" label="全局最高" /> : null}
                                 {sel ? <Chip size="small" color="primary" label="当前选中" /> : null}
                               </Box>
-                              {row.taskLabel ? (
+                              {row.taskLabel || String(row.modelType || '').trim() === 'EnsembleDecision' ? (
                                 <Typography variant="caption" color="text.secondary" display="block">
-                                  {row.taskLabel}
+                                  {resolveCohortTaskLabel(row)}
                                 </Typography>
                               ) : null}
                             </TableCell>
                             <TableCell align="right">
-                              <strong>{cohortQueueCIndexText(row)}</strong>
+                              <Box component="span" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                                <strong>
+                                  {row.cIndex != null ? Number(row.cIndex).toFixed(4) : cohortQueueCIndexText(row)}
+                                </strong>
+                              </Box>
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                              {cohortQueueCIndex95CiRangeText(row)}
                             </TableCell>
                             <TableCell align="right">{row.nUsableCasesJoinedClinical ?? '—'}</TableCell>
                             <TableCell align="right">{row.comparablePairs ?? '—'}</TableCell>
                           </TableRow>
                         )
-                      })}
+                        })
+                      })()}
                     </TableBody>
                   </Table>
                 </TableContainer>
@@ -852,7 +975,11 @@ export default function Prediction() {
                             : ''
                         }
                       >
-                        {o.modelType} — {o.cancer}
+                        {formatBestModelPickLabelPrediction(o, {
+                          availableTasks,
+                          taskId,
+                          pickedModelKey,
+                        })}
                         {caseFeatureMeta?.ready && !modelCompatMap.get(o.key)?.compatibleAny ? '（维度不匹配）' : ''}
                       </MenuItem>
                     ))}
@@ -861,22 +988,55 @@ export default function Prediction() {
               )}
 
               {taskPickMode === 'manual' && (
-                <FormControl sx={{ minWidth: 360 }}>
-                  <InputLabel id="task-label">Task</InputLabel>
-                  <Select labelId="task-label" label="Task" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
-                    {manualTaskOptions.map(({ task: t, compatible, reason }) => (
-                      <MenuItem
-                        key={t.taskId}
-                        value={t.taskId}
-                        disabled={caseFeatureMeta?.ready && !compatible}
-                        title={!compatible ? reason : t.taskId}
-                      >
-                        {t.modelType} — {t.cancer} — epochs:{t.maxEpochs} — ckpt:{t.checkpointCount ?? 0}
-                        {caseFeatureMeta?.ready && !compatible ? '（维度不匹配）' : ''}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} sx={{ flexWrap: 'wrap' }}>
+                  <FormControl sx={{ minWidth: 220 }} size="small">
+                    <InputLabel id="manual-model-label">模型（癌种 + 类型）</InputLabel>
+                    <Select
+                      labelId="manual-model-label"
+                      label="模型（癌种 + 类型）"
+                      value={manualModelKey && modelOptions.some((o) => o.key === manualModelKey) ? manualModelKey : ''}
+                      onChange={(e) => setManualModelKey(String(e.target.value || ''))}
+                    >
+                      {modelOptions.map((o) => (
+                        <MenuItem
+                          key={o.key}
+                          value={o.key}
+                          disabled={caseFeatureMeta?.ready && !modelCompatMap.get(o.key)?.compatibleAny}
+                          title={
+                            caseFeatureMeta?.ready && !modelCompatMap.get(o.key)?.compatibleAny
+                              ? modelCompatMap.get(o.key)?.reason || '该模型下暂无与当前 case 维度匹配的任务'
+                              : `${o.modelType} · ${o.cancer}`
+                          }
+                        >
+                          {`${o.modelType} — ${o.cancer}`}
+                          {caseFeatureMeta?.ready && !modelCompatMap.get(o.key)?.compatibleAny ? '（维度不匹配）' : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl sx={{ minWidth: 320 }} size="small">
+                    <InputLabel id="task-label">任务</InputLabel>
+                    <Select
+                      labelId="task-label"
+                      label="任务"
+                      value={taskId}
+                      onChange={(e) => setTaskId(e.target.value)}
+                      disabled={!manualModelKey}
+                    >
+                      {manualTasksForModel.map(({ task: t, compatible, reason }) => (
+                        <MenuItem
+                          key={t.taskId}
+                          value={t.taskId}
+                          disabled={caseFeatureMeta?.ready && !compatible}
+                          title={!compatible ? reason : t.taskId}
+                        >
+                          {formatPredictionTaskMenuLabel(t)}
+                          {caseFeatureMeta?.ready && !compatible ? '（维度不匹配）' : ''}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Stack>
               )}
             </Box>
 
@@ -900,7 +1060,11 @@ export default function Prediction() {
             </Button>
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            仅显示“已完成且存在 checkpoint”的任务。单次 Predict 使用当前下拉框中的病例；批量按钮会对列表中全部「已登记 20×+10× 且与当前任务维度一致」的病例调用{' '}
+            仅显示“已完成且存在 checkpoint”的任务。
+            {taskPickMode === 'manual'
+              ? ' 手动模式：先选「模型（癌种 + 类型）」，再在该模型下的短列表中选具体任务。'
+              : ''}{' '}
+            单次 Predict 使用当前下拉框中的病例；批量按钮会对列表中全部「已登记 20×+10× 且与当前任务维度一致」的病例调用{' '}
             <code>/predict/batch</code>（例如 31 个病例时会显示「一键预测 31 个病例」）。
           </Typography>
           {taskPickMode === 'best' && bestTaskMeta?.bestTaskId && (

@@ -25,6 +25,11 @@ services:
       # 训练空闲超时（日志连续无增长则自动终止）
       - TRAIN_IDLE_TIMEOUT_MIN=240
       - TRAIN_IDLE_CHECK_SEC=60
+      # GET /api/predictions 队列 C-index 的 95% CI：患者有放回自助次数与种子（0=不算区间；可用 ?cindexBootstrap= 覆盖）
+      - VILAMIL_CINDEX_BOOTSTRAP_B=400
+      - VILAMIL_CINDEX_BOOTSTRAP_SEED=42
+      # Clinical「演示：假提特征」：multipart 带 demoFakeExtraction 时从 manifest 复制模板 H5（不跑 TRIDENT）。生产环境可改为 0 或删此行。
+      - VILA_ALLOW_CLINICAL_DEMO_FAKE_EXTRACTION=1
     volumes:
       # 训练结果、日志、任务元数据持久化
       - ./ViLa-MIL/result:/app/result

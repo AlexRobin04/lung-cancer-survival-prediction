@@ -276,7 +276,43 @@
 
 ## 4.7 预测接口
 
-- `GET /api/predictions?limit=50`
+### `GET /api/predictions`（预测列表 + 队列 C-index）
+
+| 查询参数 | 必填 | 说明 |
+|----------|:----:|------|
+| `limit` | 否 | 返回的预测历史条数，默认 `50`，最大 `500` |
+| `taskId` / `task_id` | 否 | 若指定，额外返回该任务的 `cohortCIndexForTask` |
+| `cindexBootstrap` / `cindex_bootstrap` | 否 | 队列 C-index **95% 置信区间**的自助重采样次数；缺省读环境变量 `VILAMIL_CINDEX_BOOTSTRAP_B`（默认 `400`）。`0` 表示只算点估计、不返回区间；最大 `8000` |
+
+响应中与队列统计、置信区间相关的顶层字段：
+
+| 字段 | 说明 |
+|------|------|
+| `items` | 预测历史列表（受 `limit` 截断） |
+| `cIndexBootstrapB` | 本次实际使用的自助次数 |
+| `cIndexBootstrapSeed` | 自助随机种子（环境变量 `VILAMIL_CINDEX_BOOTSTRAP_SEED`，默认 `42`） |
+| `cIndexCiMethodZh` | 区间算法口径的中文简述 |
+| `cohortCIndex` | 不按单一 `taskId` 合并的全局对象（当前为**停用**口径，见返回内 `cIndexSuppressedZh`） |
+| `cohortCIndexByTask` | 按训练任务分行的队列 C-index 与区间等 |
+| `cohortCIndexForTask` | 仅当请求带 `taskId` 时出现，结构与 `cohortCIndexByTask` 单行一致 |
+
+`cohortCIndexByTask` 每一行（及 `cohortCIndexForTask`）中与 C-index / CI 相关的字段：
+
+| 字段 | 说明 |
+|------|------|
+| `taskId` | 训练任务 ID |
+| `cIndex` | 队列生存 C-index 点估计（与可比患者对规则一致） |
+| `cIndex95Ci` | 近似 **95% 置信区间** `[下界, 上界]`（四位小数）；未开启自助或样本/自助失败时为 `null` |
+| `cIndexBootstrapB` | 该行计算使用的自助次数 |
+| `cIndexBootstrapSuccess` | 自助循环中成功得到有限 C-index 的次数 |
+| `cIndexBootstrapNoteZh` | 未给出区间时的原因说明（若有） |
+| `cIndexBootstrapSeed` | 种子（与顶层一致） |
+| `cIndexCiMethodZh` | 该行口径说明 |
+| `nUsableCasesJoinedClinical` | 与 Clinical 成功join且可算分的病例数 |
+| `comparablePairs` | 可比患者对数量 |
+
+- `GET /api/predictions?limit=50`（示例：`GET /api/predictions?limit=250&cindexBootstrap=400`）
+
 - `POST /api/predict`
   - **输入（二选一）**
     - **按病例**：`caseId`（必填）+ `taskId`（可选，缺省时取最近已完成任务）；病例须在 `cases.json` 中已指定 20×/10× 特征文件 ID
@@ -463,18 +499,25 @@ docker compose logs -f backend
 
 ## 10. 关键配置项速查
 
-## 10.1 训练稳定性相关环境变量
+## 10.1 训练稳定性与队列 C-index 自助区间（环境变量）
 
-- `VILAMIL_MIN_AVAIL_GB`
-- `VILAMIL_MIN_SWAP_GB`
-- `TRAIN_IDLE_TIMEOUT_MIN`
-- `TRAIN_IDLE_CHECK_SEC`
+| 变量名 | 典型默认值 | 说明 |
+|--------|------------|------|
+| `VILAMIL_MIN_AVAIL_GB` | `5.5` | ViLa_MIL 启动前 `MemAvailable`（GB）下限 |
+| `VILAMIL_MIN_SWAP_GB` | `2` | `SwapTotal`（GB）下限 |
+| `TRAIN_IDLE_TIMEOUT_MIN` | `20`（`docker-compose` 中常为 `240`） | 训练日志在窗口内无增长则自动终止（分钟） |
+| `TRAIN_IDLE_CHECK_SEC` | `30`（`docker-compose` 中常为 `60`） | 空闲检测轮询间隔（秒） |
+| `VILAMIL_CINDEX_BOOTSTRAP_B` | `400` | `GET /api/predictions` 返回队列 C-index **95% CI** 时的患者有放回自助次数；`0` 只返回点估计；上限 `8000`。请求参数 `cindexBootstrap` 可覆盖 |
+| `VILAMIL_CINDEX_BOOTSTRAP_SEED` | `42` | 上述自助法的随机种子，便于复现 |
+
+其他与 TRIDENT、时区相关的变量见仓库根 `docker-compose.yml` → `services.backend.environment`。
 
 ## 10.2 API 与模型相关
 
 - `MODEL_CHOICES`：模型展示列表
 - `/api/models`：含 `implemented/mode/fallbackTarget`
 - `/api/training/history`：含 `hasCheckpoint/checkpointCount`
+- `/api/predictions`：预测列表 + 按 `taskId` 的队列 C-index 与 **95% CI**（见 **4.7** 节表格）
 
 ---
 

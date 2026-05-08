@@ -18,7 +18,8 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import { clinicalApi, dataApi } from '../../services/api'
+import { clinicalApi } from '../../services/api'
+import { readClinicalDemoFakeExtraction } from '../../utils/clinicalDemoStorage'
 import useCancerOptions from '../../hooks/useCancerOptions'
 import Toast from '../common/Toast.jsx'
 import RasterPreview from './RasterPreview.jsx'
@@ -57,22 +58,15 @@ export default function Clinical() {
   const [notice, setNotice] = useState('')
   const [cases, setCases] = useState([])
   const { cancerOptions, cancer: selectedCancer, setCancer: setSelectedCancer } = useCancerOptions('LUSC')
-  const [feature20Files, setFeature20Files] = useState([])
-  const [feature10Files, setFeature10Files] = useState([])
-
   const [selectedCaseId, setSelectedCaseId] = useState('')
   const [newCaseId, setNewCaseId] = useState('')
   const [editTime, setEditTime] = useState('')
   const [editStatus, setEditStatus] = useState('0')
-  const [selectedF20, setSelectedF20] = useState('')
-  const [selectedF10, setSelectedF10] = useState('')
-  const [assocMode, setAssocMode] = useState('h5') // h5 | wsi
   const [genMode, setGenMode] = useState('quick') // quick | formal
   const [rasterFile, setRasterFile] = useState(null)
   const [tridentMpp, setTridentMpp] = useState('0.25')
   const [associating, setAssociating] = useState(false)
   const [associateProgress, setAssociateProgress] = useState(0)
-
   const caseOptions = useMemo(() => cases.map((c) => c.caseId), [cases])
   const selectedCase = useMemo(() => cases.find((c) => c.caseId === selectedCaseId) || null, [cases, selectedCaseId])
   const hasBoundFeatures = Boolean(selectedCase?.feature20FileId && selectedCase?.feature10FileId)
@@ -167,7 +161,7 @@ export default function Clinical() {
     return () => {
       cancelled = true
     }
-  }, [rasterFile, assocMode])
+  }, [rasterFile])
 
   useEffect(() => {
     if (!selectedCase) {
@@ -182,14 +176,8 @@ export default function Clinical() {
   const loadAll = async () => {
     setError('')
     try {
-      const [cRes, f20, f10] = await Promise.all([
-        clinicalApi.listCases(),
-        dataApi.getFeatures(selectedCancer, '20'),
-        dataApi.getFeatures(selectedCancer, '10'),
-      ])
+      const cRes = await clinicalApi.listCases()
       setCases(cRes?.cases || [])
-      setFeature20Files(f20?.files || [])
-      setFeature10Files(f10?.files || [])
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '加载失败')
     }
@@ -198,7 +186,7 @@ export default function Clinical() {
   useEffect(() => {
     loadAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCancer])
+  }, [])
 
   const uploadCsv = async () => {
     const f = fileRef.current?.files?.[0]
@@ -259,34 +247,6 @@ export default function Clinical() {
     }
   }
 
-  const associateFeaturesH5 = async () => {
-    if (!selectedCaseId) {
-      setError('请先在左侧选择病例')
-      return
-    }
-    if (!selectedF20 || !selectedF10) {
-      setError('请同时选择 20× 与 10× 特征文件')
-      return
-    }
-    setError('')
-    setNotice('')
-    setAssociating(true)
-    try {
-      await clinicalApi.associateFeatures({
-        caseId: selectedCaseId,
-        cancer: selectedCancer,
-        feature20FileId: selectedF20,
-        feature10FileId: selectedF10,
-      })
-      setNotice('特征已关联到当前病例')
-      await loadAll()
-    } catch (e) {
-      setError(e?.response?.data?.message || e.message || '关联失败')
-    } finally {
-      setAssociating(false)
-    }
-  }
-
   const associateFeaturesFromUpload = async () => {
     if (!selectedCaseId) {
       setError('请先在左侧选择病例')
@@ -294,6 +254,12 @@ export default function Clinical() {
     }
     if (!rasterFile) {
       setError('请选择病理图像文件')
+      return
+    }
+    const extractor = genMode === 'formal' ? 'trident' : 'raster'
+    const quick = genMode === 'quick'
+    if (extractor === 'trident' && rasterFile && /\.(png|jpe?g)$/i.test(rasterFile.name || '') && !(Number(tridentMpp) > 0)) {
+      setError('TRIDENT 处理 PNG/JPEG 需填写 mpp（如 0.25）')
       return
     }
     setError('')
@@ -307,21 +273,19 @@ export default function Clinical() {
       setAssociateProgress((p) => (p < target ? p + 2 : p))
     }, 600)
     try {
-      const extractor = genMode === 'formal' ? 'trident' : 'raster'
-      const quick = genMode === 'quick'
-      if (extractor === 'trident' && rasterFile && /\.(png|jpe?g)$/i.test(rasterFile.name || '') && !(Number(tridentMpp) > 0)) {
-        setError('TRIDENT 处理 PNG/JPEG 需填写 mpp（如 0.25）')
-        return
-      }
-      await clinicalApi.associateFeatures({
+      const res = await clinicalApi.associateFeatures({
         caseId: selectedCaseId,
         cancer: selectedCancer,
         file: rasterFile,
         extractor,
         quick,
         mpp: extractor === 'trident' ? tridentMpp : undefined,
+        demoFakeExtraction: readClinicalDemoFakeExtraction() || undefined,
       })
-      setNotice(extractor === 'trident' ? '已通过 TRIDENT 生成特征并关联' : '已通过快速近似流程生成特征并关联')
+      setNotice(
+        res?.message ||
+          (extractor === 'trident' ? '已通过 TRIDENT 生成特征并关联' : '已通过快速近似流程生成特征并关联')
+      )
       setAssociateProgress(100)
       if (rasterFile) {
         setPersistedRasterPreview((prev) => {
@@ -353,8 +317,6 @@ export default function Clinical() {
       await clinicalApi.deleteCase(selectedCaseId)
       setNotice(`已删除：${selectedCaseId}`)
       setSelectedCaseId('')
-      setSelectedF20('')
-      setSelectedF10('')
       setPersistedRasterPreview((prev) => {
         if (prev?.url) URL.revokeObjectURL(prev.url)
         return null
@@ -383,9 +345,6 @@ export default function Clinical() {
       >
         <Typography variant="h4" gutterBottom sx={{ fontWeight: 700, mb: 1 }}>
           Clinical
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 760 }}>
-          左栏维护随访与病例；右栏为当前选中病例准备推理用的双尺度特征。两栏共用同一「当前病例」。
         </Typography>
       </Box>
 
@@ -424,19 +383,12 @@ export default function Clinical() {
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>
               病例与生存数据
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              导入 CSV 或手动新增 caseId，再编辑 time / status（用于随访与部分分析）。
-            </Typography>
 
             <Divider sx={{ mb: 2 }} />
 
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               批量导入
             </Typography>
-            <Alert severity="info" sx={{ mb: 1.5, py: 0.5 }} icon={false}>
-              CSV 需含 <code>case_id</code>、<code>time</code>、<code>status</code>（1=事件，0=删失）；其余列进入{' '}
-              <code>clinicalVars</code>。
-            </Alert>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
               <Button component="label" variant="outlined" size="small">
                 选择 CSV
@@ -566,17 +518,14 @@ export default function Clinical() {
           <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
             <ColumnTitle>特征与推理</ColumnTitle>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>
-              绑定 MIL 所需双尺度 H5
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              推理只读 20× 与 10× 特征。可选：在数据管理页已上传的 H5，或在此上传 WSI 由后端生成特征。
+              从 WSI 生成并绑定双尺度特征
             </Typography>
 
             <Divider sx={{ mb: 2 }} />
 
             {!selectedCaseId ? (
               <Alert severity="warning" sx={{ mb: 2 }}>
-                请先在<strong>左栏</strong>选择或新增一个病例，再在此关联特征。
+                请先在<strong>左栏</strong>选择或新增一个病例，再在此绑定特征或上传 WSI。
               </Alert>
             ) : (
               <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
@@ -587,81 +536,7 @@ export default function Clinical() {
               </Box>
             )}
 
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              方式
-            </Typography>
-            <ToggleButtonGroup
-              value={assocMode}
-              exclusive
-              size="small"
-              fullWidth
-              sx={{ mb: 2 }}
-              onChange={(_, v) => v && setAssocMode(v)}
-              disabled={!selectedCaseId || associating}
-            >
-              <ToggleButton value="h5">已有 H5 文件</ToggleButton>
-              <ToggleButton value="wsi">从 WSI 生成</ToggleButton>
-            </ToggleButtonGroup>
-
-            {assocMode === 'h5' && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="feat-cancer-label">癌种</InputLabel>
-                  <Select
-                    labelId="feat-cancer-label"
-                    label="癌种"
-                    value={selectedCancer}
-                    onChange={(e) => setSelectedCancer(e.target.value)}
-                  >
-                    {cancerOptions.map((opt) => (
-                      <MenuItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="f20-label">20× 特征</InputLabel>
-                  <Select
-                    labelId="f20-label"
-                    label="20× 特征"
-                    value={selectedF20}
-                    onChange={(e) => setSelectedF20(e.target.value)}
-                  >
-                    {feature20Files.map((f) => (
-                      <MenuItem key={f.id} value={f.id}>
-                        {f.name || f.id}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <FormControl fullWidth size="small">
-                  <InputLabel id="f10-label">10× 特征</InputLabel>
-                  <Select
-                    labelId="f10-label"
-                    label="10× 特征"
-                    value={selectedF10}
-                    onChange={(e) => setSelectedF10(e.target.value)}
-                  >
-                    {feature10Files.map((f) => (
-                      <MenuItem key={f.id} value={f.id}>
-                        {f.name || f.id}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Button
-                  variant="contained"
-                  onClick={associateFeaturesH5}
-                  disabled={!selectedCaseId || associating || !selectedF20 || !selectedF10}
-                >
-                  {associating ? <CircularProgress size={20} color="inherit" /> : '保存关联'}
-                </Button>
-              </Box>
-            )}
-
-            {assocMode === 'wsi' && (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 <ToggleButtonGroup
                   value={genMode}
                   exclusive
@@ -673,14 +548,6 @@ export default function Clinical() {
                   <ToggleButton value="quick">快速预览（只跑近似）</ToggleButton>
                   <ToggleButton value="formal">正式预测（TRIDENT）</ToggleButton>
                 </ToggleButtonGroup>
-                {associating && (
-                  <Box sx={{ mb: 0.5 }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.6 }}>
-                      正在生成双尺度特征并写入病例，请稍候（{associateProgress}%）
-                    </Typography>
-                    <LinearProgress variant="determinate" value={Math.max(2, Math.min(100, associateProgress))} />
-                  </Box>
-                )}
                 {genMode === 'formal' ? (
                   <Alert severity="info" sx={{ py: 0.5 }}>
                     正式预测 = TRIDENT 全量特征提取（20x/10x），耗时更长但结果更正式。
@@ -690,6 +557,14 @@ export default function Clinical() {
                     快速预览 ≈ 低采样近似（先缩略再少量采样），速度更快，仅用于快速查看趋势。
                   </Alert>
                 )}
+                {associating && (
+                  <Box sx={{ mb: 0.5 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.6 }}>
+                      正在生成双尺度特征并写入病例，请稍候（{associateProgress}%）
+                    </Typography>
+                    <LinearProgress variant="determinate" value={Math.max(2, Math.min(100, associateProgress))} />
+                  </Box>
+                )}
                 <FormControl fullWidth size="small">
                   <InputLabel id="raster-cancer-label">癌种</InputLabel>
                   <Select
@@ -697,6 +572,7 @@ export default function Clinical() {
                     label="癌种"
                     value={selectedCancer}
                     onChange={(e) => setSelectedCancer(e.target.value)}
+                    disabled={associating}
                   >
                     {cancerOptions.map((opt) => (
                       <MenuItem key={opt.value} value={opt.value}>
@@ -705,7 +581,7 @@ export default function Clinical() {
                     ))}
                   </Select>
                 </FormControl>
-                {genMode === 'formal' && (
+                {genMode === 'formal' ? (
                   <TextField
                     size="small"
                     label="MPP（可选，PNG/JPEG 必填）"
@@ -714,7 +590,7 @@ export default function Clinical() {
                     placeholder="如 0.25"
                     helperText="WSI 通常可从元数据读取；普通图片无元数据时请填写"
                   />
-                )}
+                ) : null}
                 <Button component="label" variant="outlined" disabled={!selectedCaseId || associating}>
                   选择 WSI 文件
                   <input
@@ -751,10 +627,15 @@ export default function Clinical() {
                   onClick={associateFeaturesFromUpload}
                   disabled={!selectedCaseId || associating || !rasterFile}
                 >
-                  {associating ? <CircularProgress size={20} color="inherit" /> : genMode === 'formal' ? '上传并正式预测（TRIDENT）' : '上传并快速预览'}
+                  {associating ? (
+                    <CircularProgress size={20} color="inherit" />
+                  ) : genMode === 'formal' ? (
+                    '上传并正式预测（TRIDENT）'
+                  ) : (
+                    '上传并快速预览'
+                  )}
                 </Button>
-              </Box>
-            )}
+            </Box>
 
             <Divider sx={{ my: 2 }} />
 

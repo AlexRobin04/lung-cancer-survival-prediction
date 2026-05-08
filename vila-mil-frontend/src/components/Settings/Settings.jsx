@@ -7,14 +7,20 @@ import {
   CardContent,
   CardHeader,
   Divider,
+  FormControlLabel,
   Grid,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import DownloadIcon from '@mui/icons-material/Download'
 import { getApiBaseUrl, healthApi, setApiBaseUrl } from '../../services/api'
+import {
+  readClinicalDemoFakeExtraction,
+  writeClinicalDemoFakeExtraction,
+} from '../../utils/clinicalDemoStorage'
 
 /** 静态样例目录（Vite public/test-samples，部署后与站点同域） */
 function testSampleUrl(name) {
@@ -45,6 +51,9 @@ export default function Settings() {
   const [notice, setNotice] = useState('')
   const [apiBaseUrl, setApiBaseUrlState] = useState(getApiBaseUrl())
   const [cfg, setCfg] = useState(null)
+  const [demoFakeExtraction, setDemoFakeExtraction] = useState(() =>
+    typeof window !== 'undefined' ? readClinicalDemoFakeExtraction() : false
+  )
 
   const loadCfg = async () => {
     setError('')
@@ -69,12 +78,11 @@ export default function Settings() {
 
   const quickSteps = useMemo(
     () => [
-      '1) Data Management：按癌种上传 20× 与 10× 特征 H5，供病例关联或直接预测使用。',
-      '2) Clinical：页面分左右两栏——左栏「随访」导入 CSV 或维护 caseId、time、status；右栏「特征与推理」为当前选中病例绑定双尺度 H5，或上传病理图像由后端在线生成特征（上传成功后可保留预览并缩放查看细节）。',
-      '3) Training：选择模型与超参启动训练；同一时间仅允许一个训练任务；支持资源预检与空闲超时自动停止。',
-      '4) Model Evaluation：选择已完成的 run 查看训练曲线与摘要；可按需做 KM 与 log-rank 分析。',
-      '5) Prediction：仅支持按病例（cases.json）推理，使用 Clinical 中该病例已绑定的 20×/10× 特征。Task 下拉仅列出已结束且含 checkpoint 的任务，并按当前病例特征维度做兼容性校验（不匹配项置灰提示）。',
-      '6) Settings（本页）：配置 API BaseURL；查看下方服务器路径与后端说明。',
+      '1) Clinical：左栏「随访」导入 CSV 或维护 caseId、time、status；右栏上传 WSI，由后端生成并绑定 20×/10× 特征（上传成功后可预览）。',
+      '2) Training：选择模型与超参启动训练；同一时间仅允许一个训练任务；支持资源预检与空闲超时自动停止。',
+      '3) Model Evaluation：选择已完成的 run 查看训练曲线与摘要；可按需做 KM 与 log-rank 分析。',
+      '4) Prediction：按病例（cases.json）推理，使用 Clinical 中该病例已绑定的双尺度特征。Task 下拉仅列出已结束且含 checkpoint 的任务。',
+      '5) Settings（本页）：配置 API BaseURL；在「服务器路径」卡片底部信息栏右侧可开关「演示」（影响 Clinical 上传关联是否走后端加速路径）。',
     ],
     []
   )
@@ -248,7 +256,7 @@ export default function Settings() {
             />
             <CardContent>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                下载到本地后，按右侧「建议操作」在对应页面导入或上传。双尺度 H5 体积较大，未在此打包；请使用 Data Management 上传自有特征，或使用已完成训练产生的特征。
+                下载到本地后，按右侧「建议操作」在 Clinical 导入随访；双尺度特征请在 Clinical 右栏上传 WSI 由后端生成并绑定病例。
               </Typography>
               <Stack spacing={2.5}>
                 <Box
@@ -362,15 +370,42 @@ export default function Settings() {
                         </Typography>
                       </Grid>
                     ))}
-                  {Array.isArray(cfg?.notes) && cfg.notes.length > 0 && (
-                    <Grid item xs={12}>
-                      <Alert severity="info" sx={{ mt: 1 }}>
-                        {cfg.notes.map((n, i) => (
-                          <div key={i}>{n}</div>
-                        ))}
-                      </Alert>
-                    </Grid>
-                  )}
+                  <Grid item xs={12}>
+                    <Alert
+                      severity="info"
+                      sx={{
+                        mt: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 2,
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
+                        {Array.isArray(cfg?.notes) && cfg.notes.length > 0
+                          ? cfg.notes.map((n, i) => (
+                              <div key={i}>{n}</div>
+                            ))
+                          : null}
+                      </Box>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={demoFakeExtraction}
+                            onChange={(_, checked) => {
+                              setDemoFakeExtraction(checked)
+                              writeClinicalDemoFakeExtraction(checked)
+                            }}
+                            color="primary"
+                            inputProps={{ 'aria-label': 'Clinical 演示' }}
+                          />
+                        }
+                        label="演示"
+                        sx={{ mr: 0, flexShrink: 0 }}
+                      />
+                    </Alert>
+                  </Grid>
                 </Grid>
               )}
             </CardContent>

@@ -102,11 +102,6 @@ export const evaluationApi = {
     const { data } = await client.post('/evaluation/km', { groups })
     return data
   },
-  /** LUSC 示例：Ours vs Others（后端读取 lusc (1).csv） */
-  async kmLuscDemo() {
-    const { data } = await client.get('/evaluation/km/lusc-demo')
-    return data
-  },
 }
 
 export const dataApi = {
@@ -178,7 +173,17 @@ export const clinicalApi = {
     return data
   },
   /** 一次性为病例关联双尺度特征：JSON 传两个 fileId，或 multipart 传文件由后端生成 H5 */
-  async associateFeatures({ caseId, cancer, feature20FileId, feature10FileId, file, extractor = 'raster', mpp, quick }) {
+  async associateFeatures({
+    caseId,
+    cancer,
+    feature20FileId,
+    feature10FileId,
+    file,
+    extractor = 'raster',
+    mpp,
+    quick,
+    demoFakeExtraction,
+  }) {
     if (file) {
       const fd = new FormData()
       fd.append('caseId', caseId)
@@ -187,6 +192,7 @@ export const clinicalApi = {
       fd.append('extractor', extractor)
       if (quick !== undefined) fd.append('quick', quick ? 'true' : 'false')
       if (mpp !== undefined && mpp !== null && String(mpp).trim() !== '') fd.append('mpp', String(mpp))
+      if (demoFakeExtraction) fd.append('demoFakeExtraction', 'true')
       const { data } = await client.post('/clinical/cases/associate-features', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 600000,
@@ -256,9 +262,13 @@ export const predictApi = {
     })
     return data
   },
-  async listPredictions(limit = 50, { taskId } = {}) {
+  async listPredictions(limit = 50, { taskId, cindexBootstrap, bustCache } = {}) {
     const params = { limit: Math.min(500, Math.max(1, Number(limit) || 50)) }
     if (taskId) params.taskId = taskId
+    if (cindexBootstrap !== undefined && cindexBootstrap !== null && String(cindexBootstrap).trim() !== '') {
+      params.cindexBootstrap = cindexBootstrap
+    }
+    if (bustCache) params._ = Date.now()
     const { data } = await client.get('/predictions', { params })
     return data
   },

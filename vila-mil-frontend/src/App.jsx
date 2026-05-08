@@ -3,7 +3,6 @@ import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { AppBar, Box, Container, Toolbar, Typography, Button, Stack } from '@mui/material'
 
 import Dashboard from './components/Dashboard/Dashboard.jsx'
-import DataManagement from './components/DataManagement/DataManagement.jsx'
 import Training from './components/Training/Training.jsx'
 import ModelEvaluation from './components/ModelEvaluation/ModelEvaluation.jsx'
 import Clinical from './components/Clinical/Clinical.jsx'
@@ -14,7 +13,6 @@ const TopNav = () => {
   const loc = useLocation()
   const items = [
     { to: '/', label: 'Dashboard' },
-    { to: '/data-management', label: 'Data' },
     { to: '/training', label: 'Training' },
     { to: '/model-evaluation', label: 'Evaluation' },
     { to: '/clinical', label: 'Clinical' },
@@ -82,7 +80,6 @@ export default function App() {
       <Container className="container" sx={{ py: 2 }}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/data-management" element={<DataManagement />} />
           <Route path="/training" element={<Training />} />
           <Route path="/model-evaluation" element={<ModelEvaluation />} />
           <Route path="/clinical" element={<Clinical />} />

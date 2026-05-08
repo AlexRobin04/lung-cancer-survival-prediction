@@ -113,6 +113,8 @@ sudo nginx -t && sudo systemctl reload nginx
 |------|------|
 | `VITE_API_BASE_URL=/api` | 前端生产构建用，请求同源 `/api` |
 | `VILAMIL_PYTHON_BIN` | `api_server` 启动训练子进程时使用的 Python，建议指向 venv 内 `python` |
+| `VILAMIL_CINDEX_BOOTSTRAP_B` | 可选，默认 `400`。`GET /api/predictions` 返回队列 C-index **95% CI** 时的自助次数；`0` 只返回点估计；最大 `8000`。可用 `?cindexBootstrap=` 单次覆盖 |
+| `VILAMIL_CINDEX_BOOTSTRAP_SEED` | 可选，默认 `42`。上述自助的随机种子 |
 
 ## 8. 更新版本
 

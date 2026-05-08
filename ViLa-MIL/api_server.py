@@ -66,6 +66,19 @@ MODEL_CHOICES = [
 _ENSEMBLE_BRANCH_KEYS_FROZEN = frozenset({"RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL"})
 # 与 Dashboard 队列 C-index 表一致的五基线顺序
 _ENSEMBLE_BRANCH_ORDER_FOR_PRIOR = ("RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL")
+# 任务展示名中「纳入支路」首字母顺序（五路全纳入 → AWRDS，与前端一致）
+_ENSEMBLE_BRANCH_ABBREV_ORDER = ("AMIL", "WiKG", "RRTMIL", "DSMIL", "S4MIL")
+
+
+def _ensemble_included_branch_abbrev(exclude: list[str] | None) -> str:
+    """ensembleExclude 为排除列表；返回仍参与融合的分支名首字母拼接。"""
+    ex_norm: set[str] = set()
+    for x in exclude or []:
+        n = _normalize_ensemble_branch_key_api(x)
+        if n:
+            ex_norm.add(n)
+    chars = [b[0].upper() for b in _ENSEMBLE_BRANCH_ABBREV_ORDER if b not in ex_norm]
+    return "".join(chars) if chars else "X"
 
 
 def _normalize_ensemble_branch_key_api(name: Any) -> str | None:
@@ -695,6 +708,60 @@ def _manifest_register_h5_copy(
     return fid
 
 
+def _pick_demo_template_h5_paths(cancer: str) -> tuple[str, str]:
+    """
+    为「演示假提特征」在 manifest 中挑选一对可复制的 20×/10× H5 绝对路径。
+    优先按文件名配对（与病例特征解析逻辑一致）；否则退回该癌种下首个可用 20× 与首个可用 10×。
+    """
+    mani = _load_manifest().get("files", {})
+    by20: list[tuple[str, dict[str, Any]]] = []
+    by10: list[tuple[str, dict[str, Any]]] = []
+    for fid, e in mani.items():
+        if str(e.get("cancer") or "") != str(cancer):
+            continue
+        p = _stored_path_to_abs(e)
+        if not p or not os.path.isfile(p):
+            continue
+        ft = str(e.get("featureType") or "")
+        if ft == "20":
+            by20.append((fid, e))
+        elif ft == "10":
+            by10.append((fid, e))
+    if not by20 or not by10:
+        raise RuntimeError(f"manifest 中未找到癌种 {cancer} 的已登记 H5（需至少各有一条 20× 与 10×）")
+
+    by20.sort(key=lambda x: (str(x[1].get("name") or ""), x[0]))
+    by10.sort(key=lambda x: (str(x[1].get("name") or ""), x[0]))
+
+    for _fid20, e20 in by20:
+        base = str(e20.get("name") or "")
+        stem = base[:-3] if base.endswith(".h5") else base
+        want = f"{stem}_10x.h5"
+        for _fid10, e10 in by10:
+            if str(e10.get("name") or "") == want:
+                p20 = _stored_path_to_abs(e20)
+                p10 = _stored_path_to_abs(e10)
+                if p20 and p10:
+                    return p20, p10
+        prefix = stem.split("_10x")[0] if "_10x" in stem else stem
+        if prefix:
+            for _fid10, e10 in by10:
+                n10 = str(e10.get("name") or "")
+                if prefix in n10:
+                    p20 = _stored_path_to_abs(e20)
+                    p10 = _stored_path_to_abs(e10)
+                    if p20 and p10:
+                        return p20, p10
+
+    e20 = by20[0][1]
+    e10 = by10[0][1]
+    p20a = _stored_path_to_abs(e20)
+    p10a = _stored_path_to_abs(e10)
+    if not (p20a and p10a):
+        raise RuntimeError("模板 H5 路径无效")
+    return p20a, p10a
+
+
 def _find_first_h5(root: str) -> str | None:
     if not root or not os.path.isdir(root):
         return None
@@ -1208,7 +1275,72 @@ def _survival_concordance_index_simple(
     return (conc + 0.5 * ties) / comparable, comparable
 
 
-def _cohort_prediction_cindex(all_items: list[dict[str, Any]], *, task_id: str | None) -> dict[str, Any]:
+def _parse_cindex_bootstrap_b_from_request() -> int:
+    """GET /api/predictions 上可用 cindexBootstrap=400 覆盖；0 表示不算置信区间。"""
+    try:
+        raw = (request.args.get("cindexBootstrap") or request.args.get("cindex_bootstrap") or "").strip()
+        if raw != "":
+            return max(0, min(int(raw), 8000))
+    except (TypeError, ValueError):
+        pass
+    try:
+        return max(0, min(int(os.environ.get("VILAMIL_CINDEX_BOOTSTRAP_B", "400")), 8000))
+    except ValueError:
+        return 400
+
+
+def _cindex_bootstrap_seed() -> int:
+    try:
+        return int(os.environ.get("VILAMIL_CINDEX_BOOTSTRAP_SEED", "42"))
+    except ValueError:
+        return 42
+
+
+def _bootstrap_survival_cindex_95ci(
+    times: list[float],
+    events: list[int],
+    scores: list[float],
+    *,
+    n_bootstrap: int,
+    seed: int | None = None,
+    min_n: int = 5,
+    min_success_ratio: float = 0.25,
+) -> tuple[list[float] | None, int, str | None]:
+    """
+    对同一可比对患者规则下的 C-index 做**患者有放回**自助估计，取自助分布的 2.5% 与 97.5% 分位作为近似 95% 置信区间。
+    与点估计均基于 _survival_concordance_index_simple，便于与队列展示口径一致。
+    """
+    n = len(times)
+    if n_bootstrap <= 0 or n < min_n:
+        return None, 0, None
+    import numpy as np
+
+    base_seed = int(seed) if seed is not None else _cindex_bootstrap_seed()
+    rng = np.random.default_rng((base_seed + n * 1009) % (2**32 - 1))
+    store: list[float] = []
+    for _ in range(n_bootstrap):
+        idx = rng.integers(0, n, size=n, endpoint=False)
+        tb_t = [times[int(i)] for i in idx]
+        tb_e = [events[int(i)] for i in idx]
+        tb_s = [scores[int(i)] for i in idx]
+        ci_b, pairs_b = _survival_concordance_index_simple(tb_t, tb_e, tb_s)
+        if ci_b is not None and pairs_b > 0 and math.isfinite(float(ci_b)):
+            store.append(float(ci_b))
+    min_ok = max(30, int(n_bootstrap * min_success_ratio))
+    if len(store) < min_ok:
+        return None, len(store), f"自助重采样中可算得 C-index 的次数为 {len(store)}，低于阈值 {min_ok}，未给出 95% 区间"
+    arr = np.asarray(store, dtype=np.float64)
+    lo, hi = float(np.quantile(arr, 0.025)), float(np.quantile(arr, 0.975))
+    if not math.isfinite(lo) or not math.isfinite(hi):
+        return None, len(store), "分位数非有限值，未给出区间"
+    if lo > hi:
+        lo, hi = hi, lo
+    return [lo, hi], len(store), None
+
+
+def _cohort_prediction_cindex(
+    all_items: list[dict[str, Any]], *, task_id: str | None, bootstrap_b: int | None = None
+) -> dict[str, Any]:
     """用已保存的预测记录 + Clinical 随访 time/status 估计队列 C-index。"""
     items = list(all_items or [])
     if not task_id or not str(task_id).strip():
@@ -1221,6 +1353,11 @@ def _cohort_prediction_cindex(all_items: list[dict[str, Any]], *, task_id: str |
             "nUsableCasesJoinedClinical": 0,
             "comparablePairs": 0,
             "cIndex": None,
+            "cIndex95Ci": None,
+            "cIndexBootstrapB": None,
+            "cIndexBootstrapSuccess": 0,
+            "cIndexBootstrapNoteZh": None,
+            "cIndexCiMethodZh": None,
             "cIndexSuppressedZh": (
                 "已停用「不区分 taskId 的全局合并 C-index」。"
                 "原因：同一 caseId 若先后用不同训练任务预测，旧逻辑只保留时间最新一条，会把不同模型的 riskScore 混成一条队列，指标会乱跳。"
@@ -1268,9 +1405,36 @@ def _cohort_prediction_cindex(all_items: list[dict[str, Any]], *, task_id: str |
 
     n = len(times)
     ci, pairs = _survival_concordance_index_simple(times, events, scores)
+    bb = bootstrap_b
+    if bb is None:
+        try:
+            bb = max(0, min(int(os.environ.get("VILAMIL_CINDEX_BOOTSTRAP_B", "400")), 8000))
+        except ValueError:
+            bb = 400
+
+    ci95: list[float] | None = None
+    boot_ok = 0
+    boot_note: str | None = None
+    if bb > 0 and ci is not None and pairs > 0 and n >= 5:
+        raw_ci, boot_ok, boot_note = _bootstrap_survival_cindex_95ci(
+            times, events, scores, n_bootstrap=bb, seed=_cindex_bootstrap_seed()
+        )
+        if raw_ci is not None:
+            ci95 = [round(float(raw_ci[0]), 4), round(float(raw_ci[1]), 4)]
+
     note = (
         f"在 taskId={tid} 的预测记录中：每个 caseId 取该任务下时间最新一条的 riskScore，与 Clinical 的 time/status 配对；"
         "在「较早发生事件」的可比患者对上比较风险排序。删失过多或未录入随访时可能无法计算。"
+    )
+    if bb > 0:
+        note += (
+            f" C-index 的 95% 区间采用患者有放回自助（B={bb}），"
+            "取自助 C-index 的 2.5% 与 97.5% 分位；与 lifelines 等软件包在加权/IPCW 上的实现可能略有数值差异。"
+        )
+    method_zh = (
+        "患者有放回自助，自助样本量等于 n；区间取自助 C-index 的 2.5% 与 97.5% 分位（近似 95%）。"
+        if bb > 0
+        else "未启用自助区间（可在 GET /api/predictions 传 cindexBootstrap=0，或环境变量 VILAMIL_CINDEX_BOOTSTRAP_B=0）。"
     )
     return {
         "taskIdFilter": tid,
@@ -1279,14 +1443,28 @@ def _cohort_prediction_cindex(all_items: list[dict[str, Any]], *, task_id: str |
         "nUsableCasesJoinedClinical": n,
         "comparablePairs": pairs,
         "cIndex": ci,
+        "cIndex95Ci": ci95,
+        "cIndexBootstrapB": bb,
+        "cIndexBootstrapSuccess": boot_ok,
+        "cIndexBootstrapNoteZh": boot_note,
+        "cIndexBootstrapSeed": _cindex_bootstrap_seed(),
+        "cIndexCiMethodZh": method_zh,
         "caseIdsUsed": case_ids_used[:80],
         "skippedSample": skipped[:30],
         "noteZh": note,
     }
 
 
-def _cohort_prediction_cindex_table_by_task(all_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _cohort_prediction_cindex_table_by_task(
+    all_items: list[dict[str, Any]], *, bootstrap_b: int | None = None
+) -> list[dict[str, Any]]:
     """按 taskId 分列：每个曾写入预测的训练任务一行队列 C-index（规则同 _cohort_prediction_cindex）。"""
+    bb = bootstrap_b
+    if bb is None:
+        try:
+            bb = max(0, min(int(os.environ.get("VILAMIL_CINDEX_BOOTSTRAP_B", "400")), 8000))
+        except ValueError:
+            bb = 400
     items = list(all_items or [])
     tids: set[str] = set()
     model_from_pred: dict[str, str] = {}
@@ -1310,7 +1488,7 @@ def _cohort_prediction_cindex_table_by_task(all_items: list[dict[str, Any]]) -> 
         tmeta = tasks_by_id.get(tid)
         if not tmeta:
             continue
-        full = _cohort_prediction_cindex(all_items, task_id=tid)
+        full = _cohort_prediction_cindex(all_items, task_id=tid, bootstrap_b=bb)
         mt = str(tmeta.get("modelType") or tmeta.get("model_type") or model_from_pred.get(tid) or "").strip() or "—"
         rows.append(
             {
@@ -1319,6 +1497,11 @@ def _cohort_prediction_cindex_table_by_task(all_items: list[dict[str, Any]]) -> 
                 "cancer": tmeta.get("cancer"),
                 "taskLabel": (str(tmeta.get("name") or "").strip() or None),
                 "cIndex": full.get("cIndex"),
+                "cIndex95Ci": full.get("cIndex95Ci"),
+                "cIndexBootstrapB": full.get("cIndexBootstrapB"),
+                "cIndexBootstrapSuccess": full.get("cIndexBootstrapSuccess"),
+                "cIndexBootstrapNoteZh": full.get("cIndexBootstrapNoteZh"),
+                "cIndexCiMethodZh": full.get("cIndexCiMethodZh"),
                 "nUsableCasesJoinedClinical": full.get("nUsableCasesJoinedClinical"),
                 "comparablePairs": full.get("comparablePairs"),
                 "cIndexSuppressedZh": full.get("cIndexSuppressedZh"),
@@ -1376,7 +1559,7 @@ def _learn_two_model_tiebreak_strategy(
     cancer_u = str(cancer or "LUSC").strip().upper()
     mode_s = str(mode or "transformer").strip().lower()
     data = _read_json(PREDICTIONS_PATH, {"items": []})
-    rows = _cohort_prediction_cindex_table_by_task(data.get("items") or [])
+    rows = _cohort_prediction_cindex_table_by_task(data.get("items") or [], bootstrap_b=0)
     base_rows: list[tuple[float, str, str]] = []
     for r in rows:
         mt = str(r.get("modelType") or "").strip()
@@ -1610,7 +1793,9 @@ def _ensemble_branch_prior_from_dashboard_cindex(
     excl = exclude or frozenset()
     data = _read_json(PREDICTIONS_PATH, {"items": []})
     all_items = data.get("items") or []
-    rows = _cohort_prediction_cindex_table_by_task(all_items)
+    # 仅需要各 task 的点估计 C-index 用于先验拼接；关闭 Bootstrap，避免「多 task × 每 task 数百次自助」
+    # 在 POST /api/training/start 请求线程内同步执行导致接口长时间无响应（用户体感为卡死）。
+    rows = _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=0)
     best: dict[str, tuple[float, str]] = {}
     for r in rows:
         mt = str(r.get("modelType") or "").strip()
@@ -1721,7 +1906,7 @@ def _execute_predict_pipeline(
         # 若该 case 尚无该基线历史预测，则回退到 EnsembleDecision checkpoint 推理。
         try:
             all_items = (_read_json(PREDICTIONS_PATH, {"items": []}).get("items") or [])
-            rows = _cohort_prediction_cindex_table_by_task(all_items)
+            rows = _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=0)
             best_base = None
             for r in rows:
                 mt = str(r.get("modelType") or "").strip()
@@ -1958,6 +2143,64 @@ def _execute_predict_pipeline(
     return (out, 200)
 
 
+def _predict_body_dict(body: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """与 POST /api/predict 相同：从 JSON body 执行推理。供单次与批量接口共用（避免 test_client 逐条模拟 HTTP）。"""
+    case_id = (body.get("caseId") or body.get("case_id") or "").strip() or None
+    task_id = body.get("taskId") or body.get("task_id")
+    save_history = body.get("saveHistory", True)
+    f20_id = (body.get("feature20FileId") or body.get("feature20_file_id") or "").strip() or None
+    f10_id = (body.get("feature10FileId") or body.get("feature10_file_id") or "").strip() or None
+    cancer_hint = (body.get("cancer") or body.get("cancerType") or "").strip() or None
+
+    t = _find_task(task_id) if task_id else None
+    if not t:
+        for it in _load_tasks().get("tasks", []):
+            if it.get("status") in ("completed",):
+                t = it
+                break
+    if not t:
+        return ({"message": "未找到可用的训练任务（请先完成训练，并传入 taskId）"}, 400)
+
+    if f20_id and f10_id:
+        try:
+            p20, p10 = _resolve_feature_paths_by_file_ids(f20_id, f10_id, cancer=cancer_hint)
+        except FileNotFoundError as e:
+            return ({"message": str(e)}, 400)
+        out_case_id = case_id or f"files:{f20_id[:8]}"
+    elif case_id:
+        try:
+            p20, p10 = _resolve_case_feature_paths(case_id)
+        except FileNotFoundError as e:
+            return ({"message": str(e)}, 400)
+        out_case_id = case_id
+    else:
+        return (
+            {
+                "message": (
+                    "请提供 caseId（已在 Clinical 中为病例指定 20×/10× 特征），"
+                    "或同时提供 feature20FileId 与 feature10FileId（直接按上传文件推理）"
+                ),
+            },
+            400,
+        )
+    feature_source = "manifestFileIds" if (f20_id and f10_id) else "caseRecord"
+    out, st = _execute_predict_pipeline(
+        p20,
+        p10,
+        t,
+        case_id=case_id,
+        out_case_id=out_case_id,
+        f20_id=f20_id,
+        f10_id=f10_id,
+        save_history=bool(save_history),
+        feature_source=feature_source,
+        disclaimer_extra=None,
+        raster_meta=None,
+    )
+    out["fallbackUsed"] = False
+    return (out, st)
+
+
 def _parse_log_metrics_loose_forward(lines: list[str]) -> tuple[float | None, float | None, int | None, int | None]:
     """自上而下扫描，取最后一次匹配（兼容旧格式 / survival 等）。"""
     loss = cidx = None
@@ -2159,7 +2402,12 @@ def create_app() -> Flask:
         os.makedirs(results_dir, exist_ok=True)
         log_path = os.path.join(LOG_DIR, f"{task_id}.log")
 
-        name = f"{cancer} {model_type} Training"
+        excl = list(ensemble_exclude or [])
+        if model_type == "EnsembleDecision":
+            abbr = _ensemble_included_branch_abbrev(excl)
+            name = f"{cancer} EnsembleDecision-{abbr} Training"
+        else:
+            name = f"{cancer} {model_type} Training"
         task: dict[str, Any] = {
             "id": task_id,
             "taskId": task_id,
@@ -2192,7 +2440,6 @@ def create_app() -> Flask:
         }
         if conch:
             task["conchCheckpointPath"] = conch
-        excl = list(ensemble_exclude or [])
         if model_type == "EnsembleDecision":
             if ensemble_ckpt_dir:
                 task["ensembleCkptDir"] = ensemble_ckpt_dir
@@ -2896,10 +3143,13 @@ def create_app() -> Flask:
                 task_id = str(uuid.uuid4())
                 results_dir = os.path.join(RESULT_API_RUNS, task_id)
                 log_path = os.path.join(LOG_DIR, f"{task_id}.log")
+                q_task_name = f"{cancer} {model_type} Training"
+                if model_type == "EnsembleDecision":
+                    q_task_name = f"{cancer} EnsembleDecision-{_ensemble_included_branch_abbrev(ensemble_exclude)} Training"
                 queued_task = {
                     "id": task_id,
                     "taskId": task_id,
-                    "name": f"{cancer} {model_type} Training",
+                    "name": q_task_name,
                     "cancer": cancer,
                     "modelType": model_type,
                     "mode": mode,
@@ -3743,16 +3993,23 @@ def create_app() -> Flask:
             if rd and os.path.isdir(rd):
                 # Rough heuristic: completed tasks likely have metrics.
                 has_metrics = t.get("status") in ("completed",)
+                rd_resolved = _resolve_task_results_dir(t)
+                ckpts = _discover_checkpoints(rd_resolved) if rd_resolved else []
                 runs.append(
                     {
                         "taskId": t.get("taskId"),
                         "cancer": t.get("cancer"),
                         "modelType": t.get("modelType"),
                         "status": t.get("status"),
+                        "name": t.get("name"),
+                        "maxEpochs": t.get("maxEpochs"),
+                        "ensembleExclude": list(t.get("ensembleExclude") or []),
+                        "checkpointCount": len(ckpts),
                         "resultsDir": rd,
                         "cIndex": t.get("cIndex"),
                         "rocAuc": t.get("rocAuc", t.get("cIndex")),
                         "loss": t.get("loss"),
+                        "startedAtTs": t.get("startedAtTs"),
                         "hasMetrics": has_metrics,
                     }
                 )
@@ -4497,6 +4754,9 @@ def create_app() -> Flask:
           可选 extractor:
             - raster(默认): 原有 ImageNet ResNet50 近似特征流程
             - trident: 调用 TRIDENT run_batch_of_slides.py 提特征
+        - multipart + demoFakeExtraction=true：需环境变量 VILA_ALLOW_CLINICAL_DEMO_FAKE_EXTRACTION=1；
+          仍上传 WSI 用于预览与登记文件名，但不对该 WSI 提特征，而是从 manifest 复制一对模板 H5
+          并登记为新 fileId（答辩演示加速；非真实提取）。
         """
         up = request.files.get("file")
         f20_id = ""
@@ -4504,11 +4764,18 @@ def create_app() -> Flask:
         extractor = "raster"
         quick_mode = False
         trident_mpp: float | None = None
+        demo_fake_extraction = False
         if up and up.filename:
             case_id = (request.form.get("caseId") or "").strip()
             cancer = (request.form.get("cancer") or "LUSC").strip()
             extractor = str(request.form.get("extractor") or "raster").strip().lower()
             quick_mode = str(request.form.get("quick") or "").strip().lower() in {"1", "true", "yes", "on"}
+            demo_fake_extraction = str(request.form.get("demoFakeExtraction") or "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
             mpp_raw = request.form.get("mpp") or request.form.get("tridentMpp")
             if mpp_raw not in (None, ""):
                 try:
@@ -4552,12 +4819,60 @@ def create_app() -> Flask:
             work = os.path.join(DATA_ROOT, cancer, "case_derived", case_id, str(uuid.uuid4()))
             os.makedirs(work, exist_ok=True)
             src_img = os.path.join(work, f"orig{ext}")
+            allow_demo_fake = str(os.environ.get("VILA_ALLOW_CLINICAL_DEMO_FAKE_EXTRACTION", "0")).lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            if demo_fake_extraction and not allow_demo_fake:
+                shutil.rmtree(work, ignore_errors=True)
+                return jsonify(
+                    {
+                        "message": (
+                            "演示「假提特征」未开启：请在后端设置环境变量 "
+                            "VILA_ALLOW_CLINICAL_DEMO_FAKE_EXTRACTION=1 并重启服务"
+                        )
+                    }
+                ), 403
             meta: dict[str, Any] = {}
             try:
                 up.save(src_img)
                 p20 = os.path.join(work, "feat20.h5")
                 p10 = os.path.join(work, "feat10.h5")
-                if extractor == "trident":
+                safe_c = re.sub(r"[^a-zA-Z0-9._-]+", "_", case_id)[:80]
+                uid_pair = str(uuid.uuid4())
+                if demo_fake_extraction:
+                    src_p20, src_p10 = _pick_demo_template_h5_paths(cancer)
+                    meta = {
+                        "extractorChosen": extractor,
+                        "quickMode": bool(quick_mode),
+                    }
+                    fid20 = _manifest_register_h5_copy(
+                        cancer,
+                        "20",
+                        src_p20,
+                        f"{uid_pair}__case_{safe_c}_20.h5",
+                        extra={
+                            "derivedFromRaster": extractor != "trident",
+                            "derivedFromTrident": extractor == "trident",
+                            "caseId": case_id,
+                            "demoCopiedFromTemplate": True,
+                        },
+                    )
+                    fid10 = _manifest_register_h5_copy(
+                        cancer,
+                        "10",
+                        src_p10,
+                        f"{uid_pair}__case_{safe_c}_10.h5",
+                        extra={
+                            "derivedFromRaster": extractor != "trident",
+                            "derivedFromTrident": extractor == "trident",
+                            "caseId": case_id,
+                            "demoCopiedFromTemplate": True,
+                        },
+                    )
+                elif extractor == "trident":
                     try:
                         meta = _extract_dual_scale_h5_with_trident(src_img, p20, p10, mpp=trident_mpp)
                     except Exception as te:
@@ -4587,6 +4902,20 @@ def create_app() -> Flask:
                                 meta["tridentFallbackReason"] = "patch_encoder_checkpoint_unavailable_offline"
                         else:
                             raise
+                    fid20 = _manifest_register_h5_copy(
+                        cancer,
+                        "20",
+                        p20,
+                        f"{uuid.uuid4()}__case_{safe_c}_20.h5",
+                        extra={"derivedFromRaster": False, "derivedFromTrident": True, "caseId": case_id},
+                    )
+                    fid10 = _manifest_register_h5_copy(
+                        cancer,
+                        "10",
+                        p10,
+                        f"{uuid.uuid4()}__case_{safe_c}_10.h5",
+                        extra={"derivedFromRaster": False, "derivedFromTrident": True, "caseId": case_id},
+                    )
                 else:
                     from utils.raster_to_h5 import build_dual_scale_h5_from_image
 
@@ -4607,21 +4936,20 @@ def create_app() -> Flask:
                         meta["quickApproxForWsi"] = True
                     else:
                         meta = build_dual_scale_h5_from_image(src_img, p20, p10)
-                safe_c = re.sub(r"[^a-zA-Z0-9._-]+", "_", case_id)[:80]
-                fid20 = _manifest_register_h5_copy(
-                    cancer,
-                    "20",
-                    p20,
-                    f"{uuid.uuid4()}__case_{safe_c}_20.h5",
-                    extra={"derivedFromRaster": extractor != "trident", "derivedFromTrident": extractor == "trident", "caseId": case_id},
-                )
-                fid10 = _manifest_register_h5_copy(
-                    cancer,
-                    "10",
-                    p10,
-                    f"{uuid.uuid4()}__case_{safe_c}_10.h5",
-                    extra={"derivedFromRaster": extractor != "trident", "derivedFromTrident": extractor == "trident", "caseId": case_id},
-                )
+                    fid20 = _manifest_register_h5_copy(
+                        cancer,
+                        "20",
+                        p20,
+                        f"{uuid.uuid4()}__case_{safe_c}_20.h5",
+                        extra={"derivedFromRaster": True, "derivedFromTrident": False, "caseId": case_id},
+                    )
+                    fid10 = _manifest_register_h5_copy(
+                        cancer,
+                        "10",
+                        p10,
+                        f"{uuid.uuid4()}__case_{safe_c}_10.h5",
+                        extra={"derivedFromRaster": True, "derivedFromTrident": False, "caseId": case_id},
+                    )
                 try:
                     prev_dir = os.path.join(DATA_ROOT, cancer, "case_previews")
                     os.makedirs(prev_dir, exist_ok=True)
@@ -4712,77 +5040,32 @@ def create_app() -> Flask:
     def predictions_list():
         lim = min(500, max(1, int(request.args.get("limit") or 50)))
         task_id_q = (request.args.get("taskId") or request.args.get("task_id") or "").strip() or None
+        boot_b = _parse_cindex_bootstrap_b_from_request()
         data = _read_json(PREDICTIONS_PATH, {"items": []})
         all_items = data.get("items") or []
         items = all_items[:lim]
         out: dict[str, Any] = {
             "items": items,
-            "cohortCIndex": _cohort_prediction_cindex(all_items, task_id=None),
-            "cohortCIndexByTask": _cohort_prediction_cindex_table_by_task(all_items),
+            "cIndexBootstrapB": boot_b,
+            "cIndexBootstrapSeed": _cindex_bootstrap_seed(),
+            "cIndexCiMethodZh": (
+                "患者有放回自助，自助 C-index 的 2.5% 与 97.5% 分位作为近似 95% 置信区间（与点估计同一可比患者规则）。"
+                if boot_b > 0
+                else "本次未计算 C-index 置信区间（cindexBootstrap=0）。"
+            ),
+            "cohortCIndex": _cohort_prediction_cindex(all_items, task_id=None, bootstrap_b=boot_b),
+            "cohortCIndexByTask": _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=boot_b),
         }
         if task_id_q:
-            out["cohortCIndexForTask"] = _cohort_prediction_cindex(all_items, task_id=task_id_q)
+            out["cohortCIndexForTask"] = _cohort_prediction_cindex(
+                all_items, task_id=task_id_q, bootstrap_b=boot_b
+            )
         return jsonify(out)
 
     @app.post("/api/predict")
     def predict_single():
         body = request.get_json(force=True, silent=True) or {}
-        case_id = (body.get("caseId") or body.get("case_id") or "").strip() or None
-        task_id = body.get("taskId") or body.get("task_id")
-        save_history = body.get("saveHistory", True)
-        f20_id = (body.get("feature20FileId") or body.get("feature20_file_id") or "").strip() or None
-        f10_id = (body.get("feature10FileId") or body.get("feature10_file_id") or "").strip() or None
-        cancer_hint = (body.get("cancer") or body.get("cancerType") or "").strip() or None
-
-        t = _find_task(task_id) if task_id else None
-        if not t:
-            # fallback: pick latest completed task (any model)
-            for it in _load_tasks().get("tasks", []):
-                if it.get("status") in ("completed",):
-                    t = it
-                    break
-        if not t:
-            return jsonify({"message": "未找到可用的训练任务（请先完成训练，并传入 taskId）"}), 400
-
-        if f20_id and f10_id:
-            try:
-                p20, p10 = _resolve_feature_paths_by_file_ids(f20_id, f10_id, cancer=cancer_hint)
-            except FileNotFoundError as e:
-                return jsonify({"message": str(e)}), 400
-            out_case_id = case_id or f"files:{f20_id[:8]}"
-        elif case_id:
-            try:
-                p20, p10 = _resolve_case_feature_paths(case_id)
-            except FileNotFoundError as e:
-                return jsonify({"message": str(e)}), 400
-            out_case_id = case_id
-        else:
-            return (
-                jsonify(
-                    {
-                        "message": (
-                            "请提供 caseId（已在 Clinical 中为病例指定 20×/10× 特征），"
-                            "或同时提供 feature20FileId 与 feature10FileId（直接按上传文件推理）"
-                        ),
-                    }
-                ),
-                400,
-            )
-        feature_source = "manifestFileIds" if (f20_id and f10_id) else "caseRecord"
-        out, st = _execute_predict_pipeline(
-            p20,
-            p10,
-            t,
-            case_id=case_id,
-            out_case_id=out_case_id,
-            f20_id=f20_id,
-            f10_id=f10_id,
-            save_history=bool(save_history),
-            feature_source=feature_source,
-            disclaimer_extra=None,
-            raster_meta=None,
-        )
-        out["fallbackUsed"] = False
+        out, st = _predict_body_dict(body)
         return jsonify(out), st
 
     @app.post("/api/predict/from-raster")
@@ -4901,13 +5184,16 @@ def create_app() -> Flask:
     def predict_batch():
         body = request.get_json(force=True, silent=True) or {}
         items = body.get("items") or []
-        out = []
+        if not items:
+            return jsonify({"results": []})
+        out: list[dict[str, Any]] = []
         for it in items:
+            row_in = it if isinstance(it, dict) else {}
             try:
-                resp = app.test_client().post("/api/predict", json=it).get_json()
-                out.append({"input": it, "output": resp})
+                resp, _st = _predict_body_dict(row_in)
+                out.append({"input": row_in, "output": resp})
             except Exception as e:
-                out.append({"input": it, "error": str(e)})
+                out.append({"input": row_in, "error": str(e)})
         return jsonify({"results": out})
 
     # API 重启：将仍为 running 但子进程已不存在的任务改回 queued，再启动调度线程

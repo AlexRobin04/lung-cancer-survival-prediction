@@ -31,7 +31,7 @@ import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined'
 import ModelTrainingOutlinedIcon from '@mui/icons-material/ModelTrainingOutlined'
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined'
 import StopOutlinedIcon from '@mui/icons-material/StopOutlined'
-import { healthApi, trainingApi, evaluationApi, predictApi, dataApi, clinicalApi } from '../../services/api'
+import { healthApi, trainingApi, evaluationApi, predictApi, clinicalApi } from '../../services/api'
 import { sanitizeTrainingLogContent } from '../../utils/trainingLogSanitize'
 import {
   buildTaskConfigSnapshot,
@@ -51,6 +51,23 @@ const parseToSec = (t) => {
 const fmtPct = (v) => {
   const n = Number(v)
   return Number.isFinite(n) ? `${n.toFixed(2)}%` : '—'
+}
+
+/** Dashboard 任务状态行：固定顺序 + 其余按字母序，保证分项之和等于 tasks.length */
+const TASK_STATUS_DISPLAY_ORDER = ['queued', 'running', 'completed', 'failed', 'stopped']
+
+const formatTrainingStatusLabel = (k) => {
+  if (!k || k === 'unknown') return 'Unknown'
+  return `${k.charAt(0).toUpperCase()}${k.slice(1)}`
+}
+
+const trainingStatusCountColor = (k) => {
+  if (k === 'running') return 'warning.main'
+  if (k === 'queued') return 'info.main'
+  if (k === 'completed') return 'success.main'
+  if (k === 'failed') return 'error.main'
+  if (k === 'stopped') return 'text.secondary'
+  return 'text.primary'
 }
 
 const trainingTaskCanStop = (t) => {
@@ -116,9 +133,6 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState([])
   const [runs, setRuns] = useState([])
   const [preds, setPreds] = useState([])
-  /** 与 /predictions 同源：历史预测 + Clinical 随访的队列 C-index */
-  const [cohortCIndexAll, setCohortCIndexAll] = useState(null)
-  const [datasets, setDatasets] = useState(null)
   const [cases, setCases] = useState([])
   const [selectedTaskId, setSelectedTaskId] = useState('')
   const [selectedTask, setSelectedTask] = useState(null)
@@ -135,20 +149,17 @@ export default function Dashboard() {
   const load = async () => {
     setError('')
     try {
-      const [h, th, r, p, d, c] = await Promise.all([
+      const [h, th, r, p, c] = await Promise.all([
         healthApi.health(),
         trainingApi.history(),
         evaluationApi.runs(),
         predictApi.listPredictions(20),
-        dataApi.getDatasets(),
         clinicalApi.listCases(),
       ])
       setHealth(h)
       setTasks(th?.tasks || th?.data?.tasks || [])
       setRuns(r?.runs || [])
       setPreds(p?.items || [])
-      setCohortCIndexAll(p?.cohortCIndex ?? null)
-      setDatasets(d)
       setCases(c?.cases || [])
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '加载失败')
@@ -168,6 +179,26 @@ export default function Dashboard() {
       return s != null && s >= cutoff
     })
   }, [tasks, timeRangeMin])
+
+  /** 全量 tasks 按 status 计数（与 Total Tasks 同源，含 failed / stopped / queued 等） */
+  const taskStatusBreakdown = useMemo(() => {
+    const ts = tasks || []
+    const m = new Map()
+    for (const t of ts) {
+      const raw = String(t?.status ?? '').trim().toLowerCase()
+      const key = raw || 'unknown'
+      m.set(key, (m.get(key) || 0) + 1)
+    }
+    const ordered = []
+    for (const k of TASK_STATUS_DISPLAY_ORDER) {
+      if (m.has(k)) ordered.push([k, m.get(k)])
+    }
+    const rest = [...m.keys()].filter((k) => !TASK_STATUS_DISPLAY_ORDER.includes(k)).sort()
+    for (const k of rest) {
+      ordered.push([k, m.get(k)])
+    }
+    return { ordered }
+  }, [tasks])
 
   /** 与「时间范围」一致：不再硬截断 15 条，由外层滚动容器承载长列表 */
   const trainingTasksForList = useMemo(() => filteredTasks, [filteredTasks])
@@ -275,7 +306,7 @@ export default function Dashboard() {
             Dashboard
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            总览服务状态、数据规模、近期训练与评估
+            总览服务状态、病例与训练、近期预测与评估
           </Typography>
         </Box>
         <Button variant="contained" onClick={load} sx={{ flexShrink: 0 }}>
@@ -302,7 +333,7 @@ export default function Dashboard() {
             }
           >
             <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.7 }}>
-              本系统用于“基于病理图像/特征的肺癌生存风险预测”，支持特征上传与病例管理、模型训练与评估、风险预测与分层展示。
+              本系统用于“基于病理图像/特征的肺癌生存风险预测”，支持在临床页上传全切片并生成特征、模型训练与评估、风险预测与分层展示。
             </Typography>
             <Divider sx={{ my: 2 }} />
             <Typography variant="body2">
@@ -321,33 +352,37 @@ export default function Dashboard() {
                 {tasks.length}
               </Box>
             </Typography>
-            <Typography variant="body2" sx={{ mt: 0.5 }}>
-              <Box component="span" color="text.secondary">
-                Running:{' '}
-              </Box>
-              <Box component="span" sx={{ fontWeight: 600, color: 'warning.main' }}>
-                {(tasks || []).filter((t) => t.status === 'running').length}
-              </Box>
-              <Box component="span" color="text.secondary" sx={{ mx: 1 }}>
-                ·
-              </Box>
-              <Box component="span" color="text.secondary">
-                Completed:{' '}
-              </Box>
-              <Box component="span" sx={{ fontWeight: 600, color: 'success.main' }}>
-                {(tasks || []).filter((t) => t.status === 'completed').length}
-              </Box>
+            <Typography
+              component="div"
+              variant="body2"
+              sx={{ mt: 0.5, lineHeight: 1.85, display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: 0.5, rowGap: 0.75 }}
+            >
+              {taskStatusBreakdown.ordered.map(([k, count], i) => (
+                <Box key={k} component="span" sx={{ display: 'inline-flex', alignItems: 'baseline', whiteSpace: 'nowrap' }}>
+                  {i > 0 ? (
+                    <Box component="span" color="text.secondary" sx={{ mx: 0.5 }}>
+                      ·
+                    </Box>
+                  ) : null}
+                  <Box component="span" color="text.secondary">
+                    {formatTrainingStatusLabel(k)}:{' '}
+                  </Box>
+                  <Box component="span" sx={{ fontWeight: 600, color: trainingStatusCountColor(k) }}>
+                    {count}
+                  </Box>
+                </Box>
+              ))}
             </Typography>
           </DashboardPanel>
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <DashboardPanel accent="#2e7d32" icon={<StorageOutlinedIcon fontSize="small" />} title="Data Summary">
+          <DashboardPanel accent="#2e7d32" icon={<StorageOutlinedIcon fontSize="small" />} title="Clinical">
             <Typography variant="body2" color="text.secondary">
-              特征登记总数
+              已登记病例数
             </Typography>
             <Typography variant="h4" sx={{ mt: 0.5, fontWeight: 800, color: '#2e7d32' }}>
-              {datasets?.totalFiles ?? '—'}
+              {cases.length}
             </Typography>
             <Box
               sx={{
@@ -357,11 +392,8 @@ export default function Dashboard() {
                 bgcolor: (theme) => alpha('#2e7d32', theme.palette.mode === 'dark' ? 0.2 : 0.08),
               }}
             >
-              <Typography variant="body2" color="text.secondary">
-                病例数
-              </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                {cases.length}
+              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
+                双尺度特征请在 Clinical 页通过上传 WSI 由后端生成并绑定到病例。
               </Typography>
             </Box>
           </DashboardPanel>
@@ -372,29 +404,6 @@ export default function Dashboard() {
             <Typography variant="body2" color="text.secondary">
               最近三条
             </Typography>
-            {cohortCIndexAll ? (
-              <Box sx={{ mt: 0.75, mb: 1 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.5 }}>
-                  队列 C-index（按 task 统计；Predict 页见各任务）：
-                  {cohortCIndexAll.cIndex != null
-                    ? Number(cohortCIndexAll.cIndex).toFixed(4)
-                    : cohortCIndexAll.cIndexSuppressedZh
-                      ? '—'
-                      : '—（可比样本不足）'}
-                  {cohortCIndexAll.cIndex != null ? (
-                    <>
-                      ，可用病例 n={cohortCIndexAll.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
-                      {cohortCIndexAll.comparablePairs ?? '—'}
-                    </>
-                  ) : null}
-                </Typography>
-                {cohortCIndexAll.cIndexSuppressedZh ? (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.35, lineHeight: 1.45 }}>
-                    {cohortCIndexAll.cIndexSuppressedZh}
-                  </Typography>
-                ) : null}
-              </Box>
-            ) : null}
             {(preds || []).slice(0, 3).map((it) => (
               <Box
                 key={it.id}

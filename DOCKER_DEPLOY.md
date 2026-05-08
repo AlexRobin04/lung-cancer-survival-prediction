@@ -112,6 +112,7 @@ docker compose down
   - `ViLa-MIL/uploaded_features`
 - 单端口模式下，前端默认同源请求 `/api`，一般不需要额外设置 API BaseURL；
   若你反向代理路径有变化，再去 `Settings` 调整即可。
+- **Clinical 答辩演示「假提特征」**：前端 Clinical 页打开「演示：假提特征」后，仍按正常流程选择 WSI 并上传；后端在环境变量 **`VILA_ALLOW_CLINICAL_DEMO_FAKE_EXTRACTION=1`** 时，会**从 manifest 中已有模板复制一对 20×/10× H5** 登记为新 fileId，并用上传的 WSI 生成病例预览，**不会**对该 WSI 执行 TRIDENT/近似提特征。当前仓库的 **`docker-compose.yml` 已对 backend 默认写入该变量为 `1`**；若你看到 403「未开启」，请执行 `docker compose up -d backend` 使配置进容器，或宿主机直接起 `api_server` 时在 shell 里 `export VILA_ALLOW_CLINICAL_DEMO_FAKE_EXTRACTION=1` 后重启进程。不需要演示时在 compose 中改为 `0` 或删除该行。
 
 ## 6) TRIDENT（当前推荐配置）
 
@@ -128,6 +129,17 @@ docker compose down
 - `/Users/zzfly/毕设/vila-mil/TRIDENT` → 容器内 `/TRIDENT:ro`
 
 > 说明：`TRIDENT_FORCE_FEATURE_DIM=512` 是在后端对 TRIDENT 产出的 H5 做维度适配（截断/补零），用于兼容历史 1024 输入模型。
+
+### 6.1 队列 C-index 的 95% 置信区间（可选环境变量）
+
+已在 `docker-compose.yml` 的 `backend.environment` 中写入默认值（与代码缺省一致）。按需修改后 `docker compose up -d backend` 生效。
+
+| 环境变量 | 默认 | 说明 |
+|----------|------|------|
+| `VILAMIL_CINDEX_BOOTSTRAP_B` | `400` | `GET /api/predictions` 计算队列生存 C-index **近似 95% CI** 时的自助重采样次数；`0` 表示只返回点估计；最大 `8000`。亦可用查询参数 `cindexBootstrap` / `cindex_bootstrap` 单次覆盖 |
+| `VILAMIL_CINDEX_BOOTSTRAP_SEED` | `42` | 自助随机种子，便于复现 |
+
+接口与返回字段的完整表格见仓库根 **[`PLATFORM_GUIDE.md`](./PLATFORM_GUIDE.md)** 第 4.7 节与第 10.1 节。
 
 ## 7) 网关超时（长任务必配）
 

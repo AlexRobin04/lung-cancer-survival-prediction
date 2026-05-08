@@ -31,6 +31,7 @@ import { modelApi, trainingApi } from '../../services/api'
 import useCancerOptions from '../../hooks/useCancerOptions'
 import { CANCER_CN_MAP } from '../../constants/trainingOptions'
 import { sanitizeTrainingLogContent } from '../../utils/trainingLogSanitize'
+import { formatTrainingHistoryDialogLabel, formatTrainingHistorySelectLabel } from '../../utils/ensembleTaskLabel'
 import Toast from '../common/Toast.jsx'
 
 /** 与后端 ensemble_exclude / 文档 6.1 留一法一致 */
@@ -94,7 +95,8 @@ export default function Training() {
   const [weightDecay, setWeightDecay] = useState(1e-5)
   const [earlyStopping, setEarlyStopping] = useState(false)
   /** EnsembleDecision：固定为 avg_prob（各分支概率均值） */
-  const [decisionFusion, setDecisionFusion] = useState('avg_prob')
+  /** 仅 avg_prob；界面已隐藏 decisionFusion 选择器 */
+  const [decisionFusion] = useState('avg_prob')
   /** 对接 POST /api/training/start：与后端 ensembleBranchPriorAuto 等一致 */
   const [ensembleBranchPriorAuto, setEnsembleBranchPriorAuto] = useState(true)
   /** 空字符串表示不传，后端用默认 1.0；可填 0.55 等 */
@@ -664,28 +666,6 @@ export default function Training() {
                     })()}
                   </Typography>
                 </Box>
-                    <Alert severity="info" sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' } }}>
-                      <strong>EnsembleDecision</strong> 为<strong>决策级（后期）融合</strong>：每路走完各自 MIL 并给出判断，再在 logits/概率层用<strong>固定规则</strong>合并（投票或加权），<strong>不训练融合层</strong>。任务仅用于写出带融合配置的 checkpoint
-                      并跑验证/测试；五路基线须已训练。后端按折从 <code>best_models.json</code> / <code>tasks.json</code> 解析五路 checkpoint。
-                    </Alert>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' }, alignSelf: 'center' }}
-                    >
-                      当前仅保留一种简单融合：<strong>avg_prob</strong>（各基线输出概率逐类平均）。例如 A=80%、B=70%，融合即 75%。
-                    </Typography>
-                    <FormControl size="small" sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' }, minWidth: 280 }}>
-                      <InputLabel id="decision-fusion-label">决策融合 decisionFusion</InputLabel>
-                      <Select
-                        labelId="decision-fusion-label"
-                        label="决策融合 decisionFusion"
-                        value={decisionFusion}
-                        onChange={(e) => setDecisionFusion(e.target.value)}
-                      >
-                        <MenuItem value="avg_prob">简单概率均值（avg_prob）</MenuItem>
-                      </Select>
-                    </FormControl>
                     <Box sx={{ gridColumn: '1 / -1', display: 'none' }}>
                       <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} sx={{ mb: 0.75 }}>
                         <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
@@ -733,12 +713,6 @@ export default function Training() {
                       </Box>
                     </Box>
                 <Box sx={{ gridColumn: '1 / -1' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                    分支先验（可选，用于 weighted 固定权重）
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    未填温度则不传（默认 1.0）。先验写入固定 <code>fusion_logits</code> buffer（非训练）。
-                  </Typography>
                   <Stack direction={{ xs: 'column', sm: 'row' }} flexWrap="wrap" gap={2} alignItems={{ sm: 'center' }}>
                     <FormControlLabel
                       control={
@@ -757,7 +731,6 @@ export default function Training() {
                       onChange={(e) => setEnsembleBranchPriorTemperature(e.target.value)}
                       sx={{ minWidth: 220 }}
                       inputProps={{ min: 0.000001, step: 0.05 }}
-                      helperText="留空则不传；小于 1 更突出高 C-index 分支"
                     />
                   </Stack>
                 </Box>
@@ -879,7 +852,7 @@ export default function Training() {
             >
               {history.map((t) => (
                 <MenuItem key={t.taskId} value={t.taskId}>
-                  {t.modelType} — {t.status}{t.isBestForModel ? ' — Best' : ''} — {t.startedAt || ''}
+                  {formatTrainingHistorySelectLabel(t)}
                 </MenuItem>
               ))}
             </Select>
@@ -939,8 +912,7 @@ export default function Training() {
                     control={<Checkbox checked={checked} disabled={disabled} onChange={() => toggleDeleteId(id)} />}
                     label={
                       <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
-                        {t.modelType} — {t.cancer} — {t.status}
-                        {t.isBestForModel ? ' — Best' : ''} — {t.startedAt || ''}
+                        {formatTrainingHistoryDialogLabel(t)}
                       </Typography>
                     }
                   />
