@@ -21,6 +21,10 @@ import {
   readClinicalDemoFakeExtraction,
   writeClinicalDemoFakeExtraction,
 } from '../../utils/clinicalDemoStorage'
+import {
+  readEnsembleTiebreakAllowFallback,
+  writeEnsembleTiebreakAllowFallback,
+} from '../../constants/ensemblePredictPrefs'
 
 /** 静态样例目录（Vite public/test-samples，部署后与站点同域） */
 function testSampleUrl(name) {
@@ -54,6 +58,9 @@ export default function Settings() {
   const [demoFakeExtraction, setDemoFakeExtraction] = useState(() =>
     typeof window !== 'undefined' ? readClinicalDemoFakeExtraction() : false
   )
+  const [tiebreakFallbackEnabled, setTiebreakFallbackEnabled] = useState(() =>
+    typeof window !== 'undefined' ? readEnsembleTiebreakAllowFallback() : true
+  )
 
   const loadCfg = async () => {
     setError('')
@@ -70,6 +77,10 @@ export default function Settings() {
     loadCfg()
   }, [])
 
+  useEffect(() => {
+    writeEnsembleTiebreakAllowFallback(tiebreakFallbackEnabled)
+  }, [tiebreakFallbackEnabled])
+
   const save = () => {
     const v = setApiBaseUrl(apiBaseUrl)
     setApiBaseUrlState(v)
@@ -78,11 +89,13 @@ export default function Settings() {
 
   const quickSteps = useMemo(
     () => [
-      '1) Clinical：左栏「随访」导入 CSV 或维护 caseId、time、status；右栏上传 WSI，由后端生成并绑定 20×/10× 特征（上传成功后可预览）。',
-      '2) Training：选择模型与超参启动训练；同一时间仅允许一个训练任务；支持资源预检与空闲超时自动停止。',
-      '3) Model Evaluation：选择已完成的 run 查看训练曲线与摘要；可按需做 KM 与 log-rank 分析。',
-      '4) Prediction：按病例（cases.json）推理，使用 Clinical 中该病例已绑定的双尺度特征。Task 下拉仅列出已结束且含 checkpoint 的任务。',
-      '5) Settings（本页）：配置 API BaseURL；在「服务器路径」卡片底部信息栏右侧可开关「演示」（影响 Clinical 上传关联是否走后端加速路径）。',
+      '1) Clinical：左栏随访（CSV 导入带状态提示、病例维护）；左栏底部展示「当前病例特征状态」；右栏 WSI 选择与上传；绑定后「已绑定病例图片预览」在右栏，说明文字可收起到 ℹ️。',
+      '2) Training：仅配置「单模型 MIL」（RRTMIL / AMIL / WiKG / DSMIL / S4MIL）与超参；与集成任务「共用队列」；单任务并发；可看日志与停止。',
+      '3) Ensemble：独立页的 EnsembleDecision（分支纳入/排除、先验与温度等）；仍走 POST /api/training/start，队列与日志在 Training 查看。',
+      '4) Evaluation：最优任务曲线对比（多模型 Loss/AUC）、评估 runs 与指标总览；与 Dashboard 部分统计同源。',
+      '5) Prediction：按病例与 Task 推理/批量推理；历史与「队列 C-index（按模型）」；请求可携带「门控回退」偏好（本页或 Ensemble 页同步）。',
+      '6) Dashboard：总览近期训练、预测与评估；可刷新聚合。',
+      '7) Settings（本页）：API BaseURL；服务器只读路径；「演示」开关；与 Ensemble 联动的 tie-break 门控回退偏好。',
     ],
     []
   )
@@ -106,7 +119,7 @@ export default function Settings() {
           设置
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          配置 API 地址、查看平台说明与服务器路径；更换域名或排查接口时可优先检查本页。
+          配置 API 地址、浏览器本地偏好；查看平台说明与服务器只读路径。更换域名或排查接口时可优先检查本页。
         </Typography>
       </Box>
 
@@ -159,6 +172,31 @@ export default function Settings() {
                 <br />
                 若前端不走同域名（跨域），可以把 BaseURL 改成带域名的完整地址。
               </Alert>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
+                浏览器本地偏好（与 Ensemble / Prediction 联动）
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={tiebreakFallbackEnabled}
+                    onChange={(e) => setTiebreakFallbackEnabled(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2">门控回退（蒸馏 tie-break 的 λ）</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      与 <strong>Ensemble</strong> 页开关写入同一本地项；<strong>Prediction</strong> 发起{' '}
+                      <code>/api/predict</code> 时会附带 <code>ensembleTiebreakAllowFallback</code>。开启=验证不足或全量退化时可将
+                      λ 置 0（稳健）；关闭=始终用学习到的 λ。服务端蒸馏路径需环境变量{' '}
+                      <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=1</code> 才生效。
+                    </Typography>
+                  </Box>
+                }
+                sx={{ alignItems: 'flex-start', ml: 0 }}
+              />
             </CardContent>
           </Card>
         </Grid>
@@ -168,16 +206,15 @@ export default function Settings() {
             <CardHeader title="平台介绍" titleTypographyProps={{ variant: 'subtitle1', fontWeight: 700 }} />
             <CardContent>
               <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                本系统是一个以<strong>多模型集成（EnsembleDecision）</strong>为核心的病理生存风险预测平台：先训练多路 MIL 基线（如 RRTMIL、AMIL、WiKG、DSMIL、S4MIL），再在统一口径下进行集成推理与对比评估。推理输入采用<strong>双尺度（20× / 10×）H5</strong>；Clinical 支持由 WSI 在线生成特征，结果用于科研流程验证。
+                本系统面向<strong>基于病理图像/特征的肺癌生存风险预测</strong>：先完成多路 MIL 基线（RRTMIL、AMIL、WiKG、DSMIL、S4MIL），再在统一数据口径下做<strong>决策级 EnsembleDecision</strong> 与对比评估。推理输入为<strong>双尺度（20× / 10×）H5</strong>；Clinical 支持由 WSI 在线生成特征并绑定病例，用于科研与流程验证。
                 <br />
                 <br />
                 当前版本提供：
-                <br />- 集成核心：EnsembleDecision（当前以概率融合为主），支持与 5 个基线模型同屏对比
-                <br />- 训练与评估：多模型 k-fold、日志与 checkpoint 管理；曲线面板支持基线与集成过程可视化
-                <br />- 集成展示：最优任务对比中可同时查看验证 Loss / 训练 Loss / 验证 AUC 的统一曲线
-                <br />- Clinical：随访管理 + 特征绑定分栏设计，支持“从 WSI 生成”（快速预览≈低采样近似，正式预测=TRIDENT 全量）
-                <br />- Prediction：按病例读取已绑定特征进行推理，展示风险得分、分层结果与概率分布
-                <br />- 兼容性保护：任务下拉自动执行特征维度校验，不匹配任务置灰提示
+                <br />- <strong>Training</strong>：仅单模型 MIL 训练与队列/日志；<strong>Ensemble</strong>：独立页的 EnsembleDecision 配置（与基线<strong>共用</strong>训练队列与 <code>/api/training/start</code>）
+                <br />- <strong>Evaluation</strong>：多模型最优任务曲线（Loss/AUC）、评估 runs；<strong>Dashboard</strong>：总览近期训练、预测与评估
+                <br />- <strong>Clinical</strong>：左栏随访与「当前病例特征状态」；右栏 WSI 与特征绑定；预览说明可收起到 ℹ️；CSV 导入带状态提示
+                <br />- <strong>Prediction</strong>：单例/批量推理、历史记录与<strong>队列 C-index（按模型）</strong>；可与服务端蒸馏/tie-break 策略配合（见本页本地偏好）
+                <br />- <strong>Settings</strong>：API BaseURL、服务器路径只读、演示开关、与 Ensemble 同步的 tie-break 门控回退偏好
               </Typography>
               <Divider sx={{ my: 2 }} />
               <Typography
@@ -194,10 +231,11 @@ export default function Settings() {
                 })}
               >
                 <strong>使用前请知悉：</strong>
-                <br />- 集成结果依赖各基线质量与覆盖范围；建议先保证单模型训练稳定，再观察 EnsembleDecision 的增益。
-                <br />- Clinical 中“快速预览”是近似流程（更快），“正式预测”走 TRIDENT 全量流程（更慢但更正式）。
-                <br />- Prediction 中 Task 仅显示已完成且含 checkpoint 的任务；界面不展示训练任务 UUID，需要时可将鼠标悬停在某一选项上查看。
-                <br />- 更换部署域名或端口时，在本页修改 API BaseURL；与 Nginx 同域反代时建议仍使用 <code>/api</code>。
+                <br />- 集成结果依赖各基线质量与覆盖范围；建议先完成五路基线再排 EnsembleDecision。
+                <br />- Clinical「快速预览」为低采样近似；「正式预测」为 TRIDENT 全量，耗时更长。
+                <br />- Prediction 的 Task 仅列出已完成且含 checkpoint 的任务；队列 C-index 依赖 Clinical 随访与预测历史齐全。
+                <br />- 自动分支先验（Dashboard 同源 C-index）在集成任务提交时由后端计算；预测量大时后端已做候选任务过滤与缓存以减轻卡顿。
+                <br />- 更换部署域名时在本页修改 API BaseURL；与 Nginx 同域反代时建议仍使用 <code>/api</code>。
               </Typography>
             </CardContent>
           </Card>
@@ -331,7 +369,9 @@ export default function Settings() {
                     <br />
                     ② 下载 SVS → Clinical 右栏选「从 WSI 生成」→ 上传 SVS → 选择「快速预览」或「正式预测」。
                     <br />
-                    ③ 打开 Prediction → 按病例选择该 caseId，并选择已有 checkpoint 的 Task → Predict。
+                    ③（可选）在 Training 完成基线后，打开 Ensemble 配置并启动 EnsembleDecision；队列与日志仍在 Training 查看。
+                    <br />
+                    ④ 打开 Prediction → 按病例选择该 caseId，并选择已有 checkpoint 的 Task → Predict。
                   </Typography>
                 </Box>
               </Stack>

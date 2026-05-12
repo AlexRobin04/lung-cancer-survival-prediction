@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Alert,
   Box,
@@ -6,7 +7,6 @@ import {
   Card,
   CardContent,
   CardHeader,
-  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -24,6 +24,7 @@ import {
   Checkbox,
   FormControlLabel,
   Typography,
+  Link as MuiLink,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
@@ -33,33 +34,6 @@ import { CANCER_CN_MAP } from '../../constants/trainingOptions'
 import { sanitizeTrainingLogContent } from '../../utils/trainingLogSanitize'
 import { formatTrainingHistoryDialogLabel, formatTrainingHistorySelectLabel } from '../../utils/ensembleTaskLabel'
 import Toast from '../common/Toast.jsx'
-
-/** 与后端 ensemble_exclude / 文档 6.1 留一法一致 */
-const ENSEMBLE_BRANCH_IDS = ['RRTMIL', 'AMIL', 'WiKG', 'DSMIL', 'S4MIL']
-
-/** 常用「用几路基线」子集（决策级 exclude） */
-const BRANCH_SUBSET_PRESETS = [
-  {
-    id: 'br-all',
-    label: '五路全开',
-    map: () => Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((b) => [b, true])),
-  },
-  {
-    id: 'br-rwd',
-    label: '仅 RRT+WiKG+DSMIL',
-    map: () => ({ RRTMIL: true, AMIL: false, WiKG: true, DSMIL: true, S4MIL: false }),
-  },
-  {
-    id: 'br-mil3',
-    label: '仅 AMIL+DSMIL+S4',
-    map: () => ({ RRTMIL: false, AMIL: true, WiKG: false, DSMIL: true, S4MIL: true }),
-  },
-  {
-    id: 'br-seq',
-    label: '仅 WiKG+S4（图+序列）',
-    map: () => ({ RRTMIL: false, AMIL: false, WiKG: true, DSMIL: false, S4MIL: true }),
-  },
-]
 
 const sectionCardSx = (accent, { mb = 3 } = {}) => (theme) => ({
   mb,
@@ -94,21 +68,6 @@ export default function Training() {
   const [kFolds, setKFolds] = useState(4)
   const [weightDecay, setWeightDecay] = useState(1e-5)
   const [earlyStopping, setEarlyStopping] = useState(false)
-  /** EnsembleDecision：固定为 avg_prob（各分支概率均值） */
-  /** 仅 avg_prob；界面已隐藏 decisionFusion 选择器 */
-  const [decisionFusion] = useState('avg_prob')
-  /** 对接 POST /api/training/start：与后端 ensembleBranchPriorAuto 等一致 */
-  const [ensembleBranchPriorAuto, setEnsembleBranchPriorAuto] = useState(true)
-  /** 空字符串表示不传，后端用默认 1.0；可填 0.55 等 */
-  const [ensembleBranchPriorTemperature, setEnsembleBranchPriorTemperature] = useState('0.55')
-  /** weighted 时可选：每路基线相对权重，留空表示该路默认 1（与后端一致） */
-  const [decisionBranchWeightById, setDecisionBranchWeightById] = useState(() =>
-    Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((b) => [b, '']))
-  )
-  /** 某路为 false 时，该基线在对齐后特征置零（等价于 ensembleExclude） */
-  const [branchInclude, setBranchInclude] = useState(() =>
-    Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((b) => [b, true]))
-  )
 
   const [task, setTask] = useState(null)
   const [logText, setLogText] = useState('')
@@ -156,21 +115,6 @@ export default function Training() {
   useEffect(() => {
     loadHistory()
   }, [])
-
-  /** 排除某路时清空其权重输入，避免误传 */
-  useEffect(() => {
-    setDecisionBranchWeightById((prev) => {
-      const next = { ...prev }
-      let changed = false
-      for (const b of ENSEMBLE_BRANCH_IDS) {
-        if (!branchInclude[b] && String(next[b] ?? '').trim() !== '') {
-          next[b] = ''
-          changed = true
-        }
-      }
-      return changed ? next : prev
-    })
-  }, [branchInclude])
 
   const removeQueueItem = async (taskId) => {
     if (!taskId || queueDeleting) return
@@ -267,62 +211,12 @@ export default function Training() {
     [cancer, modelType, maxEpochs, learningRate, kFolds, weightDecay, earlyStopping, repeat, seed]
   )
 
-  /** 写入与 Dashboard C-index 先验相关的 body 字段 */
-  const attachEnsemblePriorApiFields = useCallback(
-    (payload) => {
-      payload.ensembleBranchPriorAuto = !!ensembleBranchPriorAuto
-      const tRaw = String(ensembleBranchPriorTemperature ?? '').trim()
-      if (tRaw !== '') {
-        const n = Number(tRaw)
-        if (!Number.isNaN(n) && n > 0) payload.ensembleBranchPriorTemperature = n
-      }
-    },
-    [ensembleBranchPriorAuto, ensembleBranchPriorTemperature]
-  )
-
   const start = async () => {
-    if (String(modelType) === 'EnsembleDecision') {
-      const ex = ENSEMBLE_BRANCH_IDS.filter((b) => !branchInclude[b])
-      if (ex.length >= ENSEMBLE_BRANCH_IDS.length) {
-        setError('至少保留一路基线特征（文档 6.1：不可五路全关）')
-        return
-      }
-    }
     setLoading(true)
     setError('')
     setNotice('')
     try {
       const payload = { ...buildBasePayload() }
-      if (String(modelType) === 'EnsembleDecision') {
-        payload.repeat = 1
-        payload.decisionFusion = String(decisionFusion || 'weighted').toLowerCase()
-        const ex = ENSEMBLE_BRANCH_IDS.filter((b) => !branchInclude[b])
-        if (ex.length > 0) payload.ensembleExclude = ex
-        attachEnsemblePriorApiFields(payload)
-        if (String(decisionFusion || 'weighted').toLowerCase() === 'weighted') {
-          const wObj = {}
-          for (const b of ENSEMBLE_BRANCH_IDS) {
-            if (!branchInclude[b]) continue
-            const raw = String(decisionBranchWeightById[b] ?? '').trim()
-            if (raw === '') continue
-            const n = Number(raw)
-            if (Number.isNaN(n)) {
-              setError(`${b} 权重须为数字`)
-              setLoading(false)
-              return
-            }
-            if (n < 0) {
-              setError(`${b} 权重不能为负`)
-              setLoading(false)
-              return
-            }
-            wObj[b] = n
-          }
-          if (Object.keys(wObj).length > 0) {
-            payload.decisionBranchWeights = wObj
-          }
-        }
-      }
       const res = await trainingApi.start(payload)
       if (res?.taskId) {
         setTask({ taskId: res.taskId, status: res?.queued ? 'queued' : 'running' })
@@ -385,10 +279,7 @@ export default function Training() {
   }
 
   const modelOptions = useMemo(() => models.map((m) => (typeof m === 'string' ? { id: m, name: m } : m)), [models])
-  const allowedModelIds = useMemo(
-    () => new Set(['AMIL', 'WiKG', 'DSMIL', 'S4MIL', 'RRTMIL', 'EnsembleDecision']),
-    []
-  )
+  const allowedModelIds = useMemo(() => new Set(['AMIL', 'WiKG', 'DSMIL', 'S4MIL', 'RRTMIL']), [])
   const filteredModelOptions = useMemo(() => modelOptions.filter((m) => allowedModelIds.has(String(m.id))), [modelOptions, allowedModelIds])
 
   const openHistoryManager = () => {
@@ -475,7 +366,11 @@ export default function Training() {
           Training
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          配置癌种与模型、启动或停止训练，查看队列与当前任务日志。
+          配置癌种与<strong>基线 MIL</strong>、启动或停止训练，查看队列与当前任务日志。决策级集成请前往{' '}
+          <MuiLink component={Link} to="/ensemble" underline="hover">
+            Ensemble
+          </MuiLink>{' '}
+          页。
         </Typography>
       </Box>
 
@@ -589,153 +484,6 @@ export default function Training() {
               }
               label="早停（--early_stopping，按验证集 val_error）"
             />
-            {String(modelType) === 'EnsembleDecision' && (
-              <>
-                <Box sx={{ gridColumn: '1 / -1' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                    基线子集（ensembleExclude）
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    勾选 = 该路参与决策融合；取消勾选 = 排除该路基线 logits。
-                  </Typography>
-                  <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 1 }} alignItems="center">
-                    {ENSEMBLE_BRANCH_IDS.map((b) => (
-                      <FormControlLabel
-                        key={b}
-                        sx={{ mr: 1 }}
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={!!branchInclude[b]}
-                            onChange={() => setBranchInclude((prev) => ({ ...prev, [b]: !prev[b] }))}
-                          />
-                        }
-                        label={<Typography variant="body2">{b}</Typography>}
-                      />
-                    ))}
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                    快捷子集
-                  </Typography>
-                  <Stack direction="row" flexWrap="wrap" gap={0.75} sx={{ mb: 1 }}>
-                    {BRANCH_SUBSET_PRESETS.map((sp) => (
-                      <Chip
-                        key={sp.id}
-                        size="small"
-                        label={sp.label}
-                        variant="outlined"
-                        onClick={() => setBranchInclude(sp.map())}
-                      />
-                    ))}
-                    {ENSEMBLE_BRANCH_IDS.map((b) => (
-                      <Chip
-                        key={`exclude-only-${b}`}
-                        size="small"
-                        label={`仅排除 ${b}`}
-                        variant="outlined"
-                        onClick={() =>
-                          setBranchInclude(
-                            Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((x) => [x, x !== b]))
-                          )
-                        }
-                      />
-                    ))}
-                    {ENSEMBLE_BRANCH_IDS.map((b) => (
-                      <Chip
-                        key={`enable-only-${b}`}
-                        size="small"
-                        color="primary"
-                        variant="outlined"
-                        label={`仅启用 ${b}`}
-                        onClick={() =>
-                          setBranchInclude(
-                            Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((x) => [x, x === b]))
-                          )
-                        }
-                      />
-                    ))}
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                    当前将提交：
-                    {(() => {
-                      const active = ENSEMBLE_BRANCH_IDS.filter((b) => !!branchInclude[b])
-                      const ex = ENSEMBLE_BRANCH_IDS.filter((b) => !branchInclude[b])
-                      const activeText = active.length ? active.join(', ') : '（无）'
-                      const exText = ex.length ? ex.join(',') : '（空）'
-                      return ` 启用=[${activeText}]；--ensemble_exclude ${exText}`
-                    })()}
-                  </Typography>
-                </Box>
-                    <Box sx={{ gridColumn: '1 / -1', display: 'none' }}>
-                      <Stack direction="row" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1} sx={{ mb: 0.75 }}>
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                          显式支路权重 decisionBranchWeights（可选）
-                        </Typography>
-                        <Chip
-                          size="small"
-                          label="清空权重"
-                          variant="outlined"
-                          onClick={() =>
-                            setDecisionBranchWeightById(Object.fromEntries(ENSEMBLE_BRANCH_IDS.map((b) => [b, ''])))
-                          }
-                        />
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                        仅 <strong>weighted</strong> 生效；有任意非空数字时覆盖先验。留空表示该参与支路权重为 1；填 0 表示该路不参与显式加权（由后端与其它路归一化）。已取消勾选的基线不可填。
-                      </Typography>
-                      <Box
-                        sx={{
-                          display: 'grid',
-                          gridTemplateColumns: {
-                            xs: '1fr',
-                            sm: 'repeat(2, minmax(0, 1fr))',
-                            md: 'repeat(3, minmax(0, 1fr))',
-                            lg: 'repeat(5, minmax(0, 1fr))',
-                          },
-                          gap: 1.5,
-                        }}
-                      >
-                        {ENSEMBLE_BRANCH_IDS.map((b) => (
-                          <TextField
-                            key={b}
-                            size="small"
-                            label={b}
-                            value={decisionBranchWeightById[b] ?? ''}
-                            onChange={(e) =>
-                              setDecisionBranchWeightById((p) => ({ ...p, [b]: e.target.value }))
-                            }
-                            disabled={!branchInclude[b]}
-                            placeholder="默认 1"
-                            inputProps={{ inputMode: 'decimal' }}
-                            helperText={!branchInclude[b] ? '已排除' : undefined}
-                          />
-                        ))}
-                      </Box>
-                    </Box>
-                <Box sx={{ gridColumn: '1 / -1' }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} flexWrap="wrap" gap={2} alignItems={{ sm: 'center' }}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={ensembleBranchPriorAuto}
-                          onChange={(e) => setEnsembleBranchPriorAuto(e.target.checked)}
-                        />
-                      }
-                      label="自动从 Dashboard 队列 C-index 填先验（ensembleBranchPriorAuto）"
-                    />
-                    <TextField
-                      size="small"
-                      label="先验温度 ensembleBranchPriorTemperature"
-                      type="number"
-                      value={ensembleBranchPriorTemperature}
-                      onChange={(e) => setEnsembleBranchPriorTemperature(e.target.value)}
-                      sx={{ minWidth: 220 }}
-                      inputProps={{ min: 0.000001, step: 0.05 }}
-                    />
-                  </Stack>
-                </Box>
-              </>
-            )}
             <Button variant="contained" onClick={start} disabled={loading} sx={{ height: 40 }}>
               {loading ? <CircularProgress size={20} color="inherit" /> : 'Start'}
             </Button>

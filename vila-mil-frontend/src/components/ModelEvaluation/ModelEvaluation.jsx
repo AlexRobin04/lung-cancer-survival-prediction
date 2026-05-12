@@ -1237,12 +1237,12 @@ export default function ModelEvaluation() {
                         dataKey={`${m}_${compareMetric}`}
                         name={m}
                         stroke={COMPARE_COLORS[m] || '#333'}
-                        strokeWidth={1}
-                        strokeOpacity={m === 'EnsembleDecision' ? 0.85 : 0.95}
+                        strokeWidth={m === 'EnsembleDecision' ? 3 : 2.5}
+                        strokeOpacity={m === 'EnsembleDecision' ? 0.92 : 0.98}
                         strokeDasharray={COMPARE_DASH[m] || '0'}
                         connectNulls
                         dot={false}
-                        activeDot={{ r: 3 }}
+                        activeDot={{ r: 5, strokeWidth: 2 }}
                       />
                     ))}
                   </LineChart>

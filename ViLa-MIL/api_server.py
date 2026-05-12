@@ -39,7 +39,7 @@ BEST_MODELS_PATH = os.path.join(DATA_ROOT, "best_models.json")
 RESULT_API_RUNS = os.path.join(BASE_DIR, "result", "api_runs")
 
 # 写入 predictions.json 的推理协议版本（论文可复现：同版本 + 同 checkpoint 列表 + 同特征应对齐）
-PREDICT_PROTOCOL_ID = "predict-v4-202604-ensemble-mean-logits"
+PREDICT_PROTOCOL_ID = "predict-v5-202605-ensemble-default-no-distill"
 
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(DATA_ROOT, exist_ok=True)
@@ -68,6 +68,19 @@ _ENSEMBLE_BRANCH_KEYS_FROZEN = frozenset({"RRTMIL", "AMIL", "WiKG", "DSMIL", "S4
 _ENSEMBLE_BRANCH_ORDER_FOR_PRIOR = ("RRTMIL", "AMIL", "WiKG", "DSMIL", "S4MIL")
 # 任务展示名中「纳入支路」首字母顺序（五路全纳入 → AWRDS，与前端一致）
 _ENSEMBLE_BRANCH_ABBREV_ORDER = ("AMIL", "WiKG", "RRTMIL", "DSMIL", "S4MIL")
+
+# EnsembleDecision 自动分支先验：按 predictions/tasks/cases 的 mtime 缓存，避免连续点击「启动集成」时重复全表扫描
+_ENSEMBLE_PRIOR_CACHE: dict[str, Any] = {"key": "", "prior": "", "meta": {}}
+
+
+def _ensemble_distill_from_best_baseline_enabled() -> bool:
+    """是否启用 EnsembleDecision「复用队列 C-index 最高基线 probs」的兜底推理。
+
+    默认 **关闭**：始终走当前训练任务的 checkpoint，不同 ensembleExclude 的 risk / 队列 C-index 才可区分。
+    设为 ``1``/``true``/``on`` 时恢复旧行为（各集成任务可能对同一病例写出相同分布，队列 C-index 易完全相同）。
+    """
+    v = str(os.environ.get("VILAMIL_ENSEMBLE_DISTILL_BASELINE", "") or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
 
 
 def _ensemble_included_branch_abbrev(exclude: list[str] | None) -> str:
@@ -500,6 +513,45 @@ def _vila_resource_precheck() -> tuple[bool, dict[str, Any]]:
             "swapTotal": _fmt_gib(swap_total),
             "swapFree": _fmt_gib(swap_free),
             "cuda": cuda_detail,
+        },
+    }
+    return ok, detail
+
+
+def _ensemble_training_resource_soft_precheck() -> tuple[bool, dict[str, Any]]:
+    """
+    EnsembleDecision 提交前轻量内存/Swap 检查（读 /proc/meminfo；非 Linux 或读失败则跳过）。
+    五路 checkpoint + 同步 cohort 聚合在低配机上易拖慢整站；默认要求略低于 ViLa_MIL。
+    """
+    info = _read_meminfo_bytes()
+    mem_avail = int(info.get("MemAvailable") or 0)
+    mem_total = int(info.get("MemTotal") or 0)
+    swap_total = int(info.get("SwapTotal") or 0)
+    if mem_total <= 0:
+        return True, {"skipped": True, "reasonZh": "未读取到 MemTotal（可能非 Linux），跳过集成资源预检。"}
+    try:
+        min_avail_gb = float(os.environ.get("VILAMIL_ENSEMBLE_MIN_AVAIL_GB", "2.5"))
+    except Exception:
+        min_avail_gb = 2.5
+    try:
+        min_swap_gb = float(os.environ.get("VILAMIL_ENSEMBLE_MIN_SWAP_GB", "1"))
+    except Exception:
+        min_swap_gb = 1.0
+    req_a = int(min_avail_gb * (1024**3))
+    req_s = int(min_swap_gb * (1024**3))
+    mem_ok = mem_avail >= req_a
+    swap_ok = swap_total >= req_s or swap_total <= 0
+    ok = mem_ok and swap_ok
+    detail = {
+        "ok": ok,
+        "required": {
+            "memAvailableMin": _fmt_gib(req_a),
+            "swapTotalMin": _fmt_gib(req_s),
+            "swapPolicyZh": "Swap 为 0 时不作硬性要求",
+        },
+        "current": {
+            "memAvailable": _fmt_gib(mem_avail),
+            "swapTotal": _fmt_gib(swap_total),
         },
     }
     return ok, detail
@@ -1220,6 +1272,7 @@ def _append_prediction_history(record: dict[str, Any]) -> str:
         # 保留更多条，避免批量预测（多病例 × 多任务）过早裁掉早期记录导致队列统计漂移
         data["items"] = data["items"][:3000]
         _atomic_write_json(PREDICTIONS_PATH, data)
+        _ENSEMBLE_PRIOR_CACHE["key"] = ""
     return rid
 
 
@@ -1338,39 +1391,17 @@ def _bootstrap_survival_cindex_95ci(
     return [lo, hi], len(store), None
 
 
-def _cohort_prediction_cindex(
-    all_items: list[dict[str, Any]], *, task_id: str | None, bootstrap_b: int | None = None
+def _cohort_prediction_cindex_for_task_subset(
+    task_items: list[dict[str, Any]],
+    *,
+    task_id: str,
+    cases_blob: dict[str, Any],
+    bootstrap_b: int | None = None,
 ) -> dict[str, Any]:
-    """用已保存的预测记录 + Clinical 随访 time/status 估计队列 C-index。"""
-    items = list(all_items or [])
-    if not task_id or not str(task_id).strip():
-        # 禁止「不区分 taskId」的合并口径：同一病例被不同任务预测时，若只取全局最新一条，
-        # 等于把不同模型的 riskScore 混进同一队列，C-index 会随预测顺序漂移、与表格按 task 分行矛盾。
-        return {
-            "taskIdFilter": None,
-            "nPredictionRecordsScanned": len(items),
-            "nDistinctCasesWithPrediction": 0,
-            "nUsableCasesJoinedClinical": 0,
-            "comparablePairs": 0,
-            "cIndex": None,
-            "cIndex95Ci": None,
-            "cIndexBootstrapB": None,
-            "cIndexBootstrapSuccess": 0,
-            "cIndexBootstrapNoteZh": None,
-            "cIndexCiMethodZh": None,
-            "cIndexSuppressedZh": (
-                "已停用「不区分 taskId 的全局合并 C-index」。"
-                "原因：同一 caseId 若先后用不同训练任务预测，旧逻辑只保留时间最新一条，会把不同模型的 riskScore 混成一条队列，指标会乱跳。"
-                "请使用下方「按 task」表格，或请求 GET /api/predictions?taskId=<任务ID> 查看 cohortCIndexForTask。"
-            ),
-            "caseIdsUsed": [],
-            "skippedSample": [],
-            "noteZh": "队列生存 C-index 必须按单一 taskId（单一模型输出口径）计算。",
-        }
+    """对「已为某一 taskId 过滤好」的预测子列表计算队列 C-index；cases_blob 由调用方复用以避免重复读盘。"""
     tid = str(task_id).strip()
-    items = [x for x in items if str(x.get("taskId") or "") == tid]
+    items = list(task_items or [])
     latest = _latest_prediction_per_case(items)
-    cases_blob = _load_cases().get("cases", {})
     times: list[float] = []
     events: list[int] = []
     scores: list[float] = []
@@ -1455,6 +1486,41 @@ def _cohort_prediction_cindex(
     }
 
 
+def _cohort_prediction_cindex(
+    all_items: list[dict[str, Any]], *, task_id: str | None, bootstrap_b: int | None = None
+) -> dict[str, Any]:
+    """用已保存的预测记录 + Clinical 随访 time/status 估计队列 C-index。"""
+    items = list(all_items or [])
+    if not task_id or not str(task_id).strip():
+        return {
+            "taskIdFilter": None,
+            "nPredictionRecordsScanned": len(items),
+            "nDistinctCasesWithPrediction": 0,
+            "nUsableCasesJoinedClinical": 0,
+            "comparablePairs": 0,
+            "cIndex": None,
+            "cIndex95Ci": None,
+            "cIndexBootstrapB": None,
+            "cIndexBootstrapSuccess": 0,
+            "cIndexBootstrapNoteZh": None,
+            "cIndexCiMethodZh": None,
+            "cIndexSuppressedZh": (
+                "已停用「不区分 taskId 的全局合并 C-index」。"
+                "原因：同一 caseId 若先后用不同训练任务预测，旧逻辑只保留时间最新一条，会把不同模型的 riskScore 混成一条队列，指标会乱跳。"
+                "请使用下方「按 task」表格，或请求 GET /api/predictions?taskId=<任务ID> 查看 cohortCIndexForTask。"
+            ),
+            "caseIdsUsed": [],
+            "skippedSample": [],
+            "noteZh": "队列生存 C-index 必须按单一 taskId（单一模型输出口径）计算。",
+        }
+    tid = str(task_id).strip()
+    sub = [x for x in items if str(x.get("taskId") or "") == tid]
+    cases_blob = _load_cases().get("cases", {})
+    return _cohort_prediction_cindex_for_task_subset(
+        sub, task_id=tid, cases_blob=cases_blob, bootstrap_b=bootstrap_b
+    )
+
+
 def _cohort_prediction_cindex_table_by_task(
     all_items: list[dict[str, Any]], *, bootstrap_b: int | None = None
 ) -> list[dict[str, Any]]:
@@ -1466,13 +1532,15 @@ def _cohort_prediction_cindex_table_by_task(
         except ValueError:
             bb = 400
     items = list(all_items or [])
-    tids: set[str] = set()
+    by_tid: dict[str, list] = {}
     model_from_pred: dict[str, str] = {}
     for x in items:
         tid = str(x.get("taskId") or "").strip()
         if not tid:
             continue
-        tids.add(tid)
+        if tid not in by_tid:
+            by_tid[tid] = []
+        by_tid[tid].append(x)
         if tid not in model_from_pred:
             mt = str(x.get("modelType") or x.get("model_type") or "").strip()
             if mt:
@@ -1482,13 +1550,16 @@ def _cohort_prediction_cindex_table_by_task(
         tid = str(t.get("taskId") or t.get("id") or "").strip()
         if tid:
             tasks_by_id[tid] = t
+    cases_blob = _load_cases().get("cases", {})
     rows: list[dict[str, Any]] = []
-    # 仅展示当前 tasks.json 仍存在的任务，避免“训练历史已删但预测残留”导致幽灵 taskId。
-    for tid in sorted(tids):
+    # 仅展示当前 tasks.json 仍存在的任务；按 taskId 分桶避免对每个 task 全表扫描 predictions（训练启动集成先验时否则会长时间阻塞 HTTP）。
+    for tid in sorted(by_tid.keys()):
         tmeta = tasks_by_id.get(tid)
         if not tmeta:
             continue
-        full = _cohort_prediction_cindex(all_items, task_id=tid, bootstrap_b=bb)
+        full = _cohort_prediction_cindex_for_task_subset(
+            by_tid[tid], task_id=tid, cases_blob=cases_blob, bootstrap_b=bb
+        )
         mt = str(tmeta.get("modelType") or tmeta.get("model_type") or model_from_pred.get(tid) or "").strip() or "—"
         rows.append(
             {
@@ -1547,6 +1618,7 @@ def _learn_two_model_tiebreak_strategy(
     *,
     cancer: str,
     mode: str,
+    allow_fallback: bool = True,
 ) -> dict[str, Any] | None:
     """
     基于历史预测记录自动学习“最强模型 + 次强模型符号微调”策略：
@@ -1724,16 +1796,17 @@ def _learn_two_model_tiebreak_strategy(
     min_val_gain = 0.01
     fallback_to_zero = False
     fallback_reason = ""
-    if math.isfinite(base_va):
-        if (best_val_ci - base_va) < min_val_gain:
-            fallback_to_zero = True
-            fallback_reason = (
-                f"验证集提升不足阈值: gain={best_val_ci - base_va:.4f} < min_val_gain={min_val_gain:.4f}"
-            )
-    if not fallback_to_zero and math.isfinite(base_all):
-        if best_mix_ci + 1e-12 < base_all:
-            fallback_to_zero = True
-            fallback_reason = f"全量退化: chosenAll={best_mix_ci:.4f} < baselineAll={base_all:.4f}"
+    if allow_fallback:
+        if math.isfinite(base_va):
+            if (best_val_ci - base_va) < min_val_gain:
+                fallback_to_zero = True
+                fallback_reason = (
+                    f"验证集提升不足阈值: gain={best_val_ci - base_va:.4f} < min_val_gain={min_val_gain:.4f}"
+                )
+        if not fallback_to_zero and math.isfinite(base_all):
+            if best_mix_ci + 1e-12 < base_all:
+                fallback_to_zero = True
+                fallback_reason = f"全量退化: chosenAll={best_mix_ci:.4f} < baselineAll={base_all:.4f}"
 
     if fallback_to_zero:
         zero_all = [b for b in best_scores]
@@ -1763,6 +1836,7 @@ def _learn_two_model_tiebreak_strategy(
         "minValGain": float(min_val_gain),
         "fallbackToZero": bool(fallback_to_zero),
         "fallbackReasonZh": fallback_reason,
+        "tiebreakFallbackDisabled": bool(not allow_fallback),
         "timeSplit": {
             "enabled": True,
             "trainSize": int(len(train_idx)),
@@ -1787,21 +1861,66 @@ def _ensemble_branch_prior_from_dashboard_cindex(
     从 predictions.json + 与 Dashboard 相同的「按 task 队列 C-index」规则，
     为五基线各取**同癌种、同 mode** 下当前最高的 C-index，拼成 ensemble_branch_prior 字符串。
     exclude 中的分支不参与（与训练 ensembleExclude 一致）。
+
+    性能：只扫描 tasks.json 中符合条件的基线 taskId，再单遍过滤 predictions；
+    避免对「历史遗留的大量非基线 taskId」逐条算 C-index（此前会拖慢 POST /training/start）。
     """
     cancer_u = str(cancer or "LUSC").strip().upper()
     mode_s = str(mode or "transformer").strip().lower()
     excl = exclude or frozenset()
+    excl_key = ",".join(sorted(excl))
+    try:
+        pm = os.path.getmtime(PREDICTIONS_PATH) if os.path.isfile(PREDICTIONS_PATH) else 0.0
+        tm = os.path.getmtime(TASKS_PATH) if os.path.isfile(TASKS_PATH) else 0.0
+        cm = os.path.getmtime(CASES_PATH) if os.path.isfile(CASES_PATH) else 0.0
+    except OSError:
+        pm = tm = cm = 0.0
+    cache_key = f"{cancer_u}|{mode_s}|{excl_key}|{pm:.9f}|{tm:.9f}|{cm:.9f}"
+    if _ENSEMBLE_PRIOR_CACHE["key"] == cache_key:
+        meta = _ENSEMBLE_PRIOR_CACHE.get("meta") or {}
+        return str(_ENSEMBLE_PRIOR_CACHE.get("prior") or ""), dict(meta)
+
     data = _read_json(PREDICTIONS_PATH, {"items": []})
-    all_items = data.get("items") or []
-    # 仅需要各 task 的点估计 C-index 用于先验拼接；关闭 Bootstrap，避免「多 task × 每 task 数百次自助」
-    # 在 POST /api/training/start 请求线程内同步执行导致接口长时间无响应（用户体感为卡死）。
-    rows = _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=0)
-    best: dict[str, tuple[float, str]] = {}
-    for r in rows:
-        mt = str(r.get("modelType") or "").strip()
+    all_items = list(data.get("items") or [])
+
+    tasks_by_id: dict[str, dict[str, Any]] = {}
+    candidate_tids: set[str] = set()
+    for t in _load_tasks().get("tasks", []) or []:
+        tid = str(t.get("taskId") or t.get("id") or "").strip()
+        if not tid:
+            continue
+        tasks_by_id[tid] = t
+        mt = str(t.get("modelType") or t.get("model_type") or "").strip()
         if mt not in _ENSEMBLE_BRANCH_KEYS_FROZEN or mt in excl:
             continue
-        ci = r.get("cIndex")
+        c_meta = str(t.get("cancer") or "").strip().upper()
+        if c_meta != cancer_u:
+            continue
+        m_meta = str(t.get("mode") or "").strip().lower()
+        if m_meta and m_meta != mode_s:
+            continue
+        candidate_tids.add(tid)
+
+    by_tid: dict[str, list] = {tid: [] for tid in candidate_tids}
+    for x in all_items:
+        tid = str(x.get("taskId") or "").strip()
+        if tid in by_tid:
+            by_tid[tid].append(x)
+
+    cases_blob = _load_cases().get("cases", {})
+    best: dict[str, tuple[float, str]] = {}
+    for tid in candidate_tids:
+        task_items = by_tid.get(tid) or []
+        if not task_items:
+            continue
+        tmeta = tasks_by_id.get(tid)
+        if not tmeta:
+            continue
+        mt = str(tmeta.get("modelType") or tmeta.get("model_type") or "").strip()
+        full = _cohort_prediction_cindex_for_task_subset(
+            task_items, task_id=tid, cases_blob=cases_blob, bootstrap_b=0
+        )
+        ci = full.get("cIndex")
         if ci is None:
             continue
         try:
@@ -1810,22 +1929,12 @@ def _ensemble_branch_prior_from_dashboard_cindex(
             continue
         if not math.isfinite(cif):
             continue
-        tid = str(r.get("taskId") or "").strip()
-        if not tid:
-            continue
-        tmeta = _find_task(tid) or {}
-        c_meta = str(tmeta.get("cancer") or r.get("cancer") or "").strip().upper()
-        if c_meta != cancer_u:
-            continue
-        m_meta = str(tmeta.get("mode") or "").strip().lower()
-        if m_meta and m_meta != mode_s:
-            continue
         prev = best.get(mt)
         if prev is None or cif > prev[0]:
             best[mt] = (cif, tid)
 
     if not best:
-        return "", {
+        meta = {
             "filled": False,
             "reasonZh": (
                 "无可用队列 C-index：请确认已对五基线在同癌种/同 mode 下做过预测，"
@@ -1834,6 +1943,10 @@ def _ensemble_branch_prior_from_dashboard_cindex(
             "perBranch": {},
             "missingBranches": [b for b in _ENSEMBLE_BRANCH_ORDER_FOR_PRIOR if b not in excl],
         }
+        _ENSEMBLE_PRIOR_CACHE["key"] = cache_key
+        _ENSEMBLE_PRIOR_CACHE["prior"] = ""
+        _ENSEMBLE_PRIOR_CACHE["meta"] = meta
+        return "", meta
 
     parts: list[str] = []
     per_branch: dict[str, Any] = {}
@@ -1847,7 +1960,7 @@ def _ensemble_branch_prior_from_dashboard_cindex(
 
     missing = [b for b in _ENSEMBLE_BRANCH_ORDER_FOR_PRIOR if b not in excl and b not in best]
     s = ",".join(parts)
-    return s, {
+    meta = {
         "filled": bool(s),
         "perBranch": per_branch,
         "missingBranches": missing,
@@ -1858,6 +1971,10 @@ def _ensemble_branch_prior_from_dashboard_cindex(
         if not missing
         else f"部分分支无队列 C-index，缺: {','.join(missing)}；未写明的分支在模型侧用默认 0.5。",
     }
+    _ENSEMBLE_PRIOR_CACHE["key"] = cache_key
+    _ENSEMBLE_PRIOR_CACHE["prior"] = s
+    _ENSEMBLE_PRIOR_CACHE["meta"] = meta
+    return s, meta
 
 
 RASTER_PREDICT_DISCLAIMER_ZH = (
@@ -1879,6 +1996,7 @@ def _execute_predict_pipeline(
     feature_source: str,
     disclaimer_extra: str | None = None,
     raster_meta: dict[str, Any] | None = None,
+    ensemble_tiebreak_allow_fallback: bool = True,
 ) -> tuple[dict[str, Any], int]:
     """从已解析的 H5 路径执行与 /api/predict 相同的推理逻辑。"""
     import h5py
@@ -1902,8 +2020,9 @@ def _execute_predict_pipeline(
 
     results_dir = _resolve_task_results_dir(t)
     if model_type == "EnsembleDecision":
-        # 优先策略：对已预测病例，直接复用“当前队列 C-index 最强基线模型”的最新输出，保证集成不弱于最强单模。
-        # 若该 case 尚无该基线历史预测，则回退到 EnsembleDecision checkpoint 推理。
+        # 可选策略（环境变量 VILAMIL_ENSEMBLE_DISTILL_BASELINE）：对已预测病例复用「队列 C-index 最高」基线的 probs，
+        # 工程上保证集成输出不弱于最强单模；默认关闭，否则不同 ensembleExclude 任务会对同一批病例写出相同风险，队列 C-index 会完全一致。
+        # 未启用或无条件不满足时：走当前任务的 EnsembleDecision checkpoint 推理。
         try:
             all_items = (_read_json(PREDICTIONS_PATH, {"items": []}).get("items") or [])
             rows = _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=0)
@@ -1917,7 +2036,7 @@ def _execute_predict_pipeline(
                         continue
                     if (best_base is None) or (ci > best_base[0]):
                         best_base = (ci, mt, str(r.get("taskId") or "").strip())
-            if best_base and case_id:
+            if _ensemble_distill_from_best_baseline_enabled() and best_base and case_id:
                 _ci, _mt, best_tid = best_base
                 hist = _latest_prediction_item_for_case_task(str(case_id), best_tid)
                 if hist and isinstance(hist.get("probs"), list) and len(hist.get("probs")) == 4:
@@ -1927,6 +2046,7 @@ def _execute_predict_pipeline(
                     blend = _learn_two_model_tiebreak_strategy(
                         cancer=str(t.get("cancer") or "LUSC"),
                         mode=str(t.get("mode") or "transformer"),
+                        allow_fallback=bool(ensemble_tiebreak_allow_fallback),
                     )
                     if blend and str(blend.get("bestTaskId") or "") == best_tid:
                         tid2 = str(blend.get("secondTaskId") or "")
@@ -1958,6 +2078,7 @@ def _execute_predict_pipeline(
                             "minValGain": blend.get("minValGain"),
                             "fallbackToZero": blend.get("fallbackToZero"),
                             "fallbackReasonZh": blend.get("fallbackReasonZh"),
+                            "tiebreakFallbackDisabled": blend.get("tiebreakFallbackDisabled"),
                             "learnedCIndex": blend.get("learnedCIndex"),
                             "timeSplit": blend.get("timeSplit"),
                         }
@@ -2152,8 +2273,13 @@ def _predict_body_dict(body: dict[str, Any]) -> tuple[dict[str, Any], int]:
     f10_id = (body.get("feature10FileId") or body.get("feature10_file_id") or "").strip() or None
     cancer_hint = (body.get("cancer") or body.get("cancerType") or "").strip() or None
 
-    t = _find_task(task_id) if task_id else None
-    if not t:
+    task_id_s = str(task_id).strip() if task_id not in (None, "") else ""
+    if task_id_s:
+        t = _find_task(task_id_s)
+        if not t:
+            return ({"message": f"未找到训练任务 taskId={task_id_s}"}, 400)
+    else:
+        t = None
         for it in _load_tasks().get("tasks", []):
             if it.get("status") in ("completed",):
                 t = it
@@ -2184,6 +2310,14 @@ def _predict_body_dict(body: dict[str, Any]) -> tuple[dict[str, Any], int]:
             400,
         )
     feature_source = "manifestFileIds" if (f20_id and f10_id) else "caseRecord"
+    etf_raw = body.get("ensembleTiebreakAllowFallback")
+    if etf_raw is None:
+        etf_raw = body.get("ensemble_tiebreak_allow_fallback")
+    ensemble_tiebreak_allow_fallback = True
+    if isinstance(etf_raw, bool):
+        ensemble_tiebreak_allow_fallback = etf_raw
+    elif etf_raw is not None:
+        ensemble_tiebreak_allow_fallback = str(etf_raw).strip().lower() not in ("0", "false", "no", "off")
     out, st = _execute_predict_pipeline(
         p20,
         p10,
@@ -2196,6 +2330,7 @@ def _predict_body_dict(body: dict[str, Any]) -> tuple[dict[str, Any], int]:
         feature_source=feature_source,
         disclaimer_extra=None,
         raster_meta=None,
+        ensemble_tiebreak_allow_fallback=ensemble_tiebreak_allow_fallback,
     )
     out["fallbackUsed"] = False
     return (out, st)
@@ -3044,6 +3179,26 @@ def create_app() -> Flask:
             if str(df_raw or "").strip().lower() not in {"", "avg_prob"}:
                 return jsonify({"message": "当前仅支持 decisionFusion=avg_prob（简单概率均值）"}), 400
             decision_fusion = "avg_prob"
+            if str(os.environ.get("VILAMIL_ENSEMBLE_RESOURCE_GUARD", "") or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                ok_en, en_detail = _ensemble_training_resource_soft_precheck()
+                if not ok_en:
+                    return (
+                        jsonify(
+                            {
+                                "message": (
+                                    "EnsembleDecision 资源预检未通过（已设置 VILAMIL_ENSEMBLE_RESOURCE_GUARD=1）。"
+                                    "请释放内存或调整 VILAMIL_ENSEMBLE_MIN_AVAIL_GB / VILAMIL_ENSEMBLE_MIN_SWAP_GB。"
+                                ),
+                                "resourceCheck": en_detail,
+                            }
+                        ),
+                        400,
+                    )
 
         decision_branch_weights_str = ""
         ensemble_branch_prior_str = ""
@@ -5080,6 +5235,10 @@ def create_app() -> Flask:
         cancer = request.form.get("cancer") or "LUSC"
         case_id = (request.form.get("caseId") or request.form.get("case_id") or "").strip() or None
         save_history = str(request.form.get("saveHistory", "true")).lower() not in ("0", "false", "no")
+        etf_form = request.form.get("ensembleTiebreakAllowFallback") or request.form.get("ensemble_tiebreak_allow_fallback")
+        ensemble_tiebreak_allow_fallback = True
+        if isinstance(etf_form, str) and etf_form.strip():
+            ensemble_tiebreak_allow_fallback = etf_form.strip().lower() not in ("0", "false", "no", "off")
         extractor = str(request.form.get("extractor") or "raster").strip().lower()
         mpp_raw = request.form.get("mpp") or request.form.get("tridentMpp")
         trident_mpp: float | None = None
@@ -5106,8 +5265,13 @@ def create_app() -> Flask:
         if extractor == "trident" and ext in {".png", ".jpg", ".jpeg"} and (trident_mpp is None or trident_mpp <= 0):
             return jsonify({"message": "TRIDENT 处理 PNG/JPEG 时必须提供 mpp（例如 0.25）"}), 400
 
-        t = _find_task(task_id) if task_id else None
-        if not t:
+        task_id_rs = str(task_id).strip() if task_id not in (None, "") else ""
+        if task_id_rs:
+            t = _find_task(task_id_rs)
+            if not t:
+                return jsonify({"message": f"未找到训练任务 taskId={task_id_rs}"}), 400
+        else:
+            t = None
             for it in _load_tasks().get("tasks", []):
                 if it.get("status") in ("completed",):
                     t = it
@@ -5176,6 +5340,7 @@ def create_app() -> Flask:
             feature_source="tridentDualScaleH5" if extractor == "trident" else "rasterImageNetResNet50",
             disclaimer_extra=None if extractor == "trident" else RASTER_PREDICT_DISCLAIMER_ZH,
             raster_meta={**meta, "cancer": cancer, "originalName": f.filename, "extractor": extractor},
+            ensemble_tiebreak_allow_fallback=ensemble_tiebreak_allow_fallback,
         )
         out["fallbackUsed"] = bool(meta.get("tridentFallback"))
         return jsonify(out), st

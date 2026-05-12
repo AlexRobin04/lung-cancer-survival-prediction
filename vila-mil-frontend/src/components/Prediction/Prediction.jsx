@@ -28,6 +28,7 @@ import {
 import { alpha } from '@mui/material/styles'
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { clinicalApi, predictApi, trainingApi } from '../../services/api'
+import { readEnsembleTiebreakAllowFallback } from '../../constants/ensemblePredictPrefs'
 import useCancerOptions from '../../hooks/useCancerOptions'
 import Toast from '../common/Toast.jsx'
 import RasterPreview from '../Clinical/RasterPreview.jsx'
@@ -662,7 +663,12 @@ export default function Prediction() {
       setPredictProgress((p) => (p < target ? p + 2 : p))
     }, 600)
     try {
-      const res = await predictApi.predict({ caseId, taskId: effectiveTaskId, saveHistory: true })
+      const res = await predictApi.predict({
+        caseId,
+        taskId: effectiveTaskId,
+        saveHistory: true,
+        ensembleTiebreakAllowFallback: readEnsembleTiebreakAllowFallback(),
+      })
       setResult(res)
       setNotice('预测完成')
       setPredictProgress(100)
@@ -697,10 +703,39 @@ export default function Prediction() {
       setPredictProgress((p) => (p < target ? p + 1 : p))
     }, 800)
     try {
-      const data = await predictApi.predictBatch(
-        list.map((c) => ({ caseId: c.caseId, taskId: effectiveTaskId, saveHistory: true }))
-      )
-      const rows = Array.isArray(data?.results) ? data.results : []
+      const fb = readEnsembleTiebreakAllowFallback()
+      const initialItems = list.map((c) => ({
+        caseId: c.caseId,
+        taskId: effectiveTaskId,
+        saveHistory: true,
+        ensembleTiebreakAllowFallback: fb,
+      }))
+      const data = await predictApi.predictBatch(initialItems)
+      const merged = new Map()
+      for (const row of Array.isArray(data?.results) ? data.results : []) {
+        const k = `${String(row?.input?.caseId || '')}::${String(row?.input?.taskId || '')}`
+        if (k !== '::') merged.set(k, row)
+      }
+      const failed = []
+      for (const it of initialItems) {
+        const k = `${String(it.caseId)}::${String(it.taskId)}`
+        const row = merged.get(k)
+        const out = row?.output
+        if (!row || row.error || !out || !Number.isFinite(Number(out.riskScore))) failed.push(it)
+      }
+      let didRetry = false
+      if (failed.length) {
+        didRetry = true
+        const data2 = await predictApi.predictBatch(failed)
+        for (const row of Array.isArray(data2?.results) ? data2.results : []) {
+          const k2 = `${String(row?.input?.caseId || '')}::${String(row?.input?.taskId || '')}`
+          if (k2 !== '::') merged.set(k2, row)
+        }
+      }
+      const rows = initialItems.map((it) => {
+        const k = `${String(it.caseId)}::${String(it.taskId)}`
+        return merged.get(k) || { input: it, error: '无返回' }
+      })
       let ok = 0
       let fail = 0
       for (const row of rows) {
@@ -713,7 +748,8 @@ export default function Prediction() {
         else if (out && Number.isFinite(out.riskScore)) ok += 1
         else fail += 1
       }
-      setNotice(`批量预测完成：成功 ${ok}，失败 ${fail}（共 ${list.length} 条）`)
+      const retryHint = didRetry ? '（已对首轮失败病例自动重试一次）' : ''
+      setNotice(`批量预测完成：成功 ${ok}，失败 ${fail}（共 ${list.length} 条）${retryHint}`)
       setPredictProgress(100)
       await loadCohortCIndex()
     } catch (e) {
@@ -1066,6 +1102,7 @@ export default function Prediction() {
               : ''}{' '}
             单次 Predict 使用当前下拉框中的病例；批量按钮会对列表中全部「已登记 20×+10× 且与当前任务维度一致」的病例调用{' '}
             <code>/predict/batch</code>（例如 31 个病例时会显示「一键预测 31 个病例」）。
+            若首轮有个别病例失败，会自动对失败项再请求一次批量接口。
           </Typography>
           {taskPickMode === 'best' && bestTaskMeta?.bestTaskId && (
             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>

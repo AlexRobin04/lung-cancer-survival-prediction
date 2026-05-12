@@ -227,7 +227,15 @@ export const predictApi = {
    * - 仅 caseId：使用 Clinical 中已为病例登记的 20×/10× fileId
    * - feature20FileId + feature10FileId：直接按上传清单中的文件推理（可选 caseId 用于关联随访）
    */
-  async predict({ caseId, taskId, saveHistory = true, feature20FileId, feature10FileId, cancer }) {
+  async predict({
+    caseId,
+    taskId,
+    saveHistory = true,
+    feature20FileId,
+    feature10FileId,
+    cancer,
+    ensembleTiebreakAllowFallback,
+  }) {
     const body = { taskId, saveHistory }
     if (feature20FileId && feature10FileId) {
       body.feature20FileId = feature20FileId
@@ -236,6 +244,9 @@ export const predictApi = {
       if (caseId) body.caseId = caseId
     } else {
       body.caseId = caseId
+    }
+    if (ensembleTiebreakAllowFallback !== undefined) {
+      body.ensembleTiebreakAllowFallback = !!ensembleTiebreakAllowFallback
     }
     const { data } = await client.post('/predict', body)
     return data
@@ -246,7 +257,17 @@ export const predictApi = {
     return data
   },
   /** 上传文件，后端生成双尺度 H5 后推理（extractor=raster|trident） */
-  async predictFromRaster({ file, taskId, cancer, caseId, saveHistory = true, extractor = 'raster', mpp, quick }) {
+  async predictFromRaster({
+    file,
+    taskId,
+    cancer,
+    caseId,
+    saveHistory = true,
+    extractor = 'raster',
+    mpp,
+    quick,
+    ensembleTiebreakAllowFallback,
+  }) {
     const fd = new FormData()
     fd.append('file', file)
     if (taskId) fd.append('taskId', taskId)
@@ -254,6 +275,9 @@ export const predictApi = {
     if (caseId) fd.append('caseId', caseId)
     fd.append('saveHistory', saveHistory ? 'true' : 'false')
     fd.append('extractor', extractor)
+    if (ensembleTiebreakAllowFallback !== undefined) {
+      fd.append('ensembleTiebreakAllowFallback', ensembleTiebreakAllowFallback ? 'true' : 'false')
+    }
     if (quick !== undefined) fd.append('quick', quick ? 'true' : 'false')
     if (mpp !== undefined && mpp !== null && String(mpp).trim() !== '') fd.append('mpp', String(mpp))
     const { data } = await client.post('/predict/from-raster', fd, {

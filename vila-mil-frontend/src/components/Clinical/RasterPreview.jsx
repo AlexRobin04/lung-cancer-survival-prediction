@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Box, IconButton, Slider, Stack, Typography } from '@mui/material'
+import { Box, IconButton, Popover, Slider, Stack, Tooltip, Typography } from '@mui/material'
 import ZoomInIcon from '@mui/icons-material/ZoomIn'
 import ZoomOutIcon from '@mui/icons-material/ZoomOut'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 
 const ZOOM_MIN = 0.25
 const ZOOM_MAX = 4
@@ -13,11 +14,20 @@ const ZOOM_STEP = 0.05
  * @param {File | null} file - 当前选中的文件（优先显示）
  * @param {{ url: string, name: string } | null} persisted - 上传成功后保留的预览（parent 持有 url 并负责 revoke）
  * @param {{ url: string, name: string } | null} generated - 针对 WSI 生成的缩略图预览（parent 持有 url 并负责 revoke）
+ * @param {boolean} [hideDisplayName] - 不展示顶部文件名（由父级展示标题时）
+ * @param {boolean} [suppressInlineHints] - 将「已生成特征…」「图像预览操作…」收起到 ℹ️，悬停或点击查看
  */
-export default function RasterPreview({ file, persisted = null, generated = null }) {
+export default function RasterPreview({
+  file,
+  persisted = null,
+  generated = null,
+  hideDisplayName = false,
+  suppressInlineHints = false,
+}) {
   const [fileObjectUrl, setFileObjectUrl] = useState(null)
   const [zoom, setZoom] = useState(1)
   const scrollRef = useRef(null)
+  const [hintAnchor, setHintAnchor] = useState(null)
 
   useEffect(() => {
     if (!file) {
@@ -33,6 +43,19 @@ export default function RasterPreview({ file, persisted = null, generated = null
   const displayName = generated?.name ?? file?.name ?? persisted?.name ?? ''
   const isPersistedOnly = !file && !!persisted?.url
 
+  const hintBody = (
+    <Box sx={{ p: 1.5, maxWidth: 320 }}>
+      {isPersistedOnly ? (
+        <Typography variant="body2" color="success.main" sx={{ mb: 1.25, display: 'block' }}>
+          已生成特征，预览保留；选择新图像可替换
+        </Typography>
+      ) : null}
+      <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.55 }}>
+        图像预览（框内可拖动滚动；拖曳滑块或 Ctrl/⌘ + 滚轮缩放）
+      </Typography>
+    </Box>
+  )
+
   useEffect(() => {
     setZoom(1)
     if (scrollRef.current) {
@@ -40,6 +63,10 @@ export default function RasterPreview({ file, persisted = null, generated = null
       scrollRef.current.scrollLeft = 0
     }
   }, [file, persisted?.url, generated?.url])
+
+  useEffect(() => {
+    setHintAnchor(null)
+  }, [displayUrl])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -60,20 +87,81 @@ export default function RasterPreview({ file, persisted = null, generated = null
 
   if (!displayUrl) return null
 
+  const hintOpen = Boolean(hintAnchor)
+
   return (
-    <Box sx={{ mt: 1 }}>
-      <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 500 }} noWrap title={displayName}>
-        {displayName}
-      </Typography>
-      {isPersistedOnly && (
+    <Box sx={{ mt: hideDisplayName && suppressInlineHints ? 0 : 1 }}>
+      {!hideDisplayName && (
+        <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 500 }} noWrap title={displayName}>
+          {displayName}
+        </Typography>
+      )}
+      {!suppressInlineHints && isPersistedOnly && (
         <Typography variant="caption" color="success.main" sx={{ display: 'block', mb: 0.5 }}>
           已生成特征，预览保留；选择新图像可替换
         </Typography>
       )}
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-        图像预览（框内可拖动滚动；拖曳滑块或 Ctrl/⌘ + 滚轮缩放）
-      </Typography>
+      {!suppressInlineHints && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          图像预览（框内可拖动滚动；拖曳滑块或 Ctrl/⌘ + 滚轮缩放）
+        </Typography>
+      )}
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap' }}>
+        {suppressInlineHints ? (
+          <>
+            <Tooltip
+              title={hintBody}
+              placement="top"
+              enterTouchDelay={0}
+              componentsProps={{
+                tooltip: {
+                  sx: (theme) => ({
+                    maxWidth: 360,
+                    bgcolor: 'background.paper',
+                    color: 'text.primary',
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 1,
+                    boxShadow: theme.shadows[8],
+                    p: 0,
+                  }),
+                },
+              }}
+            >
+              <IconButton
+                size="small"
+                aria-label="查看预览说明"
+                onClick={(e) => setHintAnchor(hintOpen ? null : e.currentTarget)}
+                color="info"
+                sx={{
+                  mr: 0.5,
+                  '&:hover': {
+                    bgcolor: 'background.paper',
+                  },
+                }}
+              >
+                <InfoOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Popover
+              open={hintOpen}
+              anchorEl={hintAnchor}
+              onClose={() => setHintAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+              PaperProps={{
+                sx: (theme) => ({
+                  maxWidth: 360,
+                  bgcolor: 'background.paper',
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: 1,
+                  boxShadow: theme.shadows[8],
+                }),
+              }}
+            >
+              {hintBody}
+            </Popover>
+          </>
+        ) : null}
         <IconButton
           size="small"
           aria-label="缩小"

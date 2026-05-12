@@ -4,6 +4,7 @@ import { AppBar, Box, Container, Toolbar, Typography, Button, Stack } from '@mui
 
 import Dashboard from './components/Dashboard/Dashboard.jsx'
 import Training from './components/Training/Training.jsx'
+import Ensemble from './components/Ensemble/Ensemble.jsx'
 import ModelEvaluation from './components/ModelEvaluation/ModelEvaluation.jsx'
 import Clinical from './components/Clinical/Clinical.jsx'
 import Prediction from './components/Prediction/Prediction.jsx'
@@ -14,6 +15,7 @@ const TopNav = () => {
   const items = [
     { to: '/', label: 'Dashboard' },
     { to: '/training', label: 'Training' },
+    { to: '/ensemble', label: 'Ensemble' },
     { to: '/model-evaluation', label: 'Evaluation' },
     { to: '/clinical', label: 'Clinical' },
     { to: '/prediction', label: 'Prediction' },
@@ -81,6 +83,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/training" element={<Training />} />
+          <Route path="/ensemble" element={<Ensemble />} />
           <Route path="/model-evaluation" element={<ModelEvaluation />} />
           <Route path="/clinical" element={<Clinical />} />
           <Route path="/prediction" element={<Prediction />} />

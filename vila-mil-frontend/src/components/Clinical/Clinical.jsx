@@ -67,6 +67,10 @@ export default function Clinical() {
   const [tridentMpp, setTridentMpp] = useState('0.25')
   const [associating, setAssociating] = useState(false)
   const [associateProgress, setAssociateProgress] = useState(0)
+  /** 批量 CSV：已选文件名（未点导入）、上传中、最近一次成功导入摘要 */
+  const [csvPendingName, setCsvPendingName] = useState('')
+  const [csvUploading, setCsvUploading] = useState(false)
+  const [csvLastImport, setCsvLastImport] = useState(null)
   const caseOptions = useMemo(() => cases.map((c) => c.caseId), [cases])
   const selectedCase = useMemo(() => cases.find((c) => c.caseId === selectedCaseId) || null, [cases, selectedCaseId])
   const hasBoundFeatures = Boolean(selectedCase?.feature20FileId && selectedCase?.feature10FileId)
@@ -196,14 +200,20 @@ export default function Clinical() {
     }
     setError('')
     setNotice('')
+    setCsvUploading(true)
     try {
       const res = await clinicalApi.uploadCsv(f)
-      setNotice(`已导入 ${res?.count ?? '—'} 条病例`)
+      const count = res?.count
+      setNotice(`已导入 ${count ?? '—'} 条病例`)
+      setCsvLastImport({ fileName: f.name, count: count ?? null })
+      setCsvPendingName('')
       await loadAll()
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '导入失败')
     } finally {
+      setCsvUploading(false)
       if (fileRef.current) fileRef.current.value = ''
+      setCsvPendingName('')
     }
   }
 
@@ -389,14 +399,41 @@ export default function Clinical() {
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               批量导入
             </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-              <Button component="label" variant="outlined" size="small">
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+              <Button component="label" variant="outlined" size="small" disabled={csvUploading}>
                 选择 CSV
-                <input ref={fileRef} type="file" accept=".csv" hidden />
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".csv"
+                  hidden
+                  disabled={csvUploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    setCsvPendingName(f ? f.name : '')
+                  }}
+                />
               </Button>
-              <Button variant="contained" size="small" onClick={uploadCsv}>
-                导入
+              <Button
+                variant="contained"
+                size="small"
+                onClick={uploadCsv}
+                disabled={csvUploading}
+                startIcon={csvUploading ? <CircularProgress size={16} color="inherit" /> : null}
+              >
+                {csvUploading ? '导入中…' : '导入'}
               </Button>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1, mb: 2 }}>
+              {!csvUploading && csvPendingName ? (
+                <Chip size="small" color="primary" variant="outlined" label={`已选择：${csvPendingName}`} />
+              ) : null}
+              {!csvUploading && csvLastImport ? (
+                <Alert severity="success" variant="outlined" sx={{ py: 0.5 }}>
+                  已成功上传并导入「{csvLastImport.fileName}」，共写入{' '}
+                  <strong>{csvLastImport.count != null ? csvLastImport.count : '—'}</strong> 条病例。
+                </Alert>
+              ) : null}
             </Box>
 
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
@@ -497,6 +534,81 @@ export default function Clinical() {
             <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
               共 {cases.length} 个病例
             </Typography>
+
+            {selectedCaseId ? (
+              <>
+                <Divider sx={{ my: 2 }} />
+                {hasBoundFeatures ? (
+                  <>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      当前病例特征状态
+                    </Typography>
+                    <Box
+                      sx={(theme) => ({
+                        px: 1.25,
+                        py: 1,
+                        borderRadius: 1.2,
+                        border: '1px solid',
+                        borderColor: theme.palette.mode === 'dark' ? 'divider' : 'rgba(25,118,210,0.25)',
+                        bgcolor: theme.palette.mode === 'dark' ? 'action.hover' : 'rgba(25,118,210,0.04)',
+                      })}
+                    >
+                      <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.7 }}>
+                        来源：
+                        {selectedCase?.featureSource === 'raster_derived'
+                          ? '图像派生'
+                          : selectedCase?.featureSource === 'trident_derived'
+                            ? 'TRIDENT 派生'
+                            : selectedCase?.featureSource === 'h5_pair'
+                              ? '已选 H5'
+                              : selectedCase?.feature20FileId
+                                ? '已登记'
+                                : '未关联'}
+                        <br />
+                        20×：{selectedCase?.feature20FileId ? <code>{selectedCase.feature20FileId}</code> : '—'}
+                        <br />
+                        10×：{selectedCase?.feature10FileId ? <code>{selectedCase.feature10FileId}</code> : '—'}
+                        {selectedCase?.rasterSourceFileName ? (
+                          <>
+                            <br />
+                            图像文件名：{selectedCase.rasterSourceFileName}
+                          </>
+                        ) : null}
+                      </Typography>
+                    </Box>
+                    <Divider sx={{ my: 2 }} />
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        已绑定病例图片预览
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 500 }}
+                        noWrap
+                        title={boundCasePreview?.name ?? `${selectedCaseId}（已绑定预览）`}
+                      >
+                        {boundCasePreview?.name ?? `${selectedCaseId}（已绑定预览）`}
+                      </Typography>
+                    </Box>
+                  </>
+                ) : (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      px: 1.25,
+                      py: 1,
+                      borderRadius: 1.2,
+                      bgcolor: 'action.hover',
+                      border: '1px dashed',
+                      borderColor: 'divider',
+                    }}
+                  >
+                    绑定成功后将在此显示当前病例的详细特征信息。
+                  </Typography>
+                )}
+              </>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -548,15 +660,6 @@ export default function Clinical() {
                   <ToggleButton value="quick">快速预览（只跑近似）</ToggleButton>
                   <ToggleButton value="formal">正式预测（TRIDENT）</ToggleButton>
                 </ToggleButtonGroup>
-                {genMode === 'formal' ? (
-                  <Alert severity="info" sx={{ py: 0.5 }}>
-                    正式预测 = TRIDENT 全量特征提取（20x/10x），耗时更长但结果更正式。
-                  </Alert>
-                ) : (
-                  <Alert severity="warning" sx={{ py: 0.5 }}>
-                    快速预览 ≈ 低采样近似（先缩略再少量采样），速度更快，仅用于快速查看趋势。
-                  </Alert>
-                )}
                 {associating && (
                   <Box sx={{ mb: 0.5 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.6 }}>
@@ -621,7 +724,12 @@ export default function Clinical() {
                     未选择文件
                   </Typography>
                 )}
-                <RasterPreview file={rasterFile} persisted={persistedRasterPreview} generated={generatedPreview} />
+                <RasterPreview
+                  file={rasterFile}
+                  persisted={persistedRasterPreview}
+                  generated={generatedPreview}
+                  suppressInlineHints
+                />
                 <Button
                   variant="contained"
                   onClick={associateFeaturesFromUpload}
@@ -635,81 +743,29 @@ export default function Clinical() {
                     '上传并快速预览'
                   )}
                 </Button>
+
+                {selectedCaseId && hasBoundFeatures ? (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    {boundCasePreviewBusy ? (
+                      <Typography variant="body2" color="text.secondary">
+                        正在加载病例预览...
+                      </Typography>
+                    ) : boundCasePreview ? (
+                      <RasterPreview
+                        file={null}
+                        persisted={boundCasePreview}
+                        hideDisplayName
+                        suppressInlineHints
+                      />
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        该病例暂无可用预览图
+                      </Typography>
+                    )}
+                  </>
+                ) : null}
             </Box>
-
-            <Divider sx={{ my: 2 }} />
-
-            {hasBoundFeatures ? (
-              <>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                  当前病例特征状态
-                </Typography>
-                <Box
-                  sx={(theme) => ({
-                    px: 1.25,
-                    py: 1,
-                    borderRadius: 1.2,
-                    border: '1px solid',
-                    borderColor: theme.palette.mode === 'dark' ? 'divider' : 'rgba(25,118,210,0.25)',
-                    bgcolor: theme.palette.mode === 'dark' ? 'action.hover' : 'rgba(25,118,210,0.04)',
-                  })}
-                >
-                  <Typography variant="body2" color="text.secondary" component="div" sx={{ lineHeight: 1.7 }}>
-                    来源：
-                    {selectedCase?.featureSource === 'raster_derived'
-                      ? '图像派生'
-                      : selectedCase?.featureSource === 'trident_derived'
-                        ? 'TRIDENT 派生'
-                      : selectedCase?.featureSource === 'h5_pair'
-                        ? '已选 H5'
-                      : selectedCase?.feature20FileId
-                        ? '已登记'
-                        : '未关联'}
-                    <br />
-                    20×：{selectedCase?.feature20FileId ? <code>{selectedCase.feature20FileId}</code> : '—'}
-                    <br />
-                    10×：{selectedCase?.feature10FileId ? <code>{selectedCase.feature10FileId}</code> : '—'}
-                    {selectedCase?.rasterSourceFileName ? (
-                      <>
-                        <br />
-                        图像文件名：{selectedCase.rasterSourceFileName}
-                      </>
-                    ) : null}
-                  </Typography>
-                </Box>
-                <Box sx={{ mt: 1.5 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                    已绑定病例图片预览
-                  </Typography>
-                  {boundCasePreviewBusy ? (
-                    <Typography variant="body2" color="text.secondary">
-                      正在加载病例预览...
-                    </Typography>
-                  ) : boundCasePreview ? (
-                    <RasterPreview file={null} persisted={boundCasePreview} />
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      该病例暂无可用预览图
-                    </Typography>
-                  )}
-                </Box>
-              </>
-            ) : (
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{
-                  px: 1.25,
-                  py: 1,
-                  borderRadius: 1.2,
-                  bgcolor: 'action.hover',
-                  border: '1px dashed',
-                  borderColor: 'divider',
-                }}
-              >
-                绑定成功后将在此显示当前病例的详细特征信息。
-              </Typography>
-            )}
           </CardContent>
         </Card>
       </Box>
