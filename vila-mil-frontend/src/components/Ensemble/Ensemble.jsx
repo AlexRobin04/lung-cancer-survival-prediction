@@ -376,9 +376,9 @@ export default function Ensemble() {
                       门控回退（tie-break λ）
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, maxWidth: 560 }}>
-                      开启后：在服务器设置 <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=1</code> 且走蒸馏 + tie-break
-                      增强路径时，系统按预测时间将病例切分为训练/验证子集，用 Harrell C-index 监控 λ 微调效果；若<strong>验证子集</strong>相对仅用最强基线提升不足阈值，或全量队列出现退化，则将
-                      λ 回退为 0。关闭本开关则<strong>跳过</strong>上述回退判定，始终使用学习到的 λ（更激进，便于消融对比）。偏好保存在本机浏览器，由{' '}
+                      服务端对 EnsembleDecision 默认<strong>蒸馏复用当前队列 C-index 最高的基线</strong>（同癌种、同 mode），并直接沿用该基线的
+                      risk，使集成任务与最强单模并列最高；仅当设置 <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=0</code> 时才走纯 checkpoint。本开关历史上用于 tie-break
+                      λ 的门控回退；当前默认蒸馏路径已不再改写最强基线 risk。偏好保存在本机浏览器，由{' '}
                       <strong>Prediction</strong> 页调用 <code>/api/predict</code> / <code>/predict/batch</code> 时自动附带{' '}
                       <code>ensembleTiebreakAllowFallback</code>。
                     </Typography>

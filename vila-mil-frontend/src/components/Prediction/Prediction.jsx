@@ -26,8 +26,8 @@ import {
   Typography,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { clinicalApi, predictApi, trainingApi } from '../../services/api'
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { clinicalApi, evaluationApi, predictApi, trainingApi } from '../../services/api'
 import { readEnsembleTiebreakAllowFallback } from '../../constants/ensemblePredictPrefs'
 import useCancerOptions from '../../hooks/useCancerOptions'
 import Toast from '../common/Toast.jsx'
@@ -37,6 +37,15 @@ import {
   formatBestModelPickLabelPrediction,
   formatPredictionTaskMenuLabel,
 } from '../../utils/ensembleTaskLabel'
+import {
+  KM_GROUP_COLORS,
+  KM_SIX_MODEL_ORDER,
+  buildKmChartRows,
+  fmtFixed,
+  fmtLogRankP,
+  kmCurveKey,
+  kmStrokeForModel,
+} from '../../utils/kmChartUtils'
 
 const RiskBadge = ({ tierZh }) => {
   const color =
@@ -74,6 +83,39 @@ const shortTaskId = (id) => {
   return `${s.slice(0, 8)}…${s.slice(-4)}`
 }
 
+const kmChartPanelSx = (theme) => ({
+  height: 340,
+  p: 1,
+  borderRadius: 1.5,
+  border: '1px solid',
+  borderColor: 'divider',
+  bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.02) : '#fbfcff',
+})
+
+/** 与模型评估页 KM 卡片顶栏同色条风格一致 */
+const kmSectionCardSx = (theme) => ({
+  mb: 3,
+  borderRadius: 2,
+  overflow: 'hidden',
+  border: '1px solid',
+  borderColor: 'divider',
+  borderTop: '4px solid',
+  borderTopColor: '#2e7d32',
+  bgcolor: alpha('#2e7d32', theme.palette.mode === 'dark' ? 0.12 : 0.05),
+})
+
+/** 六模型最佳任务同图 KM（与单任务 KM 卡片区分配色条） */
+const kmSixSectionCardSx = (theme) => ({
+  mb: 3,
+  borderRadius: 2,
+  overflow: 'hidden',
+  border: '1px solid',
+  borderColor: 'divider',
+  borderTop: '4px solid',
+  borderTopColor: '#1565c0',
+  bgcolor: alpha('#1565c0', theme.palette.mode === 'dark' ? 0.14 : 0.06),
+})
+
 /** 后端 cIndex95Ci: [lo, hi]（与点估计同四位小数） */
 const formatCindex95CiParen = (ci) => {
   if (!ci || !Array.isArray(ci) || ci.length < 2) return ''
@@ -101,6 +143,26 @@ const cohortQueueCIndexText = (row) => {
   }
   if (row.cIndexSuppressedZh) return '—'
   return '—'
+}
+
+/** 与 KM 双组分层一致：单变量 Cox，较高风险组相对参照组 HR 及 95% CI、Wald p */
+const cohortHazardRatioCellText = (row) => {
+  const hr = row?.hazardRatio
+  if (hr == null || !Number.isFinite(Number(hr))) return '—'
+  const ci = row.hazardRatio95Ci
+  let s = Number(hr).toFixed(3)
+  if (ci && Array.isArray(ci) && ci.length >= 2) {
+    const lo = Number(ci[0])
+    const hi = Number(ci[1])
+    if (Number.isFinite(lo) && Number.isFinite(hi)) {
+      s += `（${lo.toFixed(3)}–${hi.toFixed(3)}）`
+    }
+  }
+  const p = row.hazardRatioP
+  if (p != null && Number.isFinite(Number(p))) {
+    s += ` · p=${fmtLogRankP(p)}`
+  }
+  return s
 }
 
 /** 与训练/预测页六基线一致，表格始终渲染 6 行（无数据则填 —） */
@@ -144,6 +206,12 @@ export default function Prediction() {
   /** 基于 predictions + Clinical 随访的队列生存 C-index（后端计算） */
   const [cohortCIndexAll, setCohortCIndexAll] = useState(null)
   const [cohortCIndexByTask, setCohortCIndexByTask] = useState([])
+  const [kmFromTask, setKmFromTask] = useState(null)
+  const [kmLoading, setKmLoading] = useState(false)
+  const [kmError, setKmError] = useState('')
+  const [kmSixFromApi, setKmSixFromApi] = useState(null)
+  const [kmSixLoading, setKmSixLoading] = useState(false)
+  const [kmSixError, setKmSixError] = useState('')
 
   const loadCohortCIndex = async () => {
     try {
@@ -439,6 +507,85 @@ export default function Prediction() {
     return (cohortCIndexByTask || []).find((r) => String(r.taskId) === tid) || null
   }, [cohortCIndexByTask, effectiveTaskId])
 
+  const loadKmFromPredictions = useCallback(async () => {
+    const tid = String(effectiveTaskId || '').trim()
+    if (!tid) {
+      setKmFromTask(null)
+      setKmError('')
+      setKmLoading(false)
+      return
+    }
+    setKmLoading(true)
+    setKmError('')
+    try {
+      const data = await evaluationApi.kmFromPredictions(tid)
+      setKmFromTask(data)
+      if (data && data.ok === false && data.messageZh) {
+        setKmError(String(data.messageZh))
+      } else {
+        setKmError('')
+      }
+    } catch (e) {
+      setKmFromTask(null)
+      setKmError(
+        e?.response?.data?.messageZh ||
+          e?.response?.data?.message ||
+          e.message ||
+          'Kaplan–Meier 数据加载失败'
+      )
+    } finally {
+      setKmLoading(false)
+    }
+  }, [effectiveTaskId])
+
+  const loadKmSixBestFromPredictions = useCallback(async () => {
+    if (!(cohortCIndexByTask && cohortCIndexByTask.length)) {
+      setKmSixFromApi(null)
+      setKmSixError('')
+      setKmSixLoading(false)
+      return
+    }
+    setKmSixLoading(true)
+    setKmSixError('')
+    try {
+      const data = await evaluationApi.kmSixBestByModel()
+      setKmSixFromApi(data)
+      if (data && data.ok === false && data.messageZh) {
+        setKmSixError(String(data.messageZh))
+      } else {
+        setKmSixError('')
+      }
+    } catch (e) {
+      setKmSixFromApi(null)
+      setKmSixError(
+        e?.response?.data?.messageZh ||
+          e?.response?.data?.message ||
+          e.message ||
+          '六模型 KM 加载失败'
+      )
+    } finally {
+      setKmSixLoading(false)
+    }
+  }, [cohortCIndexByTask])
+
+  const kmChartData = useMemo(() => buildKmChartRows(kmFromTask?.curves || []), [kmFromTask])
+
+  const kmCurveLines = useMemo(() => {
+    const curves = kmFromTask?.curves || []
+    return curves.map((c, i) => ({
+      label: c.label || `组${i + 1}`,
+      stroke: KM_GROUP_COLORS[i % KM_GROUP_COLORS.length],
+      dataKey: kmCurveKey(c.label),
+    }))
+  }, [kmFromTask])
+
+  const kmSixCurvesWithData = useMemo(() => {
+    const list = kmSixFromApi?.curves || []
+    return list.filter((c) => Array.isArray(c?.times) && c.times.length > 0)
+  }, [kmSixFromApi])
+
+  const kmSixChartData = useMemo(() => buildKmChartRows(kmSixCurvesWithData), [kmSixCurvesWithData])
+
   const barData = useMemo(() => {
     const x = result?.visualization?.probabilityBar?.x || []
     const y = result?.visualization?.probabilityBar?.y || []
@@ -505,6 +652,10 @@ export default function Prediction() {
           cIndex95Ci: null,
           nUsableCasesJoinedClinical: null,
           comparablePairs: null,
+          hazardRatio: null,
+          hazardRatio95Ci: null,
+          hazardRatioP: null,
+          hazardRatioStratificationKind: null,
         }
 
     if (idx >= 0) {
@@ -540,6 +691,10 @@ export default function Prediction() {
         cIndex95Ci: null,
         nUsableCasesJoinedClinical: null,
         comparablePairs: null,
+        hazardRatio: null,
+        hazardRatio95Ci: null,
+        hazardRatioP: null,
+        hazardRatioStratificationKind: null,
       }
     })
   }, [cohortCindexRowsForDisplay])
@@ -629,13 +784,23 @@ export default function Prediction() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasks])
 
-  /** 六行队列表随预测历史变化：定时拉取，避免仅依赖浏览器缓存或漏触发刷新 */
+  useEffect(() => {
+    loadKmFromPredictions()
+  }, [loadKmFromPredictions])
+
+  useEffect(() => {
+    loadKmSixBestFromPredictions()
+  }, [loadKmSixBestFromPredictions])
+
+  /** 六行队列表与 KM 随预测历史变化：定时拉取，避免仅依赖浏览器缓存或漏触发刷新 */
   useEffect(() => {
     const t = setInterval(() => {
       loadCohortCIndex()
+      loadKmFromPredictions()
+      loadKmSixBestFromPredictions()
     }, 12000)
     return () => clearInterval(t)
-  }, [])
+  }, [loadKmFromPredictions, loadKmSixBestFromPredictions])
 
   useEffect(() => {
     if (!taskId) return
@@ -673,6 +838,8 @@ export default function Prediction() {
       setNotice('预测完成')
       setPredictProgress(100)
       await loadCohortCIndex()
+      await loadKmFromPredictions()
+      await loadKmSixBestFromPredictions()
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '预测失败')
     } finally {
@@ -752,6 +919,8 @@ export default function Prediction() {
       setNotice(`批量预测完成：成功 ${ok}，失败 ${fail}（共 ${list.length} 条）${retryHint}`)
       setPredictProgress(100)
       await loadCohortCIndex()
+      await loadKmFromPredictions()
+      await loadKmSixBestFromPredictions()
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '批量预测失败')
     } finally {
@@ -786,7 +955,7 @@ export default function Prediction() {
 
       {(cohortCIndexByTask && cohortCIndexByTask.length > 0) || cohortCIndexAll?.cIndexSuppressedZh ? (
         <Card sx={{ mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-          <CardHeader title="历史预测队列 · 生存 C-index（按模型）" />
+          <CardHeader title="历史预测队列 · 生存 C-index / HR（按模型）" />
           <CardContent>
             {cohortSummaryForSelectedTask ? (
               <Box sx={{ mb: 2, p: 1.5, borderRadius: 1, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06), border: '1px solid', borderColor: 'divider' }}>
@@ -811,6 +980,10 @@ export default function Prediction() {
                   可用病例 n={cohortSummaryForSelectedTask.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
                   {cohortSummaryForSelectedTask.comparablePairs ?? '—'}
                 </Typography>
+                <Typography variant="body2" sx={{ mt: 0.5 }}>
+                  Cox HR（较高风险组 vs 参照，与下方 KM 分层一致）:{' '}
+                  <strong>{cohortHazardRatioCellText(cohortSummaryForSelectedTask)}</strong>
+                </Typography>
                 {cohortSummaryForSelectedTask.cIndexBootstrapNoteZh ? (
                   <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
                     {cohortSummaryForSelectedTask.cIndexBootstrapNoteZh}
@@ -833,7 +1006,7 @@ export default function Prediction() {
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               <strong>仅与底部当前任务同一模型类型的那一行</strong>会随你在「任务」里的选择变化（显示该 taskId 的队列 C-index，无数据则「—」，不会再用同模型下别的任务的「历史最高」顶替）。
               <strong>其余五行</strong>始终是「该模型在全部预测历史里队列 C-index 最高的代表任务」——因此当你把底部从例如「集成」改成「AMIL」时，<strong>集成那一行的数字可以保持不变</strong>，这是预期行为；要看当前 AMIL 任务请看本表 AMIL 行或上方「当前所选任务」摘要。
-              预测成功后会立即刷新，本页每 12 秒也会再拉一次。
+              HR 列为与 KM 相同的双组分层下单变量 Cox 比例风险模型（较高组相对参照）；预测成功后会立即刷新，本页每 12 秒也会再拉一次。
             </Typography>
             {cohortCIndexByTask.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
@@ -854,6 +1027,9 @@ export default function Prediction() {
                         <TableCell>代表任务 taskId</TableCell>
                         <TableCell align="right">队列 C-index</TableCell>
                         <TableCell align="right">95% CI</TableCell>
+                        <TableCell align="right" title="与 Kaplan–Meier 双组分层一致的单变量 Cox HR（较高组/参照）">
+                          HR（Cox）
+                        </TableCell>
                         <TableCell align="right">可用病例 n</TableCell>
                         <TableCell align="right">可比患者对</TableCell>
                       </TableRow>
@@ -925,6 +1101,9 @@ export default function Prediction() {
                             <TableCell align="right" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
                               {cohortQueueCIndex95CiRangeText(row)}
                             </TableCell>
+                            <TableCell align="right" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, maxWidth: 200, whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                              {cohortHazardRatioCellText(row)}
+                            </TableCell>
                             <TableCell align="right">{row.nUsableCasesJoinedClinical ?? '—'}</TableCell>
                             <TableCell align="right">{row.comparablePairs ?? '—'}</TableCell>
                           </TableRow>
@@ -936,6 +1115,275 @@ export default function Prediction() {
                 </TableContainer>
               </>
             )}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {cohortCIndexByTask && cohortCIndexByTask.length > 0 ? (
+        <Card sx={(theme) => kmSixSectionCardSx(theme)}>
+          <CardHeader title="六模型最佳任务 · Kaplan–Meier 总体曲线（同图）" />
+          <CardContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              与上方「各模型队列 C-index」表一致：每个模型类型取<strong>队列 C-index 最高</strong>的代表 <code>taskId</code>；图中六条颜色曲线为该任务上<strong>全体已配对随访病例</strong>的总体 KM（非双组拆分）。
+              下方每个模型单独给出<strong>该任务内</strong>与单任务 KM 卡片相同分层的 Cox HR、95% CI 与 Log-rank p（用于比较高/低风险组差异）。
+            </Typography>
+            {kmSixError ? (
+              <Alert severity="warning" sx={{ mb: 1.5 }}>
+                {kmSixError}
+              </Alert>
+            ) : null}
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+                gap: 1.25,
+                mb: 2,
+              }}
+            >
+              {KM_SIX_MODEL_ORDER.map((mt) => {
+                const c = (kmSixFromApi?.curves || []).find((x) => String(x.modelType) === mt)
+                const stroke = kmStrokeForModel(mt)
+                return (
+                  <Box
+                    key={mt}
+                    sx={{
+                      p: 1.25,
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderLeft: `4px solid ${stroke}`,
+                      bgcolor: (theme) => alpha(stroke, theme.palette.mode === 'dark' ? 0.12 : 0.06),
+                    }}
+                  >
+                    <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 800, color: stroke }}>
+                        {mt}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>
+                        {c?.taskId ? shortTaskId(c.taskId) : '—'}
+                      </Typography>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                      n={c?.n != null ? c.n : '—'}
+                      {c?.cIndex != null && Number.isFinite(Number(c.cIndex)) ? ` · C-index ${Number(c.cIndex).toFixed(4)}` : ''}
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 0.75, fontFamily: 'ui-monospace, monospace', fontSize: 13 }}>
+                      HR {cohortHazardRatioCellText(c || {})}
+                    </Typography>
+                    {c?.logRankP != null && Number.isFinite(Number(c.logRankP)) ? (
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Log-rank p={fmtLogRankP(c.logRankP)}
+                      </Typography>
+                    ) : null}
+                    {c?.messageZh ? (
+                      <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
+                        {c.messageZh}
+                      </Typography>
+                    ) : null}
+                  </Box>
+                )
+              })}
+            </Box>
+            {kmSixFromApi?.noteZh ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                {kmSixFromApi.noteZh}
+              </Typography>
+            ) : null}
+            {kmSixChartData.length > 0 && kmSixCurvesWithData.length > 0 ? (
+              <Box sx={(theme) => kmChartPanelSx(theme)}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={kmSixChartData} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" type="number" tickFormatter={(v) => fmtFixed(v, 2)} label={{ value: '时间', position: 'insideBottom', offset: -2 }} />
+                    <YAxis domain={[0, 1.05]} tickFormatter={(v) => fmtFixed(v, 2)} width={48} label={{ value: 'S(t)', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip
+                      formatter={(value, name) => [fmtFixed(value, 4), name]}
+                      labelFormatter={(t) => `time ${fmtFixed(t, 3)}`}
+                    />
+                    <Legend />
+                    {kmSixCurvesWithData.map((c) => {
+                      const mt = String(c.modelType || c.label || '')
+                      const dk = kmCurveKey(c.label || mt)
+                      return (
+                        <Line
+                          key={mt}
+                          type="stepAfter"
+                          dataKey={dk}
+                          name={mt}
+                          stroke={kmStrokeForModel(mt)}
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive={false}
+                        />
+                      )
+                    })}
+                  </LineChart>
+                </ResponsiveContainer>
+              </Box>
+            ) : !kmSixLoading ? (
+              <Typography variant="body2" color="text.secondary">
+                暂无足够数据绘制六模型曲线（需各模型有可计算 C-index 的代表任务且随访配对 n≥2）。
+              </Typography>
+            ) : null}
+            {kmSixLoading ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                <CircularProgress size={22} />
+                <Typography variant="body2" color="text.secondary">
+                  正在加载六模型 KM…
+                </Typography>
+              </Box>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {String(effectiveTaskId || '').trim() ? (
+        <Card sx={(theme) => kmSectionCardSx(theme)}>
+          <CardHeader title="Kaplan–Meier 生存曲线（本系统预测 + 随访）" />
+          <CardContent>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }} alignItems="center">
+              <Chip size="small" variant="outlined" label={`taskId ${shortTaskId(effectiveTaskId)}`} />
+              {kmFromTask?.stratificationKind ? (
+                <Chip
+                  size="small"
+                  color="secondary"
+                  variant="outlined"
+                  label={
+                    kmFromTask.stratificationKind === 'risk_median'
+                      ? '分层：risk 中位数'
+                      : kmFromTask.stratificationKind === 'pred_class_quartile'
+                        ? '分层：predClass 0–1 / 2–3'
+                        : kmFromTask.stratificationKind === 'rank_half'
+                          ? '分层：排序均分'
+                          : `分层：${kmFromTask.stratificationKind}`
+                  }
+                />
+              ) : null}
+              {kmFromTask?.logRankP != null && Number.isFinite(Number(kmFromTask.logRankP)) ? (
+                <Chip size="small" variant="outlined" label={`Log-rank p=${fmtLogRankP(kmFromTask.logRankP)}`} />
+              ) : null}
+              {kmFromTask?.counts ? (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`n=${kmFromTask.counts.nTotal ?? '—'}（低/高 ${kmFromTask.counts.nLow ?? '—'}/${kmFromTask.counts.nHigh ?? '—'}）`}
+                />
+              ) : null}
+              {kmFromTask?.hazardRatio != null && Number.isFinite(Number(kmFromTask.hazardRatio)) ? (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  label={`HR ${fmtFixed(kmFromTask.hazardRatio, 3)}${
+                    kmFromTask.hazardRatio95Ci &&
+                    Array.isArray(kmFromTask.hazardRatio95Ci) &&
+                    kmFromTask.hazardRatio95Ci.length >= 2
+                      ? `（${fmtFixed(kmFromTask.hazardRatio95Ci[0], 3)}–${fmtFixed(kmFromTask.hazardRatio95Ci[1], 3)}）`
+                      : ''
+                  }`}
+                />
+              ) : null}
+              {kmFromTask?.hazardRatioP != null && Number.isFinite(Number(kmFromTask.hazardRatioP)) ? (
+                <Chip size="small" variant="outlined" label={`Cox p=${fmtLogRankP(kmFromTask.hazardRatioP)}`} />
+              ) : null}
+              {kmFromTask?.cohortCIndex != null && Number.isFinite(Number(kmFromTask.cohortCIndex)) ? (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  label={`C-index ${fmtFixed(kmFromTask.cohortCIndex, 4)}（可比对 ${kmFromTask.comparablePairs ?? '—'}）`}
+                />
+              ) : null}
+              {kmLoading ? <CircularProgress size={22} sx={{ ml: 0.5 }} /> : null}
+            </Stack>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              与底部所选任务一致：取该 <code>taskId</code> 在 <code>predictions.json</code> 中每位患者<strong>最新一次</strong>预测的{' '}
+              <code>riskScore</code> / <code>predClass</code>，与 Clinical（<code>cases.json</code>）的 <code>time</code>、<code>status</code>{' '}
+              配对；生存曲线与 Log-rank、<strong>Cox HR</strong>由后端 <code>lifelines</code> 计算（HR 与双组分层一致：较高风险组相对参照组）。若连续 risk 几乎无区分度，会自动改用 predClass 或排序分层，避免两条曲线完全重合却无说明。
+            </Typography>
+            {cohortSummaryForSelectedTask ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                训练任务展示名：{resolveCohortTaskLabel(cohortSummaryForSelectedTask)} · 模型{' '}
+                <strong>{cohortSummaryForSelectedTask.modelType ?? '—'}</strong>
+              </Typography>
+            ) : (
+              (() => {
+                const tid = String(effectiveTaskId || '').trim()
+                const tm = latestTaskMetaById.get(tid)
+                const lab =
+                  String(tm?.modelType || tm?.model_type || effectiveModelType || '') === 'EnsembleDecision'
+                    ? enrichEnsembleTrainingTitle({
+                        modelType: 'EnsembleDecision',
+                        taskLabel: tm?.name,
+                        name: tm?.name,
+                        cancer: String(tm?.cancer || tm?.cancerType || '').trim() || cancer,
+                        ensembleExclude: tm?.ensembleExclude,
+                      })
+                    : ''
+                return (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                    训练任务：{lab || tm?.name || tid}
+                    {tm?.modelType || tm?.model_type ? (
+                      <>
+                        {' '}
+                        · 模型 <strong>{String(tm.modelType || tm.model_type)}</strong>
+                      </>
+                    ) : null}
+                  </Typography>
+                )
+              })()
+            )}
+            {kmFromTask?.splitDescriptionZh ? (
+              <Alert severity="info" sx={{ mb: 1.5 }}>
+                {kmFromTask.splitDescriptionZh}
+              </Alert>
+            ) : null}
+            {kmFromTask?.hazardRatioRefZh ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                HR 参照：{kmFromTask.hazardRatioRefZh}
+              </Typography>
+            ) : null}
+            {kmError ? (
+              <Alert severity={kmFromTask?.ok === false ? 'warning' : 'error'} sx={{ mb: 1.5 }}>
+                {kmError}
+              </Alert>
+            ) : null}
+            {kmFromTask?.noteZh ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                {kmFromTask.noteZh}
+              </Typography>
+            ) : null}
+            {kmChartData.length > 0 && kmCurveLines.length > 0 ? (
+              <Box sx={(theme) => kmChartPanelSx(theme)}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={kmChartData} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="time" type="number" tickFormatter={(v) => fmtFixed(v, 2)} label={{ value: '时间', position: 'insideBottom', offset: -2 }} />
+                    <YAxis domain={[0, 1.05]} tickFormatter={(v) => fmtFixed(v, 2)} width={48} label={{ value: 'S(t)', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip
+                      formatter={(value, name) => [fmtFixed(value, 4), name]}
+                      labelFormatter={(t) => `time ${fmtFixed(t, 3)}`}
+                    />
+                    <Legend />
+                    {kmCurveLines.map((line) => (
+                      <Line
+                        key={line.dataKey}
+                        type="stepAfter"
+                        dataKey={line.dataKey}
+                        name={line.label}
+                        stroke={line.stroke}
+                        strokeWidth={2}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </Box>
+            ) : !kmLoading && String(effectiveTaskId || '').trim() ? (
+              <Typography variant="body2" color="text.secondary">
+                暂无可用曲线数据（多为随访配对不足或尚未对该任务写入预测）。完成预测并维护 Clinical 的 <code>time</code>、<code>status</code> 后将自动显示。
+              </Typography>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}

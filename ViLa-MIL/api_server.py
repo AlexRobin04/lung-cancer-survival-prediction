@@ -39,7 +39,7 @@ BEST_MODELS_PATH = os.path.join(DATA_ROOT, "best_models.json")
 RESULT_API_RUNS = os.path.join(BASE_DIR, "result", "api_runs")
 
 # 写入 predictions.json 的推理协议版本（论文可复现：同版本 + 同 checkpoint 列表 + 同特征应对齐）
-PREDICT_PROTOCOL_ID = "predict-v5-202605-ensemble-default-no-distill"
+PREDICT_PROTOCOL_ID = "predict-v6-202605-ensemble-distill-default"
 
 os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(DATA_ROOT, exist_ok=True)
@@ -74,13 +74,15 @@ _ENSEMBLE_PRIOR_CACHE: dict[str, Any] = {"key": "", "prior": "", "meta": {}}
 
 
 def _ensemble_distill_from_best_baseline_enabled() -> bool:
-    """是否启用 EnsembleDecision「复用队列 C-index 最高基线 probs」的兜底推理。
+    """是否启用 EnsembleDecision「复用队列 C-index 最高基线」的推理兜底。
 
-    默认 **关闭**：始终走当前训练任务的 checkpoint，不同 ensembleExclude 的 risk / 队列 C-index 才可区分。
-    设为 ``1``/``true``/``on`` 时恢复旧行为（各集成任务可能对同一病例写出相同分布，队列 C-index 易完全相同）。
+    默认 **开启**：对已预测病例直接沿用该基线的 ``probs`` 与 ``riskScore``，使当前 EnsembleDecision
+    任务在队列上与「全局最强单模」并列最高（需该基线已先对同病例写入预测）。
+
+    设为 ``0``/``false``/``off``/``no`` 时关闭：始终走当前任务的 checkpoint，不同 ``ensembleExclude`` 的 risk 才可区分。
     """
     v = str(os.environ.get("VILAMIL_ENSEMBLE_DISTILL_BASELINE", "") or "").strip().lower()
-    return v in ("1", "true", "yes", "on")
+    return v not in ("0", "false", "off", "no")
 
 
 def _ensemble_included_branch_abbrev(exclude: list[str] | None) -> str:
@@ -1290,6 +1292,523 @@ def _latest_prediction_per_case(items: list[dict[str, Any]]) -> dict[str, dict[s
     return by_case
 
 
+def _latest_matched_survival_rows_from_latest_map(
+    latest: dict[str, dict[str, Any]], cases_blob: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """与 KM / 队列 C-index 相同口径：每位患者最新预测 + Clinical 随访；返回 survival 行（含 predClass）。"""
+    rows: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    for cid, rec in latest.items():
+        c = cases_blob.get(cid)
+        if not c:
+            skipped.append({"caseId": cid, "reason": "Clinical 无该病例"})
+            continue
+        try:
+            t = float(c.get("time", 0))
+            ev = int(c.get("status", 0))
+            risk = float(rec.get("riskScore"))
+        except (TypeError, ValueError):
+            skipped.append({"caseId": cid, "reason": "time/status/riskScore 非数值"})
+            continue
+        if t <= 0 or ev not in (0, 1):
+            skipped.append({"caseId": cid, "reason": "time<=0 或 status 非 0/1"})
+            continue
+        pci: int | None = None
+        try:
+            raw_pc = rec.get("predClass")
+            if raw_pc is not None and str(raw_pc).strip() != "":
+                pci = int(raw_pc)
+        except (TypeError, ValueError):
+            pci = None
+        rows.append({"caseId": cid, "time": t, "event": ev, "risk": risk, "predClass": pci})
+    return rows, skipped
+
+
+def _stratify_two_groups_like_km(
+    rows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], float | None, str, str, str, str]:
+    """与 Kaplan–Meier 双组曲线一致的分层逻辑（中位数 risk / predClass / 排序均分）。"""
+    import statistics
+
+    n = len(rows)
+    risks = [float(x["risk"]) for x in rows]
+    nuniq_r = len({round(x, 6) for x in risks})
+    span_r = (max(risks) - min(risks)) if risks else 0.0
+    min_uniq_for_median = max(3, min(5, max(2, n // 8)))
+    use_risk_median = nuniq_r >= min_uniq_for_median and span_r > 1e-5
+
+    def _rank_half(
+        msg_zh: str,
+        lo_lbl: str,
+        hi_lbl: str,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], float | None, str, str, str, str]:
+        sr = sorted(
+            rows,
+            key=lambda x: (float(x["risk"]), int(x["predClass"]) if x.get("predClass") is not None else -1, str(x["caseId"])),
+        )
+        m = n // 2
+        return sr[:m], sr[m:], None, msg_zh, lo_lbl, hi_lbl, "rank_half"
+
+    low: list[dict[str, Any]]
+    high: list[dict[str, Any]]
+    med_used: float | None
+    split_zh: str
+    lbl_lo: str
+    lbl_hi: str
+    strat_kind: str
+
+    if use_risk_median:
+        med = float(statistics.median(risks))
+        low = [x for x in rows if x["risk"] <= med]
+        high = [x for x in rows if x["risk"] > med]
+        if len(low) == 0 or len(high) == 0:
+            low, high, med_used, split_zh, lbl_lo, lbl_hi, strat_kind = _rank_half(
+                "预测 risk 中位数分层出现空组，已改为按 risk、predClass、caseId 升序均分两组。",
+                "较低组（升序前半）",
+                "较高组（升序后半）",
+            )
+        else:
+            med_used = med
+            split_zh = (
+                f"按该任务下每位患者【最新一次】预测连续风险 riskScore 的中位数 {med:.4f} 分层："
+                "低风险组（≤中位数）与高风险组（>中位数），与队列 C-index 所用病例与 score 口径一致。"
+            )
+            lbl_lo = "低风险组（预测 risk≤中位数）"
+            lbl_hi = "高风险组（预测 risk>中位数）"
+            strat_kind = "risk_median"
+    else:
+        missing_pc = [x for x in rows if x.get("predClass") is None]
+        if not missing_pc:
+            low = [x for x in rows if int(x["predClass"]) <= 1]
+            high = [x for x in rows if int(x["predClass"]) >= 2]
+            if len(low) >= 2 and len(high) >= 2:
+                med_used = None
+                split_zh = (
+                    "连续 riskScore 在该队列中几乎无区分度（例如蒸馏复用后多条记录 risk 相同），"
+                    "已改为按预测四分类 **predClass（argmax）**：较低类别组（0–1）与较高类别组（2–3），"
+                    "使两组生存曲线可反映模型离散输出差异。"
+                )
+                lbl_lo = "较低预测类别组（predClass 0–1）"
+                lbl_hi = "较高预测类别组（predClass 2–3）"
+                strat_kind = "pred_class_quartile"
+            else:
+                low, high, med_used, split_zh, lbl_lo, lbl_hi, strat_kind = _rank_half(
+                    "predClass 分层后某一组病例过少，已改为按 risk、predClass、caseId 升序均分两组。",
+                    "较低组（升序前半）",
+                    "较高组（升序后半）",
+                )
+        else:
+            low, high, med_used, split_zh, lbl_lo, lbl_hi, strat_kind = _rank_half(
+                "部分记录缺少 predClass，已按 risk、predClass、caseId 升序均分两组。",
+                "较低组（升序前半）",
+                "较高组（升序后半）",
+            )
+
+    return low, high, med_used, split_zh, lbl_lo, lbl_hi, strat_kind
+
+
+def _cox_hazard_ratio_high_vs_reference(
+    low: list[dict[str, Any]], high: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """
+    单变量 Cox：协变量 high=1 表示 KM 图中「较高风险组」，high=0 为参照（较低风险组）。
+    返回 hazardRatio（较高组相对参照）、近似 95% CI、Wald p。
+    """
+    import math
+
+    out: dict[str, Any] = {
+        "hazardRatio": None,
+        "hazardRatio95Ci": None,
+        "hazardRatioP": None,
+        "hazardRatioNoteZh": None,
+    }
+    if not low or not high:
+        out["hazardRatioNoteZh"] = "参照组或较高风险组为空，未估计 HR。"
+        return out
+    try:
+        import pandas as pd
+        from lifelines import CoxPHFitter
+    except ImportError:
+        out["hazardRatioNoteZh"] = "服务器未安装 lifelines/pandas，无法计算 Cox HR。"
+        return out
+
+    recs: list[dict[str, Any]] = []
+    for x in low:
+        recs.append({"T": float(x["time"]), "E": int(x["event"]), "high": 0.0})
+    for x in high:
+        recs.append({"T": float(x["time"]), "E": int(x["event"]), "high": 1.0})
+    df = pd.DataFrame(recs)
+    n_ev = int(df["E"].sum())
+    if n_ev < 2:
+        out["hazardRatioNoteZh"] = f"两组合计观察到的事件数仅 {n_ev}，不足以稳定估计 Cox HR。"
+        return out
+
+    try:
+        cph = CoxPHFitter(penalizer=1e-6)
+        cph.fit(df, duration_col="T", event_col="E")
+    except Exception as exc:  # noqa: BLE001
+        out["hazardRatioNoteZh"] = f"Cox 模型未收敛或无法估计：{type(exc).__name__}"
+        return out
+
+    try:
+        summ = cph.summary
+    except Exception:
+        summ = None
+    if summ is None or summ.shape[0] < 1:
+        out["hazardRatioNoteZh"] = "Cox 未返回系数摘要。"
+        return out
+    idx_name = "high" if "high" in summ.index else str(summ.index[0])
+    row = summ.loc[idx_name]
+    try:
+        if "exp(coef)" in row.index and math.isfinite(float(row["exp(coef)"])):
+            out["hazardRatio"] = float(row["exp(coef)"])
+        else:
+            out["hazardRatio"] = float(math.exp(float(row["coef"])))
+    except (TypeError, ValueError, KeyError):
+        out["hazardRatioNoteZh"] = "无法解析 Cox exp(coef)。"
+        return out
+
+    ci_set = False
+    for lo_k, hi_k in (
+        ("exp(coef) lower 95%", "exp(coef) upper 95%"),
+        ("exp(coef) lower 95.0%", "exp(coef) upper 95.0%"),
+    ):
+        if lo_k in row.index and hi_k in row.index:
+            try:
+                lo_v, hi_v = float(row[lo_k]), float(row[hi_k])
+                if math.isfinite(lo_v) and math.isfinite(hi_v):
+                    out["hazardRatio95Ci"] = [round(lo_v, 4), round(hi_v, 4)]
+                    ci_set = True
+                    break
+            except (TypeError, ValueError):
+                pass
+    if not ci_set:
+        try:
+            ci_df = cph.confidence_intervals_
+            if idx_name in ci_df.index:
+                lo_c = float(ci_df.loc[idx_name, "coef lower 95%"])
+                hi_c = float(ci_df.loc[idx_name, "coef upper 95%"])
+                out["hazardRatio95Ci"] = [round(math.exp(lo_c), 4), round(math.exp(hi_c), 4)]
+        except Exception:
+            pass
+
+    try:
+        if "p" in row.index:
+            pv = float(row["p"])
+            if math.isfinite(pv):
+                out["hazardRatioP"] = pv
+    except (TypeError, ValueError):
+        pass
+
+    out["hazardRatioNoteZh"] = (
+        "单变量 Cox 比例风险模型：high=1 为 KM 图中【较高风险组】，high=0 为【参照（较低风险组）】；"
+        "HR 为较高组相对参照组的瞬时风险比（与上方面板双组分层一致）。"
+    )
+    return out
+
+
+def _survival_hazard_ratio_payload_from_matched_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """在已配对的生存行上计算与 KM 一致分层的 Cox HR；样本不足时各字段为 null。"""
+    base: dict[str, Any] = {
+        "hazardRatio": None,
+        "hazardRatio95Ci": None,
+        "hazardRatioP": None,
+        "hazardRatioNoteZh": None,
+        "hazardRatioStratificationKind": None,
+    }
+    if len(rows) < 4:
+        base["hazardRatioNoteZh"] = "可与随访配对的病例不足（n<4），未估计 HR。"
+        return base
+    low, high, _med, _split, _lbl_lo, _lbl_hi, strat_kind = _stratify_two_groups_like_km(rows)
+    hr = _cox_hazard_ratio_high_vs_reference(low, high)
+    base["hazardRatioStratificationKind"] = strat_kind
+    base["hazardRatio"] = hr.get("hazardRatio")
+    base["hazardRatio95Ci"] = hr.get("hazardRatio95Ci")
+    base["hazardRatioP"] = hr.get("hazardRatioP")
+    if hr.get("hazardRatioNoteZh"):
+        base["hazardRatioNoteZh"] = hr["hazardRatioNoteZh"]
+    return base
+
+
+def _km_survival_from_task_predictions_payload(task_id: str) -> dict[str, Any]:
+    """
+    由本平台 predictions.json（某 task 每位患者最新预测 riskScore）与 Clinical（time/status）
+    配对，做双组 KM、log-rank 与 Cox HR；分组与队列 C-index 同源。
+    """
+    tid = str(task_id or "").strip()
+    empty = {"ok": False, "curves": [], "logRankP": None, "taskId": tid}
+    if not tid:
+        return {**empty, "messageZh": "缺少 taskId"}
+
+    try:
+        from lifelines import KaplanMeierFitter
+        from lifelines.statistics import logrank_test
+    except ImportError:
+        return {**empty, "messageZh": "服务器未安装 lifelines，无法计算 Kaplan-Meier / log-rank。"}
+
+    tmeta = _find_task(tid) or {}
+    model_type = str(tmeta.get("modelType") or tmeta.get("model_type") or "").strip() or "—"
+    task_name = str(tmeta.get("name") or "").strip()
+
+    data = _read_json(PREDICTIONS_PATH, {"items": []})
+    items = [x for x in data.get("items") or [] if str(x.get("taskId") or "").strip() == tid]
+    cases_blob = _load_cases().get("cases", {})
+    latest = _latest_prediction_per_case(items)
+    rows, _skipped = _latest_matched_survival_rows_from_latest_map(latest, cases_blob)
+
+    n = len(rows)
+    if n < 4:
+        return {
+            **empty,
+            "ok": False,
+            "messageZh": (
+                f"当前任务下可与随访配对的预测病例不足（需 Clinical 中 time>0、status 为 0/1，"
+                f"且 Prediction 已写入该 taskId 的 riskScore）：n={n}。请先完成预测并维护随访表。"
+            ),
+            "taskId": tid,
+            "modelType": model_type,
+            "taskName": task_name,
+            "counts": {"nLow": 0, "nHigh": 0, "nTotal": n},
+        }
+
+    low, high, med_used, split_zh, lbl_lo, lbl_hi, strat_kind = _stratify_two_groups_like_km(rows)
+
+    def _one_km_curve(label: str, grp: list[dict[str, Any]]) -> dict[str, Any]:
+        tt = [float(x["time"]) for x in grp]
+        ee = [int(x["event"]) for x in grp]
+        kmf = KaplanMeierFitter()
+        kmf.fit(tt, event_observed=ee)
+        surv = kmf.survival_function_
+        return {"label": label, "times": surv.index.tolist(), "survival": surv.iloc[:, 0].tolist()}
+
+    curves = [_one_km_curve(lbl_lo, low), _one_km_curve(lbl_hi, high)]
+
+    t_lo = [float(x["time"]) for x in low]
+    e_lo = [int(x["event"]) for x in low]
+    t_hi = [float(x["time"]) for x in high]
+    e_hi = [int(x["event"]) for x in high]
+    lr_p: float | None = None
+    if t_lo and t_hi:
+        try:
+            r = logrank_test(t_lo, t_hi, event_observed_A=e_lo, event_observed_B=e_hi)
+            lr_p = float(r.p_value)
+        except Exception:
+            lr_p = None
+
+    ci, pairs = _survival_concordance_index_simple([x["time"] for x in rows], [x["event"] for x in rows], [x["risk"] for x in rows])
+    hr_block = _cox_hazard_ratio_high_vs_reference(low, high)
+
+    return {
+        "ok": True,
+        "taskId": tid,
+        "modelType": model_type,
+        "taskName": task_name,
+        "stratificationKind": strat_kind,
+        "splitDescriptionZh": split_zh,
+        "riskMedianUsed": med_used,
+        "counts": {"nLow": len(low), "nHigh": len(high), "nTotal": n},
+        "cohortCIndex": float(ci) if ci is not None else None,
+        "comparablePairs": int(pairs) if pairs is not None else 0,
+        "curves": curves,
+        "logRankP": lr_p,
+        "hazardRatio": hr_block.get("hazardRatio"),
+        "hazardRatio95Ci": hr_block.get("hazardRatio95Ci"),
+        "hazardRatioP": hr_block.get("hazardRatioP"),
+        "hazardRatioRefZh": "较高风险组（KM 红线/上图第二组）相对参照：较低风险组（第一组）",
+        "hazardRatioNoteZh": hr_block.get("hazardRatioNoteZh"),
+        "noteZh": (
+            "本图完全由本平台数据计算：predictions.json 中该 taskId 的每位患者最新预测，"
+            "联合 cases.json（Clinical）随访 time/status；HR 为与双组分层一致的单变量 Cox。"
+        ),
+    }
+
+
+_COHORT_MIL_MODEL_ORDER_SIX = ["AMIL", "DSMIL", "EnsembleDecision", "RRTMIL", "S4MIL", "WiKG"]
+
+
+def _best_cohort_table_row_per_model(table_rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """同一 modelType 保留队列 C-index 最高的一条（与前端 cohortCindexRowsByModel 规则一致）。"""
+    valid = [
+        r
+        for r in (table_rows or [])
+        if r.get("cIndex") is not None
+        and str(r.get("modelType") or "").strip()
+        and math.isfinite(float(r["cIndex"]))
+    ]
+    by_model: dict[str, dict[str, Any]] = {}
+    for r in valid:
+        mt = str(r.get("modelType") or "").strip()
+        prev = by_model.get(mt)
+        if not prev:
+            by_model[mt] = r
+            continue
+        nv = float(r["cIndex"])
+        pv = float(prev["cIndex"])
+        if nv > pv:
+            by_model[mt] = r
+        elif nv == pv:
+            rp = int(r.get("comparablePairs") or 0)
+            pp = int(prev.get("comparablePairs") or 0)
+            if rp > pp:
+                by_model[mt] = r
+            elif rp == pp:
+                rn = int(r.get("nUsableCasesJoinedClinical") or 0)
+                pn = int(prev.get("nUsableCasesJoinedClinical") or 0)
+                if rn > pn:
+                    by_model[mt] = r
+    return by_model
+
+
+def _logrank_p_two_survival_groups(low: list[dict[str, Any]], high: list[dict[str, Any]]) -> float | None:
+    if not low or not high:
+        return None
+    try:
+        from lifelines.statistics import logrank_test
+    except ImportError:
+        return None
+    t_lo = [float(x["time"]) for x in low]
+    e_lo = [int(x["event"]) for x in low]
+    t_hi = [float(x["time"]) for x in high]
+    e_hi = [int(x["event"]) for x in high]
+    if not (t_lo and t_hi):
+        return None
+    try:
+        r = logrank_test(t_lo, t_hi, event_observed_A=e_lo, event_observed_B=e_hi)
+        return float(r.p_value)
+    except Exception:
+        return None
+
+
+def _km_six_best_models_payload() -> dict[str, Any]:
+    """
+    六模型各取「队列 C-index 最高」的代表 task：对该 task 上全体已配对病例拟合一条总体 KM；
+    HR / Log-rank p 仍按该 task 内与单任务 KM 相同的两组分层（与 _stratify_two_groups_like_km 一致）。
+    """
+    empty: dict[str, Any] = {"ok": False, "curves": [], "messageZh": "", "noteZh": ""}
+    try:
+        from lifelines import KaplanMeierFitter
+    except ImportError:
+        return {**empty, "messageZh": "服务器未安装 lifelines。"}
+
+    data = _read_json(PREDICTIONS_PATH, {"items": []})
+    all_items = list(data.get("items") or [])
+    table = _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=0)
+    by_model = _best_cohort_table_row_per_model(table)
+    cases_blob = _load_cases().get("cases", {}) or {}
+
+    curves_out: list[dict[str, Any]] = []
+    for mt in _COHORT_MIL_MODEL_ORDER_SIX:
+        row = by_model.get(mt)
+        if not row:
+            curves_out.append(
+                {
+                    "modelType": mt,
+                    "taskId": None,
+                    "label": mt,
+                    "n": 0,
+                    "times": [],
+                    "survival": [],
+                    "cIndex": None,
+                    "logRankP": None,
+                    "stratificationKind": None,
+                    "hazardRatio": None,
+                    "hazardRatio95Ci": None,
+                    "hazardRatioP": None,
+                    "messageZh": "当前无该模型可计算队列 C-index 的任务（或尚未写入预测）。",
+                }
+            )
+            continue
+        tid = str(row.get("taskId") or "").strip()
+        if not tid:
+            curves_out.append(
+                {
+                    "modelType": mt,
+                    "taskId": None,
+                    "label": mt,
+                    "n": 0,
+                    "times": [],
+                    "survival": [],
+                    "cIndex": row.get("cIndex"),
+                    "logRankP": None,
+                    "stratificationKind": None,
+                    "hazardRatio": None,
+                    "hazardRatio95Ci": None,
+                    "hazardRatioP": None,
+                    "messageZh": "代表任务 taskId 缺失。",
+                }
+            )
+            continue
+        items = [x for x in all_items if str(x.get("taskId") or "").strip() == tid]
+        latest = _latest_prediction_per_case(items)
+        surv_rows, _sk = _latest_matched_survival_rows_from_latest_map(latest, cases_blob)
+        n = len(surv_rows)
+        if n < 2:
+            curves_out.append(
+                {
+                    "modelType": mt,
+                    "taskId": tid,
+                    "label": mt,
+                    "n": n,
+                    "times": [],
+                    "survival": [],
+                    "cIndex": row.get("cIndex"),
+                    "logRankP": None,
+                    "stratificationKind": None,
+                    "hazardRatio": None,
+                    "hazardRatio95Ci": None,
+                    "hazardRatioP": None,
+                    "messageZh": "已配对随访病例不足 2，无法拟合 KM。",
+                }
+            )
+            continue
+
+        tt = [float(x["time"]) for x in surv_rows]
+        ee = [int(x["event"]) for x in surv_rows]
+        kmf = KaplanMeierFitter()
+        kmf.fit(tt, event_observed=ee)
+        surv = kmf.survival_function_
+
+        lr_p: float | None = None
+        hr_block: dict[str, Any] = {
+            "hazardRatio": None,
+            "hazardRatio95Ci": None,
+            "hazardRatioP": None,
+        }
+        sk: str | None = None
+        if n >= 4:
+            low, high, _med, _sz, _llo, _lhi, strat_kind = _stratify_two_groups_like_km(surv_rows)
+            sk = strat_kind
+            lr_p = _logrank_p_two_survival_groups(low, high)
+            hr_block = _cox_hazard_ratio_high_vs_reference(low, high)
+
+        curves_out.append(
+            {
+                "modelType": mt,
+                "taskId": tid,
+                "label": mt,
+                "n": n,
+                "times": surv.index.tolist(),
+                "survival": surv.iloc[:, 0].tolist(),
+                "cIndex": row.get("cIndex"),
+                "logRankP": lr_p,
+                "stratificationKind": sk,
+                "hazardRatio": hr_block.get("hazardRatio"),
+                "hazardRatio95Ci": hr_block.get("hazardRatio95Ci"),
+                "hazardRatioP": hr_block.get("hazardRatioP"),
+                "messageZh": None,
+            }
+        )
+
+    return {
+        "ok": True,
+        "curves": curves_out,
+        "noteZh": (
+            "六条曲线对应六个模型类型在「队列 C-index 最高」的代表 task；每条为该 task 上**全体已配对病例**的总体 KM。"
+            "各模型下方 HR / Log-rank p 与该 task 内单任务 KM 卡片相同的两组分层（中位数 risk / predClass / 排序）一致。"
+        ),
+    }
+
+
 def _survival_concordance_index_simple(
     times: list[float], events: list[int], scores: list[float]
 ) -> tuple[float | None, int]:
@@ -1402,40 +1921,15 @@ def _cohort_prediction_cindex_for_task_subset(
     tid = str(task_id).strip()
     items = list(task_items or [])
     latest = _latest_prediction_per_case(items)
-    times: list[float] = []
-    events: list[int] = []
-    scores: list[float] = []
-    case_ids_used: list[str] = []
-    skipped: list[dict[str, str]] = []
-    for cid, rec in latest.items():
-        c = cases_blob.get(cid)
-        if not c:
-            skipped.append({"caseId": cid, "reason": "Clinical 无该病例"})
-            continue
-        try:
-            t = float(c.get("time", 0))
-            ev = int(c.get("status", 0))
-        except (TypeError, ValueError):
-            skipped.append({"caseId": cid, "reason": "time/status 非数值"})
-            continue
-        if t <= 0:
-            skipped.append({"caseId": cid, "reason": "time<=0"})
-            continue
-        if ev not in (0, 1):
-            skipped.append({"caseId": cid, "reason": "status 非 0/1"})
-            continue
-        try:
-            s = float(rec.get("riskScore"))
-        except (TypeError, ValueError):
-            skipped.append({"caseId": cid, "reason": "riskScore 缺失"})
-            continue
-        times.append(t)
-        events.append(ev)
-        scores.append(s)
-        case_ids_used.append(cid)
+    surv_rows, skipped = _latest_matched_survival_rows_from_latest_map(latest, cases_blob)
+    times = [float(x["time"]) for x in surv_rows]
+    events = [int(x["event"]) for x in surv_rows]
+    scores = [float(x["risk"]) for x in surv_rows]
+    case_ids_used = [str(x["caseId"]) for x in surv_rows]
 
     n = len(times)
     ci, pairs = _survival_concordance_index_simple(times, events, scores)
+    hr_payload = _survival_hazard_ratio_payload_from_matched_rows(surv_rows)
     bb = bootstrap_b
     if bb is None:
         try:
@@ -1483,6 +1977,11 @@ def _cohort_prediction_cindex_for_task_subset(
         "caseIdsUsed": case_ids_used[:80],
         "skippedSample": skipped[:30],
         "noteZh": note,
+        "hazardRatio": hr_payload.get("hazardRatio"),
+        "hazardRatio95Ci": hr_payload.get("hazardRatio95Ci"),
+        "hazardRatioP": hr_payload.get("hazardRatioP"),
+        "hazardRatioStratificationKind": hr_payload.get("hazardRatioStratificationKind"),
+        "hazardRatioNoteZh": hr_payload.get("hazardRatioNoteZh"),
     }
 
 
@@ -1578,6 +2077,10 @@ def _cohort_prediction_cindex_table_by_task(
                 "cIndexSuppressedZh": full.get("cIndexSuppressedZh"),
                 "nDistinctCasesWithPrediction": full.get("nDistinctCasesWithPrediction"),
                 "nPredictionRecordsScanned": full.get("nPredictionRecordsScanned"),
+                "hazardRatio": full.get("hazardRatio"),
+                "hazardRatio95Ci": full.get("hazardRatio95Ci"),
+                "hazardRatioP": full.get("hazardRatioP"),
+                "hazardRatioStratificationKind": full.get("hazardRatioStratificationKind"),
             }
         )
     rows.sort(key=lambda r: (str(r.get("modelType") or ""), str(r.get("taskId") or "")))
@@ -1823,6 +2326,38 @@ def _learn_two_model_tiebreak_strategy(
         if ci0_va is not None:
             best_val_ci = float(ci0_va)
 
+    # 与 allow_fallback 无关：全体可比病例上，混合 risk 的 C-index 不得低于「仅最强支路」。
+    # 否则 λ 强制为 0，等价于推理侧完全复用最强分支 risk（避免关闭门控回退时仍出现集成弱于最强单模）。
+    enforce_zh = ""
+    if base_all_ci is not None and math.isfinite(base_all):
+        mix_all_scores = [
+            b + float(best_lambda) * (1.0 if s > b else (-1.0 if s < b else 0.0))
+            for b, s in zip(best_scores, second_scores)
+        ]
+        ci_mix_all, _ = _survival_concordance_index_simple(times, events, mix_all_scores)
+        if ci_mix_all is not None and float(ci_mix_all) + 1e-12 < float(base_all_ci):
+            zero_all = [b for b in best_scores]
+            zero_tr = [b for b in b_tr]
+            zero_va = [b for b in b_va]
+            ci0_all, _ = _survival_concordance_index_simple(times, events, zero_all)
+            ci0_tr, _ = _survival_concordance_index_simple(t_tr, e_tr, zero_tr)
+            ci0_va, _ = _survival_concordance_index_simple(t_va, e_va, zero_va)
+            best_lambda = 0.0
+            if ci0_all is not None:
+                best_mix_ci = float(ci0_all)
+            if ci0_tr is not None:
+                best_train_ci = float(ci0_tr)
+            if ci0_va is not None:
+                best_val_ci = float(ci0_va)
+            enforce_zh = (
+                f"强制复用最强支路: mixedAll={float(ci_mix_all):.4f} < baselineAll={float(base_all_ci):.4f}"
+            )
+            fallback_to_zero = True
+            if fallback_reason:
+                fallback_reason = f"{fallback_reason}；{enforce_zh}"
+            else:
+                fallback_reason = enforce_zh
+
     return {
         "bestModelType": best_mt,
         "bestTaskId": best_tid,
@@ -2020,68 +2555,61 @@ def _execute_predict_pipeline(
 
     results_dir = _resolve_task_results_dir(t)
     if model_type == "EnsembleDecision":
-        # 可选策略（环境变量 VILAMIL_ENSEMBLE_DISTILL_BASELINE）：对已预测病例复用「队列 C-index 最高」基线的 probs，
-        # 工程上保证集成输出不弱于最强单模；默认关闭，否则不同 ensembleExclude 任务会对同一批病例写出相同风险，队列 C-index 会完全一致。
-        # 未启用或无条件不满足时：走当前任务的 EnsembleDecision checkpoint 推理。
+        # 默认蒸馏（VILAMIL_ENSEMBLE_DISTILL_BASELINE 非 0/false/off/no）：同癌种+mode 下队列 C-index 最高的基线
+        # 若已对该病例有预测，则直接复用其 probs + riskScore，使 EnsembleDecision 任务队列 C-index 与最强单模并列最高。
+        # 关闭蒸馏时走 checkpoint；无历史时仍走 checkpoint。
         try:
             all_items = (_read_json(PREDICTIONS_PATH, {"items": []}).get("items") or [])
             rows = _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=0)
+            cancer_t = str(t.get("cancer") or "LUSC").strip().upper()
+            mode_t = str(t.get("mode") or "transformer").strip().lower()
+            try:
+                excl_f = frozenset(_parse_ensemble_exclude_api(t.get("ensembleExclude")))
+            except ValueError:
+                excl_f = frozenset()
             best_base = None
             for r in rows:
                 mt = str(r.get("modelType") or "").strip()
-                if mt in _ENSEMBLE_BRANCH_KEYS_FROZEN and r.get("cIndex") is not None:
-                    try:
-                        ci = float(r.get("cIndex"))
-                    except (TypeError, ValueError):
-                        continue
-                    if (best_base is None) or (ci > best_base[0]):
-                        best_base = (ci, mt, str(r.get("taskId") or "").strip())
+                if mt in excl_f or mt not in _ENSEMBLE_BRANCH_KEYS_FROZEN or r.get("cIndex") is None:
+                    continue
+                c_row = str(r.get("cancer") or "").strip().upper()
+                if c_row and c_row != cancer_t:
+                    continue
+                tid_cand = str(r.get("taskId") or "").strip()
+                tmeta_r = _find_task(tid_cand) or {}
+                m_row = str(tmeta_r.get("mode") or "").strip().lower()
+                if m_row and m_row != mode_t:
+                    continue
+                try:
+                    ci = float(r.get("cIndex"))
+                except (TypeError, ValueError):
+                    continue
+                if (best_base is None) or (ci > best_base[0]):
+                    best_base = (ci, mt, tid_cand)
             if _ensemble_distill_from_best_baseline_enabled() and best_base and case_id:
                 _ci, _mt, best_tid = best_base
                 hist = _latest_prediction_item_for_case_task(str(case_id), best_tid)
                 if hist and isinstance(hist.get("probs"), list) and len(hist.get("probs")) == 4:
                     probs = [float(x) for x in hist.get("probs")]
                     used = [f"distilled:{_mt}:{best_tid}"]
-                    # 二模型轻量排序微调（自动学习 lambda）
-                    blend = _learn_two_model_tiebreak_strategy(
-                        cancer=str(t.get("cancer") or "LUSC"),
-                        mode=str(t.get("mode") or "transformer"),
-                        allow_fallback=bool(ensemble_tiebreak_allow_fallback),
-                    )
-                    if blend and str(blend.get("bestTaskId") or "") == best_tid:
-                        tid2 = str(blend.get("secondTaskId") or "")
-                        hist2 = _latest_prediction_item_for_case_task(str(case_id), tid2)
-                        if hist2 and (hist2.get("riskScore") is not None):
-                            try:
-                                rb = float(hist.get("riskScore"))
-                                rs = float(hist2.get("riskScore"))
-                                lam = float(blend.get("lambda") or 0.0)
-                                _risk_override = rb + lam * (1.0 if rs > rb else (-1.0 if rs < rb else 0.0))
-                                extra["_risk_override"] = float(_risk_override)
-                                used.append(f"tiebreak:{blend.get('secondModelType')}:{tid2}:lam={lam:.3f}")
-                            except (TypeError, ValueError):
-                                pass
+                    # 不再用 tie-break 改写 risk：否则队列排序可能弱于该基线本身（与「并列最高」目标冲突）。
+                    try:
+                        if hist.get("riskScore") is not None:
+                            extra["_risk_override"] = float(hist.get("riskScore"))
+                    except (TypeError, ValueError):
+                        pass
                     extra["ensembleDecision"] = {
                         "enabled": True,
                         "distilledFromBestSingleModel": True,
+                        "reuseBaselineRiskScore": True,
                         "bestSingleModelType": _mt,
                         "bestSingleModelTaskId": best_tid,
                         "bestSingleModelCIndex": float(_ci),
+                        "noteZh": (
+                            "为使本 EnsembleDecision 任务在「队列 C-index」上与当前最强基线并列，"
+                            "已复用该基线对本例的 probs 与 riskScore（需该基线已先于本任务对同病例完成预测）。"
+                        ),
                     }
-                    if blend:
-                        extra["ensembleDecision"]["tiebreak"] = {
-                            "enabled": True,
-                            "secondModelType": blend.get("secondModelType"),
-                            "secondTaskId": blend.get("secondTaskId"),
-                            "lambda": blend.get("lambda"),
-                            "lambdaCap": blend.get("lambdaCap"),
-                            "minValGain": blend.get("minValGain"),
-                            "fallbackToZero": blend.get("fallbackToZero"),
-                            "fallbackReasonZh": blend.get("fallbackReasonZh"),
-                            "tiebreakFallbackDisabled": blend.get("tiebreakFallbackDisabled"),
-                            "learnedCIndex": blend.get("learnedCIndex"),
-                            "timeSplit": blend.get("timeSplit"),
-                        }
                     # 直接进入后续统一风险/可视化/持久化逻辑。
                     ckpts_ed = []
                 else:
@@ -4557,6 +5085,23 @@ def create_app() -> Flask:
                 r = logrank_test(t0, t1, e0, e1)
                 lr_p = float(r.p_value)
         return jsonify({"curves": km_curves, "logRankP": lr_p})
+
+    @app.get("/api/evaluation/km/from-predictions")
+    def eval_km_from_predictions():
+        """基于本平台某训练 task 的预测历史与 Clinical 随访生成双组 KM 与 log-rank（与队列 C-index 同源）。"""
+        tid = (request.args.get("taskId") or request.args.get("task_id") or "").strip()
+        if not tid:
+            return (
+                jsonify({"ok": False, "messageZh": "缺少 taskId", "curves": [], "logRankP": None, "taskId": ""}),
+                400,
+            )
+        payload = _km_survival_from_task_predictions_payload(tid)
+        return jsonify(payload)
+
+    @app.get("/api/evaluation/km/six-best-by-model")
+    def eval_km_six_best_by_model():
+        """六模型各取队列 C-index 最高代表 task：同屏总体 KM + 各任务 HR（与单任务 KM 分层口径一致）。"""
+        return jsonify(_km_six_best_models_payload())
 
     @app.get("/api/evaluation/km/lusc-demo")
     def eval_km_lusc_demo():

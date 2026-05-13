@@ -597,7 +597,7 @@ export default function Dashboard() {
                   >
                     <ListItemText
                       primary={`${r.taskId} — ${r.modelType}`}
-                      secondary={`status: ${r.status} · ROC AUC: ${r.rocAuc ?? r.cIndex ?? '—'}`}
+                      secondary={`status: ${r.status} · 验证 c-index: ${r.cIndex ?? '—'}`}
                     />
                   </ListItemButton>
                 ))}
@@ -656,7 +656,7 @@ export default function Dashboard() {
                   </Grid>
                   <Grid item xs={12} md={4}>
                     <Typography variant="body2" color="text.secondary">
-                      验证集 AUC（训练日志）
+                      验证集 c-index（训练日志）
                     </Typography>
                     <Typography variant="body1">{selectedTask.cIndex ?? '—'}</Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
@@ -877,31 +877,31 @@ export default function Dashboard() {
                 <Grid container spacing={2} sx={{ mb: 2 }}>
                   <Grid item xs={12} md={6}>
                     <Typography variant="body2" color="text.secondary">
-                      验证集最佳 ROC AUC
+                      验证集最佳 c-index
                     </Typography>
                     <Typography variant="body1">
-                      {selectedRunCurves?.summary?.bestValRocAuc ??
-                        selectedRunCurves?.summary?.bestValCIndex ??
+                      {selectedRunCurves?.summary?.bestValCIndex ??
+                        selectedRunCurves?.summary?.bestValRocAuc ??
                         '—'}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography variant="body2" color="text.secondary">
-                      测试集最终 ROC AUC
+                      测试集最终 c-index
                     </Typography>
                     <Typography variant="body1">
-                      {selectedRunCurves?.summary?.finalTestRocAuc ??
-                        selectedRunCurves?.summary?.finalTestCIndex ??
+                      {selectedRunCurves?.summary?.finalTestCIndex ??
+                        selectedRunCurves?.summary?.finalTestRocAuc ??
                         '—'}
                     </Typography>
                   </Grid>
                   <Grid item xs={12} md={6}>
                     <Typography variant="body2" color="text.secondary">
-                      训练集最终 ROC AUC
+                      训练集最终 c-index
                     </Typography>
                     <Typography variant="body1">
-                      {selectedRunCurves?.summary?.finalTrainRocAuc ??
-                        selectedRunCurves?.summary?.finalTrainCIndex ??
+                      {selectedRunCurves?.summary?.finalTrainCIndex ??
+                        selectedRunCurves?.summary?.finalTrainRocAuc ??
                         '—'}
                     </Typography>
                   </Grid>
@@ -917,8 +917,8 @@ export default function Dashboard() {
                 </Typography>
                 {(selectedRunCurves?.series || []).slice(-5).map((p) => (
                   <Typography key={p.epoch} variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                    epoch {p.epoch} · trainLoss {p.trainLoss ?? '—'} · valLoss {p.valLoss ?? '—'} · trainRocAuc{' '}
-                    {p.trainRocAuc ?? p.trainCIndex ?? '—'} · valRocAuc {p.valRocAuc ?? p.valCIndex ?? '—'}
+                    epoch {p.epoch} · trainLoss {p.trainLoss ?? '—'} · valLoss {p.valLoss ?? '—'} · train c-index{' '}
+                    {p.trainCIndex ?? p.trainRocAuc ?? '—'} · val c-index {p.valCIndex ?? p.valRocAuc ?? '—'}
                   </Typography>
                 ))}
               </>

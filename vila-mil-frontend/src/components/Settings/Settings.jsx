@@ -92,7 +92,7 @@ export default function Settings() {
       '1) Clinical：左栏随访（CSV 导入带状态提示、病例维护）；左栏底部展示「当前病例特征状态」；右栏 WSI 选择与上传；绑定后「已绑定病例图片预览」在右栏，说明文字可收起到 ℹ️。',
       '2) Training：仅配置「单模型 MIL」（RRTMIL / AMIL / WiKG / DSMIL / S4MIL）与超参；与集成任务「共用队列」；单任务并发；可看日志与停止。',
       '3) Ensemble：独立页的 EnsembleDecision（分支纳入/排除、先验与温度等）；仍走 POST /api/training/start，队列与日志在 Training 查看。',
-      '4) Evaluation：最优任务曲线对比（多模型 Loss/AUC）、评估 runs 与指标总览；与 Dashboard 部分统计同源。',
+      '4) Evaluation：最优任务曲线对比（多模型 Loss 等）、评估 runs 与指标总览；与 Dashboard 部分统计同源。',
       '5) Prediction：按病例与 Task 推理/批量推理；历史与「队列 C-index（按模型）」；请求可携带「门控回退」偏好（本页或 Ensemble 页同步）。',
       '6) Dashboard：总览近期训练、预测与评估；可刷新聚合。',
       '7) Settings（本页）：API BaseURL；服务器只读路径；「演示」开关；与 Ensemble 联动的 tie-break 门控回退偏好。',
@@ -190,8 +190,8 @@ export default function Settings() {
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                       与 <strong>Ensemble</strong> 页开关写入同一本地项；<strong>Prediction</strong> 发起{' '}
                       <code>/api/predict</code> 时会附带 <code>ensembleTiebreakAllowFallback</code>。开启=验证不足或全量退化时可将
-                      λ 置 0（稳健）；关闭=始终用学习到的 λ。服务端蒸馏路径需环境变量{' '}
-                      <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=1</code> 才生效。
+                      λ 置 0（稳健）；关闭=始终用学习到的 λ。服务端对 EnsembleDecision 默认启用「复用队列最强基线」蒸馏；仅当设置{' '}
+                      <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=0</code> 时才改走纯 checkpoint。
                     </Typography>
                   </Box>
                 }
@@ -211,7 +211,7 @@ export default function Settings() {
                 <br />
                 当前版本提供：
                 <br />- <strong>Training</strong>：仅单模型 MIL 训练与队列/日志；<strong>Ensemble</strong>：独立页的 EnsembleDecision 配置（与基线<strong>共用</strong>训练队列与 <code>/api/training/start</code>）
-                <br />- <strong>Evaluation</strong>：多模型最优任务曲线（Loss/AUC）、评估 runs；<strong>Dashboard</strong>：总览近期训练、预测与评估
+                <br />- <strong>Evaluation</strong>：多模型最优任务曲线（Loss 等）、评估 runs；<strong>Dashboard</strong>：总览近期训练、预测与评估
                 <br />- <strong>Clinical</strong>：左栏随访与「当前病例特征状态」；右栏 WSI 与特征绑定；预览说明可收起到 ℹ️；CSV 导入带状态提示
                 <br />- <strong>Prediction</strong>：单例/批量推理、历史记录与<strong>队列 C-index（按模型）</strong>；可与服务端蒸馏/tie-break 策略配合（见本页本地偏好）
                 <br />- <strong>Settings</strong>：API BaseURL、服务器路径只读、演示开关、与 Ensemble 同步的 tie-break 门控回退偏好

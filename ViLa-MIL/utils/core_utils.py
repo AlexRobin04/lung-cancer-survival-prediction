@@ -1,4 +1,5 @@
 from typing import Any
+import math
 
 import numpy as np
 import torch
@@ -205,6 +206,26 @@ def _auto_tune_ensemble_weights(model, val_loader, n_classes: int, max_trials: i
         if score > best_score:
             best_score = score
             best_w = w
+
+    # 若当前最优加权融合在验证目标上仍弱于「单分支 one-hot」最优者，则直接复用该最强分支权重（保证集成不弱于最强支路）。
+    branch_best = float("-inf")
+    branch_best_w: np.ndarray | None = None
+    for idx in active:
+        oh = np.zeros_like(mask)
+        oh[idx] = 1.0
+        sc = _ensemble_objective_from_parts(parts_np, oh, n_classes, surv_t_np, surv_e_np, labels_np)
+        if sc > branch_best + 1e-15:
+            branch_best = float(sc)
+            branch_best_w = oh
+    if (
+        branch_best_w is not None
+        and math.isfinite(branch_best)
+        and best_w is not None
+        and best_score + 1e-12 < branch_best
+    ):
+        best_w = branch_best_w
+        best_score = branch_best
+
     return best_w, float(best_score)
 
 def train(datasets, cur, args):

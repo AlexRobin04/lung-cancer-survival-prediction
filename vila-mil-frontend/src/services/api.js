@@ -102,6 +102,22 @@ export const evaluationApi = {
     const { data } = await client.post('/evaluation/km', { groups })
     return data
   },
+  async kmFromPredictions(taskId) {
+    const { data } = await client.get('/evaluation/km/from-predictions', {
+      params: { taskId: String(taskId || '').trim() },
+    })
+    return data
+  },
+  /** 六模型各取队列 C-index 最高代表 task，同图总体 KM + 各任务 HR（与单任务 KM 分层口径一致） */
+  async kmSixBestByModel() {
+    const { data } = await client.get('/evaluation/km/six-best-by-model')
+    return data
+  },
+  /** 仓库内 CSV 示例（脚本/兼容用；评估页 KM 已改为 from-predictions） */
+  async kmLuscDemo() {
+    const { data } = await client.get('/evaluation/km/lusc-demo')
+    return data
+  },
 }
 
 export const dataApi = {
