@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Any
 import math
 
@@ -519,6 +520,8 @@ def train(datasets, cur, args):
         early_stopping = None
     print('Done!')
 
+    best_val_cidx = -1.0
+    best_ckpt = os.path.join(args.results_dir, "s_{}_best_cindex.pt".format(cur))
     for epoch in range(args.max_epochs):
         train_loop(args, epoch, model, train_loader, optimizer, args.n_classes, writer, loss_fn)
         stop, val_cidx_ep = validate(
@@ -532,6 +535,10 @@ def train(datasets, cur, args):
             loss_fn,
             args.results_dir,
         )
+        if np.isfinite(val_cidx_ep) and float(val_cidx_ep) > best_val_cidx:
+            best_val_cidx = float(val_cidx_ep)
+            torch.save(model.state_dict(), best_ckpt)
+            print('  ** New best val_cidx: {:.4f} **'.format(best_val_cidx))
         if stop:
             break
         # Compute and print train-set metrics (ROC AUC/F1) for UI summary.
@@ -542,7 +549,11 @@ def train(datasets, cur, args):
             # Don't fail training if metrics computation fails; keep a clear log line.
             print(f'Train metrics failed: {e}')
 
-    if args.early_stopping:
+    # Load best val_cidx checkpoint for final evaluation
+    if os.path.isfile(best_ckpt):
+        model.load_state_dict(torch.load(best_ckpt))
+        print('Loaded best val_cidx checkpoint ({:.4f}) for final evaluation.'.format(best_val_cidx))
+    elif args.early_stopping:
         model.load_state_dict(torch.load(os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur))))
 
     torch.save(model.state_dict(), os.path.join(args.results_dir, "s_{}_checkpoint.pt".format(cur)))
@@ -552,6 +563,59 @@ def train(datasets, cur, args):
 
     results_dict, test_error, test_auc, acc_logger, test_f1 = summary(args.mode, model, test_loader, args.n_classes)
     print('Test error: {:.4f}, ROC AUC: {:.4f}, F1: {:.4f}'.format(test_error, test_auc, test_f1))
+
+    # Test set C-index
+    test_cidx, test_cidx_pairs = float("nan"), 0
+    sd = getattr(test_loader.dataset, "slide_data", None)
+    has_surv = (
+        sd is not None
+        and hasattr(sd, "columns")
+        and "time" in sd.columns
+        and "status" in sd.columns
+        and len(test_loader) > 0
+    )
+    if has_surv:
+        surv_t: list[float] = []
+        surv_e: list[int] = []
+        surv_r: list[float] = []
+        prob = np.zeros((len(test_loader), args.n_classes))
+        with torch.no_grad():
+            for batch_idx, (data_s, coord_s, data_l, coords_l, label) in enumerate(test_loader):
+                data_s = data_s.to(device, non_blocking=True)
+                coord_s = coord_s.to(device, non_blocking=True)
+                data_l = data_l.to(device, non_blocking=True)
+                coords_l = coords_l.to(device, non_blocking=True)
+                label = label.to(device, non_blocking=True)
+                if hasattr(model, 'config') or model.__class__.__name__ in {'ViLa_MIL_Model', 'RRTMIL', 'AMIL', 'WiKG', 'MILNet', 'S4Model', 'HVTSurv'}:
+                    logits, Y_prob, loss = model(data_s, coord_s, data_l, coords_l, label)
+                else:
+                    K = min(data_s.size(0), data_l.size(0))
+                    h = torch.cat([data_s[:K], data_l[:K]], dim=1)
+                    logits, Y_prob, Y_hat, _, _ = model(h)
+                prob[batch_idx] = Y_prob.detach().cpu().view(-1).numpy()
+                try:
+                    row = sd.iloc[int(batch_idx)]
+                    t_ = float(row["time"])
+                    ev_ = int(row["status"])
+                    if t_ > 0 and ev_ in (0, 1):
+                        if args.n_classes == 2:
+                            rsk = float(prob[batch_idx, 1])
+                        else:
+                            # Invert: labels 0=short survival→high risk, 3=long survival→low risk
+                            rsk = float(np.dot(prob[batch_idx], np.arange(args.n_classes - 1, -1, -1, dtype=np.float64)))
+                        surv_t.append(t_)
+                        surv_e.append(ev_)
+                        surv_r.append(rsk)
+                except (ValueError, TypeError, KeyError, IndexError):
+                    pass
+        if len(surv_t) >= 2:
+            test_cidx, test_cidx_pairs = _harrell_cindex_validation(
+                np.asarray(surv_t, dtype=np.float64),
+                np.asarray(surv_e, dtype=np.int64),
+                np.asarray(surv_r, dtype=np.float64),
+            )
+    cidx_str = "nan" if not np.isfinite(test_cidx) else f"{float(test_cidx):.4f}"
+    print('Test C-index: {} (comparable pairs: {})'.format(cidx_str, test_cidx_pairs))
 
     each_class_acc = []
     for i in range(args.n_classes):
@@ -723,7 +787,8 @@ def validate(cur, epoch, model, loader, n_classes, early_stopping = None, writer
                         if n_classes == 2:
                             rsk = float(prob[batch_idx, 1])
                         else:
-                            rsk = float(np.dot(prob[batch_idx], np.arange(n_classes, dtype=np.float64)))
+                            # Invert: labels 0=short survival→high risk, 3=long survival→low risk
+                            rsk = float(np.dot(prob[batch_idx], np.arange(n_classes - 1, -1, -1, dtype=np.float64)))
                         surv_t.append(t)
                         surv_e.append(ev)
                         surv_r.append(rsk)

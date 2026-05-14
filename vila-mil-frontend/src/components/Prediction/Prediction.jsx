@@ -6,16 +6,27 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Checkbox,
   Chip,
   CircularProgress,
+  Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControl,
   InputLabel,
   LinearProgress,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
   MenuItem,
   Paper,
   Select,
   Stack,
   Table,
+  TextField,
   TableBody,
   TableCell,
   TableContainer,
@@ -26,10 +37,11 @@ import {
   Typography,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { clinicalApi, evaluationApi, predictApi, trainingApi } from '../../services/api'
+import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { clinicalApi, predictApi, trainingApi } from '../../services/api'
 import { readEnsembleTiebreakAllowFallback } from '../../constants/ensemblePredictPrefs'
 import useCancerOptions from '../../hooks/useCancerOptions'
+import { useCohortAndKmFromPredictions } from '../../hooks/useCohortAndKmFromPredictions'
 import Toast from '../common/Toast.jsx'
 import RasterPreview from '../Clinical/RasterPreview.jsx'
 import {
@@ -38,14 +50,12 @@ import {
   formatPredictionTaskMenuLabel,
 } from '../../utils/ensembleTaskLabel'
 import {
-  KM_GROUP_COLORS,
-  KM_SIX_MODEL_ORDER,
-  buildKmChartRows,
-  fmtFixed,
-  fmtLogRankP,
-  kmCurveKey,
-  kmStrokeForModel,
-} from '../../utils/kmChartUtils'
+  cohortHazardRatioCellText,
+  cohortQueueCIndex95CiRangeText,
+  cohortQueueCIndexText,
+  formatCindex95CiParen,
+  shortTaskId,
+} from '../../utils/predictionCohortKmUtils'
 
 const RiskBadge = ({ tierZh }) => {
   const color =
@@ -77,111 +87,6 @@ const getBarColorByName = (name) => {
   return '#1976d2'
 }
 
-const shortTaskId = (id) => {
-  const s = String(id || '')
-  if (s.length <= 16) return s
-  return `${s.slice(0, 8)}…${s.slice(-4)}`
-}
-
-const kmChartPanelSx = (theme) => ({
-  height: 340,
-  p: 1,
-  borderRadius: 1.5,
-  border: '1px solid',
-  borderColor: 'divider',
-  bgcolor: theme.palette.mode === 'dark' ? alpha(theme.palette.common.white, 0.02) : '#fbfcff',
-})
-
-/** 与模型评估页 KM 卡片顶栏同色条风格一致 */
-const kmSectionCardSx = (theme) => ({
-  mb: 3,
-  borderRadius: 2,
-  overflow: 'hidden',
-  border: '1px solid',
-  borderColor: 'divider',
-  borderTop: '4px solid',
-  borderTopColor: '#2e7d32',
-  bgcolor: alpha('#2e7d32', theme.palette.mode === 'dark' ? 0.12 : 0.05),
-})
-
-/** 六模型最佳任务同图 KM（与单任务 KM 卡片区分配色条） */
-const kmSixSectionCardSx = (theme) => ({
-  mb: 3,
-  borderRadius: 2,
-  overflow: 'hidden',
-  border: '1px solid',
-  borderColor: 'divider',
-  borderTop: '4px solid',
-  borderTopColor: '#1565c0',
-  bgcolor: alpha('#1565c0', theme.palette.mode === 'dark' ? 0.14 : 0.06),
-})
-
-/** 后端 cIndex95Ci: [lo, hi]（与点估计同四位小数） */
-const formatCindex95CiParen = (ci) => {
-  if (!ci || !Array.isArray(ci) || ci.length < 2) return ''
-  const lo = Number(ci[0])
-  const hi = Number(ci[1])
-  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return ''
-  return `（${lo.toFixed(4)}–${hi.toFixed(4)}）`
-}
-
-const cohortQueueCIndex95CiRangeText = (row) => {
-  const ci = row?.cIndex95Ci
-  if (!ci || !Array.isArray(ci) || ci.length < 2) return '—'
-  const lo = Number(ci[0])
-  const hi = Number(ci[1])
-  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return '—'
-  return `${lo.toFixed(4)}–${hi.toFixed(4)}`
-}
-
-const cohortQueueCIndexText = (row) => {
-  if (!row) return '—'
-  if (row.cIndex != null) {
-    const pt = Number(row.cIndex).toFixed(4)
-    const ci = formatCindex95CiParen(row.cIndex95Ci)
-    return ci ? `${pt}${ci}` : pt
-  }
-  if (row.cIndexSuppressedZh) return '—'
-  return '—'
-}
-
-/** 与 KM 双组分层一致：单变量 Cox，较高风险组相对参照组 HR 及 95% CI、Wald p */
-const cohortHazardRatioCellText = (row) => {
-  const hr = row?.hazardRatio
-  if (hr == null || !Number.isFinite(Number(hr))) return '—'
-  const ci = row.hazardRatio95Ci
-  let s = Number(hr).toFixed(3)
-  if (ci && Array.isArray(ci) && ci.length >= 2) {
-    const lo = Number(ci[0])
-    const hi = Number(ci[1])
-    if (Number.isFinite(lo) && Number.isFinite(hi)) {
-      s += `（${lo.toFixed(3)}–${hi.toFixed(3)}）`
-    }
-  }
-  const p = row.hazardRatioP
-  if (p != null && Number.isFinite(Number(p))) {
-    s += ` · p=${fmtLogRankP(p)}`
-  }
-  return s
-}
-
-/** 与训练/预测页六基线一致，表格始终渲染 6 行（无数据则填 —） */
-const COHORT_CINDEX_MODEL_ORDER = ['AMIL', 'DSMIL', 'EnsembleDecision', 'RRTMIL', 'S4MIL', 'WiKG']
-const COHORT_CINDEX_BASELINE_MODELS = new Set(['AMIL', 'DSMIL', 'RRTMIL', 'S4MIL', 'WiKG'])
-
-const cohortCiDisplayEqual = (a, b) => {
-  const ok = (x) => x && Array.isArray(x) && x.length >= 2 && Number.isFinite(Number(x[0])) && Number.isFinite(Number(x[1]))
-  if (ok(a) && ok(b)) {
-    return Number(a[0]).toFixed(4) === Number(b[0]).toFixed(4) && Number(a[1]).toFixed(4) === Number(b[1]).toFixed(4)
-  }
-  if (!ok(a) && !ok(b)) return true
-  return false
-}
-
-/** 与任一基线并列第一（点估计与 CI 展示均相同）时，仅用于前端展示：点估计与 CI 同乘 1.05（+5%），并夹到 [0,1] */
-const DISPLAY_ENSEMBLE_TIE_SCALE = 1.05
-const clamp01 = (x) => Math.min(1, Math.max(0, Number(x)))
-
 export default function Prediction() {
   const [cases, setCases] = useState([])
   const [tasks, setTasks] = useState([])
@@ -197,42 +102,90 @@ export default function Prediction() {
 
   const { cancerOptions, cancer, setCancer } = useCancerOptions('LUSC')
 
+  const [batchCaseDialogOpen, setBatchCaseDialogOpen] = useState(false)
+  const [batchSelectedCases, setBatchSelectedCases] = useState(new Set())
+  const [batchRangeFrom, setBatchRangeFrom] = useState('1')
+  const [batchRangeTo, setBatchRangeTo] = useState('1')
+
+  const [historyExpanded, setHistoryExpanded] = useState(false)
+  const [predictionRecords, setPredictionRecords] = useState([])
+  const [selectedRecordIds, setSelectedRecordIds] = useState(new Set())
+  const [predictionRecordsLoading, setPredictionRecordsLoading] = useState(false)
+
+  const loadPredictionRecords = useCallback(async () => {
+    setPredictionRecordsLoading(true)
+    try {
+      const res = await predictApi.listPredictions(200, { bustCache: true })
+      setPredictionRecords(res?.items || [])
+    } catch {
+      // silent
+    } finally {
+      setPredictionRecordsLoading(false)
+    }
+  }, [])
+
+  const handleSelectRecord = (id) => {
+    setSelectedRecordIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const handleSelectAllRecords = () => {
+    setSelectedRecordIds((prev) => {
+      if (prev.size === predictionRecords.length) return new Set()
+      return new Set(predictionRecords.map((r) => r.id || '').filter(Boolean))
+    })
+  }
+
+  const handleDeleteSelectedRecords = async () => {
+    const ids = Array.from(selectedRecordIds).filter(Boolean)
+    if (!ids.length) return
+    if (!window.confirm(`确定删除选中的 ${ids.length} 条预测记录吗？`)) return
+    try {
+      await predictApi.deletePredictions({ ids })
+      setNotice(`已删除 ${ids.length} 条记录`)
+      setSelectedRecordIds(new Set())
+      await loadPredictionRecords()
+      await ck.reloadCohortAndKm()
+    } catch (e) {
+      setError(e?.response?.data?.message || e.message || '删除失败')
+    }
+  }
+
+  const handleDeleteAllRecords = async () => {
+    if (!window.confirm('确定删除全部预测历史记录吗？此操作不可恢复。')) return
+    try {
+      await predictApi.deletePredictions({ deleteAll: true })
+      setNotice('已清空全部预测记录')
+      setSelectedRecordIds(new Set())
+      await loadPredictionRecords()
+      await ck.reloadCohortAndKm()
+    } catch (e) {
+      setError(e?.response?.data?.message || e.message || '清空失败')
+    }
+  }
+
   const [loading, setLoading] = useState(false)
   const [predictProgress, setPredictProgress] = useState(0)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
   const [notice, setNotice] = useState('')
   const [caseFeatureMeta, setCaseFeatureMeta] = useState(null)
-  /** 基于 predictions + Clinical 随访的队列生存 C-index（后端计算） */
-  const [cohortCIndexAll, setCohortCIndexAll] = useState(null)
-  const [cohortCIndexByTask, setCohortCIndexByTask] = useState([])
-  const [kmFromTask, setKmFromTask] = useState(null)
-  const [kmLoading, setKmLoading] = useState(false)
-  const [kmError, setKmError] = useState('')
-  const [kmSixFromApi, setKmSixFromApi] = useState(null)
-  const [kmSixLoading, setKmSixLoading] = useState(false)
-  const [kmSixError, setKmSixError] = useState('')
-
-  const loadCohortCIndex = async () => {
-    try {
-      const data = await predictApi.listPredictions(250, { bustCache: true })
-      setCohortCIndexAll(data?.cohortCIndex ?? null)
-      setCohortCIndexByTask(Array.isArray(data?.cohortCIndexByTask) ? data.cohortCIndexByTask : [])
-    } catch {
-      setCohortCIndexAll(null)
-      setCohortCIndexByTask([])
-    }
-  }
 
   const load = async () => {
     setError('')
     try {
-      const [cRes, tRes] = await Promise.all([
+      const [cRes, tRes, pRes] = await Promise.all([
         clinicalApi.listCases(),
         trainingApi.history(),
+        predictApi.listPredictions(200, { bustCache: true }).catch(() => null),
       ])
       setCases(cRes?.cases || [])
       setTasks(tRes?.tasks || tRes?.data?.tasks || [])
+      if (pRes?.items) setPredictionRecords(pRes.items)
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '加载失败')
     }
@@ -471,281 +424,19 @@ export default function Prediction() {
     return ''
   }, [availableTasks, effectiveTaskId, taskPickMode, manualModelKey, pickedModelKey])
 
-  const latestTaskMetaById = useMemo(() => {
-    const m = new Map()
-    for (const t of availableTasks || []) {
-      const tid = String(t?.taskId || t?.id || '').trim()
-      if (!tid) continue
-      m.set(tid, t)
-    }
-    return m
-  }, [availableTasks])
-
-  const resolveCohortTaskLabel = useCallback(
-    (row) => {
-      if (!row) return '—'
-      const mt = String(row.modelType || '').trim()
-      if (mt !== 'EnsembleDecision' || !row.taskId) return row.taskLabel || row.modelType || '—'
-      const tm = latestTaskMetaById.get(String(row.taskId))
-      return (
-        enrichEnsembleTrainingTitle({
-          modelType: 'EnsembleDecision',
-          taskLabel: row.taskLabel,
-          name: row.taskLabel,
-          cancer: String(tm?.cancer || tm?.cancerType || '').trim() || cancer,
-          ensembleExclude: tm?.ensembleExclude,
-        }) || row.taskLabel || row.modelType || '—'
-      )
-    },
-    [latestTaskMetaById, cancer]
-  )
-
-  /** 与底部「最佳/手动」选中任务一致的队列 C-index（单一 taskId 口径） */
-  const cohortSummaryForSelectedTask = useMemo(() => {
-    const tid = String(effectiveTaskId || '').trim()
-    if (!tid) return null
-    return (cohortCIndexByTask || []).find((r) => String(r.taskId) === tid) || null
-  }, [cohortCIndexByTask, effectiveTaskId])
-
-  const loadKmFromPredictions = useCallback(async () => {
-    const tid = String(effectiveTaskId || '').trim()
-    if (!tid) {
-      setKmFromTask(null)
-      setKmError('')
-      setKmLoading(false)
-      return
-    }
-    setKmLoading(true)
-    setKmError('')
-    try {
-      const data = await evaluationApi.kmFromPredictions(tid)
-      setKmFromTask(data)
-      if (data && data.ok === false && data.messageZh) {
-        setKmError(String(data.messageZh))
-      } else {
-        setKmError('')
-      }
-    } catch (e) {
-      setKmFromTask(null)
-      setKmError(
-        e?.response?.data?.messageZh ||
-          e?.response?.data?.message ||
-          e.message ||
-          'Kaplan–Meier 数据加载失败'
-      )
-    } finally {
-      setKmLoading(false)
-    }
-  }, [effectiveTaskId])
-
-  const loadKmSixBestFromPredictions = useCallback(async () => {
-    if (!(cohortCIndexByTask && cohortCIndexByTask.length)) {
-      setKmSixFromApi(null)
-      setKmSixError('')
-      setKmSixLoading(false)
-      return
-    }
-    setKmSixLoading(true)
-    setKmSixError('')
-    try {
-      const data = await evaluationApi.kmSixBestByModel()
-      setKmSixFromApi(data)
-      if (data && data.ok === false && data.messageZh) {
-        setKmSixError(String(data.messageZh))
-      } else {
-        setKmSixError('')
-      }
-    } catch (e) {
-      setKmSixFromApi(null)
-      setKmSixError(
-        e?.response?.data?.messageZh ||
-          e?.response?.data?.message ||
-          e.message ||
-          '六模型 KM 加载失败'
-      )
-    } finally {
-      setKmSixLoading(false)
-    }
-  }, [cohortCIndexByTask])
-
-  const kmChartData = useMemo(() => buildKmChartRows(kmFromTask?.curves || []), [kmFromTask])
-
-  const kmCurveLines = useMemo(() => {
-    const curves = kmFromTask?.curves || []
-    return curves.map((c, i) => ({
-      label: c.label || `组${i + 1}`,
-      stroke: KM_GROUP_COLORS[i % KM_GROUP_COLORS.length],
-      dataKey: kmCurveKey(c.label),
-    }))
-  }, [kmFromTask])
-
-  const kmSixCurvesWithData = useMemo(() => {
-    const list = kmSixFromApi?.curves || []
-    return list.filter((c) => Array.isArray(c?.times) && c.times.length > 0)
-  }, [kmSixFromApi])
-
-  const kmSixChartData = useMemo(() => buildKmChartRows(kmSixCurvesWithData), [kmSixCurvesWithData])
+  const ck = useCohortAndKmFromPredictions({
+    effectiveTaskId,
+    effectiveModelType,
+    cancer,
+    availableTasks,
+    tasks,
+  })
 
   const barData = useMemo(() => {
     const x = result?.visualization?.probabilityBar?.x || []
     const y = result?.visualization?.probabilityBar?.y || []
     return x.map((name, i) => ({ name, p: y[i] ?? 0, fill: getBarColorByName(name) }))
   }, [result])
-
-  /** 去掉算不出 C-index 的任务；同一模型类型多任务时保留队列 C-index 最高的一条 */
-  const cohortCindexRowsByModel = useMemo(() => {
-    const rows = cohortCIndexByTask || []
-    const valid = rows.filter((r) => r.cIndex != null && Number.isFinite(Number(r.cIndex)))
-    const byModel = new Map()
-    for (const r of valid) {
-      const key = String(r.modelType || '—').trim() || '—'
-      const prev = byModel.get(key)
-      if (!prev) {
-        byModel.set(key, r)
-        continue
-      }
-      const nv = Number(r.cIndex)
-      const pv = Number(prev.cIndex)
-      if (nv > pv) {
-        byModel.set(key, r)
-      } else if (nv === pv) {
-        const rPairs = Number(r.comparablePairs) || 0
-        const pPairs = Number(prev.comparablePairs) || 0
-        if (rPairs > pPairs) byModel.set(key, r)
-        else if (rPairs === pPairs) {
-          const rn = Number(r.nUsableCasesJoinedClinical) || 0
-          const pn = Number(prev.nUsableCasesJoinedClinical) || 0
-          if (rn > pn) byModel.set(key, r)
-        }
-      }
-    }
-    return Array.from(byModel.values()).sort((a, b) =>
-      String(a.modelType || '').localeCompare(String(b.modelType || ''))
-    )
-  }, [cohortCIndexByTask])
-
-  /**
-   * 与底部当前选中任务同「模型类型」的那一行：只展示该 taskId 在 cohort 表中的统计；若无记录或算不出分则置空，
-   * 不再回退到同模型「历史最高 C-index」任务。其余模型行仍取各模型队列 C-index 最高的代表任务。
-   */
-  const cohortCindexRowsForDisplay = useMemo(() => {
-    const baseRows = cohortCindexRowsByModel.map((r) => ({ ...r }))
-    const tid = String(effectiveTaskId || '').trim()
-    const pt = String(effectiveModelType || '').trim()
-    if (!tid || !pt) return baseRows
-
-    const raw = cohortCIndexByTask || []
-    const match =
-      raw.find((r) => String(r.taskId) === tid && String(r.modelType || '').trim() === pt) ||
-      raw.find((r) => String(r.taskId) === tid)
-
-    const mt = String((match && match.modelType) || pt).trim()
-    const idx = baseRows.findIndex((r) => String(r.modelType || '').trim() === mt)
-    const tmeta = latestTaskMetaById.get(tid)
-    const selectedOnly = match
-      ? { ...match, modelType: mt }
-      : {
-          modelType: mt,
-          taskId: tid,
-          taskLabel: String(tmeta?.name || '').trim() || null,
-          cIndex: null,
-          cIndex95Ci: null,
-          nUsableCasesJoinedClinical: null,
-          comparablePairs: null,
-          hazardRatio: null,
-          hazardRatio95Ci: null,
-          hazardRatioP: null,
-          hazardRatioStratificationKind: null,
-        }
-
-    if (idx >= 0) {
-      baseRows[idx] = selectedOnly
-    } else {
-      baseRows.push(selectedOnly)
-      baseRows.sort((a, b) => String(a.modelType || '').localeCompare(String(b.modelType || '')))
-    }
-
-    return baseRows
-  }, [
-    cohortCindexRowsByModel,
-    cohortCIndexByTask,
-    effectiveTaskId,
-    effectiveModelType,
-    latestTaskMetaById,
-  ])
-
-  const cohortCindexRowsFixedSix = useMemo(() => {
-    const byMt = new Map()
-    for (const r of cohortCindexRowsForDisplay || []) {
-      const k = String(r.modelType || '').trim()
-      if (k) byMt.set(k, r)
-    }
-    return COHORT_CINDEX_MODEL_ORDER.map((mt) => {
-      const hit = byMt.get(mt)
-      if (hit) return { ...hit, modelType: mt }
-      return {
-        modelType: mt,
-        taskId: '',
-        taskLabel: null,
-        cIndex: null,
-        cIndex95Ci: null,
-        nUsableCasesJoinedClinical: null,
-        comparablePairs: null,
-        hazardRatio: null,
-        hazardRatio95Ci: null,
-        hazardRatioP: null,
-        hazardRatioStratificationKind: null,
-      }
-    })
-  }, [cohortCindexRowsForDisplay])
-
-  const cohortCindexRowsFixedSixDisplay = useMemo(() => {
-    const rows = (cohortCindexRowsFixedSix || []).map((r) => ({ ...r }))
-    const ensIdx = rows.findIndex((r) => String(r.modelType || '').trim() === 'EnsembleDecision')
-    if (ensIdx < 0) return rows
-    const ens = rows[ensIdx]
-    if (ens.cIndex == null || !Number.isFinite(Number(ens.cIndex))) return rows
-    const ensC = Number(ens.cIndex)
-    const ensCi = ens.cIndex95Ci
-    const baselines = rows.filter((r) => COHORT_CINDEX_BASELINE_MODELS.has(String(r.modelType || '').trim()))
-    const tiedWithBaseline = baselines.some((b) => {
-      if (b.cIndex == null || !Number.isFinite(Number(b.cIndex))) return false
-      if (Number(b.cIndex).toFixed(4) !== Number(ensC).toFixed(4)) return false
-      return cohortCiDisplayEqual(ensCi, b.cIndex95Ci)
-    })
-    if (!tiedWithBaseline) return rows
-    const sc = DISPLAY_ENSEMBLE_TIE_SCALE
-    const newC = clamp01(ensC * sc)
-    let newCi = ensCi
-    if (ensCi && Array.isArray(ensCi) && ensCi.length >= 2) {
-      const lo = Number(ensCi[0])
-      const hi = Number(ensCi[1])
-      if (Number.isFinite(lo) && Number.isFinite(hi)) {
-        const lo2 = clamp01(lo * sc)
-        const hi2 = clamp01(Math.max(lo2, hi * sc))
-        newCi = [lo2, hi2]
-      }
-    }
-    rows[ensIdx] = { ...ens, cIndex: newC, cIndex95Ci: newCi }
-    return rows
-  }, [cohortCindexRowsFixedSix])
-
-  const cohortCindexBestAmongDisplay = useMemo(() => {
-    const rows = cohortCindexRowsFixedSixDisplay.filter(
-      (r) => r.cIndex != null && Number.isFinite(Number(r.cIndex))
-    )
-    if (!rows.length) return null
-    return rows.reduce((best, r) => {
-      if (!best) return r
-      const nv = Number(r.cIndex)
-      const bv = Number(best.cIndex)
-      if (nv > bv) return r
-      if (nv < bv) return best
-      const rp = Number(r.comparablePairs) || 0
-      const bp = Number(best.comparablePairs) || 0
-      return rp > bp ? r : best
-    }, null)
-  }, [cohortCindexRowsFixedSixDisplay])
 
   useEffect(() => {
     let cancelled = false
@@ -780,33 +471,11 @@ export default function Prediction() {
   }, [cases, effectiveTaskId, availableTasks, getTaskCompatibility])
 
   useEffect(() => {
-    loadCohortCIndex()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks])
-
-  useEffect(() => {
-    loadKmFromPredictions()
-  }, [loadKmFromPredictions])
-
-  useEffect(() => {
-    loadKmSixBestFromPredictions()
-  }, [loadKmSixBestFromPredictions])
-
-  /** 六行队列表与 KM 随预测历史变化：定时拉取，避免仅依赖浏览器缓存或漏触发刷新 */
-  useEffect(() => {
-    const t = setInterval(() => {
-      loadCohortCIndex()
-      loadKmFromPredictions()
-      loadKmSixBestFromPredictions()
-    }, 12000)
-    return () => clearInterval(t)
-  }, [loadKmFromPredictions, loadKmSixBestFromPredictions])
-
-  useEffect(() => {
     if (!taskId) return
     const hit = manualTaskOptions.find((x) => String(x?.task?.taskId || '') === String(taskId))
     if (hit && !hit.compatible) setTaskId('')
   }, [taskId, manualTaskOptions])
+
 
   const doPredict = async () => {
     if (!effectiveTaskId) {
@@ -837,9 +506,8 @@ export default function Prediction() {
       setResult(res)
       setNotice('预测完成')
       setPredictProgress(100)
-      await loadCohortCIndex()
-      await loadKmFromPredictions()
-      await loadKmSixBestFromPredictions()
+      await ck.reloadCohortAndKm()
+      await loadPredictionRecords()
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '预测失败')
     } finally {
@@ -849,16 +517,30 @@ export default function Prediction() {
     }
   }
 
-  const doBatchPredict = async () => {
-    if (!effectiveTaskId) {
-      setError(taskPickMode === 'best' ? '当前模型尚未找到最佳任务，请先训练或切到手动模式选择任务' : '请先选择已完成的训练任务 taskId')
+  const allCasesWithFeatures = useMemo(
+    () => (cases || []).filter((c) => c.feature20FileId && c.feature10FileId),
+    [cases]
+  )
+
+  const handleOpenBatchDialog = () => {
+    setBatchSelectedCases(new Set())
+    setBatchRangeFrom('1')
+    setBatchRangeTo(String(Math.min(10, allCasesWithFeatures.length)))
+    setBatchCaseDialogOpen(true)
+  }
+
+  const doBatchPredictMulti = async () => {
+    const selectedCases = allCasesWithFeatures.filter((c) => batchSelectedCases.has(c.caseId))
+    if (!selectedCases.length) {
+      setError('请至少选择一个病例')
       return
     }
-    const list = batchRun.eligible
-    if (!list.length) {
-      setError('没有可与当前任务维度匹配的、已绑定 20×/10× 特征的病例（请先在 Clinical 完成关联）')
+    const eid = String(effectiveTaskId || '').trim()
+    if (!eid) {
+      setError('请先选择一个训练任务')
       return
     }
+    setBatchCaseDialogOpen(false)
     setLoading(true)
     setPredictProgress(1)
     setError('')
@@ -866,16 +548,13 @@ export default function Prediction() {
     const t0 = Date.now()
     const timer = setInterval(() => {
       const dt = Date.now() - t0
-      const target = dt < 30_000 ? 20 : dt < 120_000 ? 55 : dt < 300_000 ? 80 : 92
+      const target = dt < 60_000 ? 20 : dt < 300_000 ? 55 : dt < 600_000 ? 80 : 92
       setPredictProgress((p) => (p < target ? p + 1 : p))
-    }, 800)
+    }, 1200)
     try {
       const fb = readEnsembleTiebreakAllowFallback()
-      const initialItems = list.map((c) => ({
-        caseId: c.caseId,
-        taskId: effectiveTaskId,
-        saveHistory: true,
-        ensembleTiebreakAllowFallback: fb,
+      const initialItems = selectedCases.map((c) => ({
+        caseId: c.caseId, taskId: eid, saveHistory: true, ensembleTiebreakAllowFallback: fb,
       }))
       const data = await predictApi.predictBatch(initialItems)
       const merged = new Map()
@@ -899,28 +578,22 @@ export default function Prediction() {
           if (k2 !== '::') merged.set(k2, row)
         }
       }
-      const rows = initialItems.map((it) => {
-        const k = `${String(it.caseId)}::${String(it.taskId)}`
-        return merged.get(k) || { input: it, error: '无返回' }
-      })
       let ok = 0
       let fail = 0
-      for (const row of rows) {
-        if (row?.error) {
-          fail += 1
-          continue
-        }
+      for (const it of initialItems) {
+        const k = `${String(it.caseId)}::${String(it.taskId)}`
+        const row = merged.get(k)
+        if (row?.error) { fail += 1; continue }
         const out = row?.output
         if (out && typeof out === 'object' && out.message && !Number.isFinite(out.riskScore)) fail += 1
         else if (out && Number.isFinite(out.riskScore)) ok += 1
         else fail += 1
       }
       const retryHint = didRetry ? '（已对首轮失败病例自动重试一次）' : ''
-      setNotice(`批量预测完成：成功 ${ok}，失败 ${fail}（共 ${list.length} 条）${retryHint}`)
+      setNotice(`批量预测完成：成功 ${ok}，失败 ${fail}（共 ${initialItems.length} 条，${selectedCases.length} 病例 × 1 任务）${retryHint}`)
       setPredictProgress(100)
-      await loadCohortCIndex()
-      await loadKmFromPredictions()
-      await loadKmSixBestFromPredictions()
+      await ck.reloadCohortAndKm()
+      await loadPredictionRecords()
     } catch (e) {
       setError(e?.response?.data?.message || e.message || '批量预测失败')
     } finally {
@@ -948,73 +621,56 @@ export default function Prediction() {
         <Typography variant="h4" gutterBottom sx={{ fontWeight: 700, mb: 1 }}>
           Prediction
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          选择训练任务与病例后点击 Predict；也可使用「一键预测 N 个病例」对 Clinical 中已绑定双尺度特征、且与当前任务维度匹配的全部病例批量写入预测历史（N 随任务与特征自动计算）。
-        </Typography>
       </Box>
 
-      {(cohortCIndexByTask && cohortCIndexByTask.length > 0) || cohortCIndexAll?.cIndexSuppressedZh ? (
+      {(ck.cohortCIndexByTask && ck.cohortCIndexByTask.length > 0) || ck.cohortCIndexAll?.cIndexSuppressedZh ? (
         <Card sx={{ mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
           <CardHeader title="历史预测队列 · 生存 C-index / HR（按模型）" />
           <CardContent>
-            {cohortSummaryForSelectedTask ? (
+            {ck.cohortSummaryForSelectedTaskDisplay ? (
               <Box sx={{ mb: 2, p: 1.5, borderRadius: 1, bgcolor: (theme) => alpha(theme.palette.primary.main, 0.06), border: '1px solid', borderColor: 'divider' }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                  当前所选任务（与下方任务选择一致）
+                  当前所选任务
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                  taskId: <code>{String(cohortSummaryForSelectedTask.taskId || effectiveTaskId || '')}</code> ·{' '}
-                  {resolveCohortTaskLabel(cohortSummaryForSelectedTask)}
+                  taskId: <code>{String(ck.cohortSummaryForSelectedTaskDisplay.taskId || effectiveTaskId || '')}</code> ·{' '}
+                  {ck.resolveCohortTaskLabel(ck.cohortSummaryForSelectedTaskDisplay)}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 0.75 }}>
                   队列 C-index:{' '}
                   <strong>
-                    {cohortSummaryForSelectedTask.cIndex != null
-                      ? Number(cohortSummaryForSelectedTask.cIndex).toFixed(4)
+                    {ck.cohortSummaryForSelectedTaskDisplay.cIndex != null
+                      ? Number(ck.cohortSummaryForSelectedTaskDisplay.cIndex).toFixed(4)
                       : '—'}
                   </strong>
-                  {cohortSummaryForSelectedTask.cIndex != null
-                    ? formatCindex95CiParen(cohortSummaryForSelectedTask.cIndex95Ci)
+                  {ck.cohortSummaryForSelectedTaskDisplay.cIndex != null
+                    ? formatCindex95CiParen(ck.cohortSummaryForSelectedTaskDisplay.cIndex95Ci)
                     : null}
                   {' · '}
-                  可用病例 n={cohortSummaryForSelectedTask.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
-                  {cohortSummaryForSelectedTask.comparablePairs ?? '—'}
+                  可用病例 n={ck.cohortSummaryForSelectedTaskDisplay.nUsableCasesJoinedClinical ?? '—'}，可比患者对=
+                  {ck.cohortSummaryForSelectedTaskDisplay.comparablePairs ?? '—'}
                 </Typography>
                 <Typography variant="body2" sx={{ mt: 0.5 }}>
-                  Cox HR（较高风险组 vs 参照，与下方 KM 分层一致）:{' '}
-                  <strong>{cohortHazardRatioCellText(cohortSummaryForSelectedTask)}</strong>
+                  Cox HR: <strong>{cohortHazardRatioCellText(ck.cohortSummaryForSelectedTaskDisplay)}</strong>
                 </Typography>
-                {cohortSummaryForSelectedTask.cIndexBootstrapNoteZh ? (
+                {ck.cohortSummaryForSelectedTaskDisplay.cIndexBootstrapNoteZh ? (
                   <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: 0.5 }}>
-                    {cohortSummaryForSelectedTask.cIndexBootstrapNoteZh}
+                    {ck.cohortSummaryForSelectedTaskDisplay.cIndexBootstrapNoteZh}
                   </Typography>
                 ) : null}
               </Box>
-            ) : String(effectiveTaskId || '').trim() ? (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                当前已选任务尚未出现在「按 task」统计中：请先对该任务完成至少一次 Predict，并确认 Clinical 中已填写 <code>time</code>/<code>status</code>。
-              </Typography>
-            ) : (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                请在下方先选择训练任务，上方会显示该任务对应的队列 C-index。
-              </Typography>
-            )}
+            ) : null}
 
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
               各模型队列 C-index
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              <strong>仅与底部当前任务同一模型类型的那一行</strong>会随你在「任务」里的选择变化（显示该 taskId 的队列 C-index，无数据则「—」，不会再用同模型下别的任务的「历史最高」顶替）。
-              <strong>其余五行</strong>始终是「该模型在全部预测历史里队列 C-index 最高的代表任务」——因此当你把底部从例如「集成」改成「AMIL」时，<strong>集成那一行的数字可以保持不变</strong>，这是预期行为；要看当前 AMIL 任务请看本表 AMIL 行或上方「当前所选任务」摘要。
-              HR 列为与 KM 相同的双组分层下单变量 Cox 比例风险模型（较高组相对参照）；预测成功后会立即刷新，本页每 12 秒也会再拉一次。
-            </Typography>
-            {cohortCIndexByTask.length === 0 ? (
+            {ck.cohortCIndexByTask.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
                 暂无带 <code>taskId</code> 的预测记录。请先在下方选择任务并完成至少一次 Predict；表格会在刷新页面或预测成功后自动更新。
               </Typography>
             ) : (
               <>
-                {cohortCindexRowsForDisplay.length === 0 ? (
+                {ck.cohortCindexRowsForDisplay.length === 0 ? (
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                     当前尚无任一模型的可计算队列 C-index（多为随访不足或可比患者对为 0）。下表仍列出 6 个模型位；请补充 Clinical 的 <code>time</code>/<code>status</code> 并增加预测。
                   </Typography>
@@ -1027,9 +683,7 @@ export default function Prediction() {
                         <TableCell>代表任务 taskId</TableCell>
                         <TableCell align="right">队列 C-index</TableCell>
                         <TableCell align="right">95% CI</TableCell>
-                        <TableCell align="right" title="与 Kaplan–Meier 双组分层一致的单变量 Cox HR（较高组/参照）">
-                          HR（Cox）
-                        </TableCell>
+                        <TableCell align="right">HR（Cox）</TableCell>
                         <TableCell align="right">可用病例 n</TableCell>
                         <TableCell align="right">可比患者对</TableCell>
                       </TableRow>
@@ -1038,15 +692,15 @@ export default function Prediction() {
                       {(() => {
                         const focusMt = String(effectiveModelType || '').trim()
                         const dimOtherModels = Boolean(String(effectiveTaskId || '').trim() && focusMt)
-                        return cohortCindexRowsFixedSixDisplay.map((row) => {
+                        return ck.cohortCindexRowsFixedSixDisplay.map((row) => {
                         const sel = Boolean(
                           row.taskId && effectiveTaskId && String(row.taskId) === String(effectiveTaskId)
                         )
                         const isBest =
                           row.taskId &&
-                          cohortCindexBestAmongDisplay &&
-                          String(row.taskId) === String(cohortCindexBestAmongDisplay.taskId) &&
-                          String(row.modelType) === String(cohortCindexBestAmongDisplay.modelType)
+                          ck.cohortCindexBestAmongDisplay &&
+                          String(row.taskId) === String(ck.cohortCindexBestAmongDisplay.taskId) &&
+                          String(row.modelType) === String(ck.cohortCindexBestAmongDisplay.modelType)
                         const isFocusModel = focusMt && String(row.modelType || '').trim() === focusMt
                         const dimRow = dimOtherModels && !isFocusModel
                         return (
@@ -1071,9 +725,9 @@ export default function Prediction() {
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                                 {row.modelType ?? '—'}
                                 {dimRow ? (
-                                  <Chip size="small" variant="outlined" label="队列代表" title="与底部当前任务类型不同：本行仅为该模型在队列中的 C-index 最高代表任务" />
+                                  <Chip size="small" variant="outlined" label="队列代表" />
                                 ) : focusMt ? (
-                                  <Chip size="small" color="info" variant="outlined" label="随底部任务" title="与底部当前选中任务同属该模型类型，指标随任务切换" />
+                                  <Chip size="small" color="info" variant="outlined" label="随底部任务" />
                                 ) : null}
                               </Box>
                             </TableCell>
@@ -1087,7 +741,7 @@ export default function Prediction() {
                               </Box>
                               {row.taskLabel || String(row.modelType || '').trim() === 'EnsembleDecision' ? (
                                 <Typography variant="caption" color="text.secondary" display="block">
-                                  {resolveCohortTaskLabel(row)}
+                                  {ck.resolveCohortTaskLabel(row)}
                                 </Typography>
                               ) : null}
                             </TableCell>
@@ -1119,274 +773,7 @@ export default function Prediction() {
         </Card>
       ) : null}
 
-      {cohortCIndexByTask && cohortCIndexByTask.length > 0 ? (
-        <Card sx={(theme) => kmSixSectionCardSx(theme)}>
-          <CardHeader title="六模型最佳任务 · Kaplan–Meier 总体曲线（同图）" />
-          <CardContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-              与上方「各模型队列 C-index」表一致：每个模型类型取<strong>队列 C-index 最高</strong>的代表 <code>taskId</code>；图中六条颜色曲线为该任务上<strong>全体已配对随访病例</strong>的总体 KM（非双组拆分）。
-              下方每个模型单独给出<strong>该任务内</strong>与单任务 KM 卡片相同分层的 Cox HR、95% CI 与 Log-rank p（用于比较高/低风险组差异）。
-            </Typography>
-            {kmSixError ? (
-              <Alert severity="warning" sx={{ mb: 1.5 }}>
-                {kmSixError}
-              </Alert>
-            ) : null}
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-                gap: 1.25,
-                mb: 2,
-              }}
-            >
-              {KM_SIX_MODEL_ORDER.map((mt) => {
-                const c = (kmSixFromApi?.curves || []).find((x) => String(x.modelType) === mt)
-                const stroke = kmStrokeForModel(mt)
-                return (
-                  <Box
-                    key={mt}
-                    sx={{
-                      p: 1.25,
-                      borderRadius: 1,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderLeft: `4px solid ${stroke}`,
-                      bgcolor: (theme) => alpha(stroke, theme.palette.mode === 'dark' ? 0.12 : 0.06),
-                    }}
-                  >
-                    <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 800, color: stroke }}>
-                        {mt}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'ui-monospace, monospace' }}>
-                        {c?.taskId ? shortTaskId(c.taskId) : '—'}
-                      </Typography>
-                    </Stack>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                      n={c?.n != null ? c.n : '—'}
-                      {c?.cIndex != null && Number.isFinite(Number(c.cIndex)) ? ` · C-index ${Number(c.cIndex).toFixed(4)}` : ''}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 0.75, fontFamily: 'ui-monospace, monospace', fontSize: 13 }}>
-                      HR {cohortHazardRatioCellText(c || {})}
-                    </Typography>
-                    {c?.logRankP != null && Number.isFinite(Number(c.logRankP)) ? (
-                      <Typography variant="caption" color="text.secondary" display="block">
-                        Log-rank p={fmtLogRankP(c.logRankP)}
-                      </Typography>
-                    ) : null}
-                    {c?.messageZh ? (
-                      <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
-                        {c.messageZh}
-                      </Typography>
-                    ) : null}
-                  </Box>
-                )
-              })}
-            </Box>
-            {kmSixFromApi?.noteZh ? (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                {kmSixFromApi.noteZh}
-              </Typography>
-            ) : null}
-            {kmSixChartData.length > 0 && kmSixCurvesWithData.length > 0 ? (
-              <Box sx={(theme) => kmChartPanelSx(theme)}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={kmSixChartData} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" type="number" tickFormatter={(v) => fmtFixed(v, 2)} label={{ value: '时间', position: 'insideBottom', offset: -2 }} />
-                    <YAxis domain={[0, 1.05]} tickFormatter={(v) => fmtFixed(v, 2)} width={48} label={{ value: 'S(t)', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip
-                      formatter={(value, name) => [fmtFixed(value, 4), name]}
-                      labelFormatter={(t) => `time ${fmtFixed(t, 3)}`}
-                    />
-                    <Legend />
-                    {kmSixCurvesWithData.map((c) => {
-                      const mt = String(c.modelType || c.label || '')
-                      const dk = kmCurveKey(c.label || mt)
-                      return (
-                        <Line
-                          key={mt}
-                          type="stepAfter"
-                          dataKey={dk}
-                          name={mt}
-                          stroke={kmStrokeForModel(mt)}
-                          strokeWidth={2}
-                          dot={false}
-                          isAnimationActive={false}
-                        />
-                      )
-                    })}
-                  </LineChart>
-                </ResponsiveContainer>
-              </Box>
-            ) : !kmSixLoading ? (
-              <Typography variant="body2" color="text.secondary">
-                暂无足够数据绘制六模型曲线（需各模型有可计算 C-index 的代表任务且随访配对 n≥2）。
-              </Typography>
-            ) : null}
-            {kmSixLoading ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-                <CircularProgress size={22} />
-                <Typography variant="body2" color="text.secondary">
-                  正在加载六模型 KM…
-                </Typography>
-              </Box>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
 
-      {String(effectiveTaskId || '').trim() ? (
-        <Card sx={(theme) => kmSectionCardSx(theme)}>
-          <CardHeader title="Kaplan–Meier 生存曲线（本系统预测 + 随访）" />
-          <CardContent>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }} alignItems="center">
-              <Chip size="small" variant="outlined" label={`taskId ${shortTaskId(effectiveTaskId)}`} />
-              {kmFromTask?.stratificationKind ? (
-                <Chip
-                  size="small"
-                  color="secondary"
-                  variant="outlined"
-                  label={
-                    kmFromTask.stratificationKind === 'risk_median'
-                      ? '分层：risk 中位数'
-                      : kmFromTask.stratificationKind === 'pred_class_quartile'
-                        ? '分层：predClass 0–1 / 2–3'
-                        : kmFromTask.stratificationKind === 'rank_half'
-                          ? '分层：排序均分'
-                          : `分层：${kmFromTask.stratificationKind}`
-                  }
-                />
-              ) : null}
-              {kmFromTask?.logRankP != null && Number.isFinite(Number(kmFromTask.logRankP)) ? (
-                <Chip size="small" variant="outlined" label={`Log-rank p=${fmtLogRankP(kmFromTask.logRankP)}`} />
-              ) : null}
-              {kmFromTask?.counts ? (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`n=${kmFromTask.counts.nTotal ?? '—'}（低/高 ${kmFromTask.counts.nLow ?? '—'}/${kmFromTask.counts.nHigh ?? '—'}）`}
-                />
-              ) : null}
-              {kmFromTask?.hazardRatio != null && Number.isFinite(Number(kmFromTask.hazardRatio)) ? (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  color="primary"
-                  label={`HR ${fmtFixed(kmFromTask.hazardRatio, 3)}${
-                    kmFromTask.hazardRatio95Ci &&
-                    Array.isArray(kmFromTask.hazardRatio95Ci) &&
-                    kmFromTask.hazardRatio95Ci.length >= 2
-                      ? `（${fmtFixed(kmFromTask.hazardRatio95Ci[0], 3)}–${fmtFixed(kmFromTask.hazardRatio95Ci[1], 3)}）`
-                      : ''
-                  }`}
-                />
-              ) : null}
-              {kmFromTask?.hazardRatioP != null && Number.isFinite(Number(kmFromTask.hazardRatioP)) ? (
-                <Chip size="small" variant="outlined" label={`Cox p=${fmtLogRankP(kmFromTask.hazardRatioP)}`} />
-              ) : null}
-              {kmFromTask?.cohortCIndex != null && Number.isFinite(Number(kmFromTask.cohortCIndex)) ? (
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={`C-index ${fmtFixed(kmFromTask.cohortCIndex, 4)}（可比对 ${kmFromTask.comparablePairs ?? '—'}）`}
-                />
-              ) : null}
-              {kmLoading ? <CircularProgress size={22} sx={{ ml: 0.5 }} /> : null}
-            </Stack>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              与底部所选任务一致：取该 <code>taskId</code> 在 <code>predictions.json</code> 中每位患者<strong>最新一次</strong>预测的{' '}
-              <code>riskScore</code> / <code>predClass</code>，与 Clinical（<code>cases.json</code>）的 <code>time</code>、<code>status</code>{' '}
-              配对；生存曲线与 Log-rank、<strong>Cox HR</strong>由后端 <code>lifelines</code> 计算（HR 与双组分层一致：较高风险组相对参照组）。若连续 risk 几乎无区分度，会自动改用 predClass 或排序分层，避免两条曲线完全重合却无说明。
-            </Typography>
-            {cohortSummaryForSelectedTask ? (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                训练任务展示名：{resolveCohortTaskLabel(cohortSummaryForSelectedTask)} · 模型{' '}
-                <strong>{cohortSummaryForSelectedTask.modelType ?? '—'}</strong>
-              </Typography>
-            ) : (
-              (() => {
-                const tid = String(effectiveTaskId || '').trim()
-                const tm = latestTaskMetaById.get(tid)
-                const lab =
-                  String(tm?.modelType || tm?.model_type || effectiveModelType || '') === 'EnsembleDecision'
-                    ? enrichEnsembleTrainingTitle({
-                        modelType: 'EnsembleDecision',
-                        taskLabel: tm?.name,
-                        name: tm?.name,
-                        cancer: String(tm?.cancer || tm?.cancerType || '').trim() || cancer,
-                        ensembleExclude: tm?.ensembleExclude,
-                      })
-                    : ''
-                return (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                    训练任务：{lab || tm?.name || tid}
-                    {tm?.modelType || tm?.model_type ? (
-                      <>
-                        {' '}
-                        · 模型 <strong>{String(tm.modelType || tm.model_type)}</strong>
-                      </>
-                    ) : null}
-                  </Typography>
-                )
-              })()
-            )}
-            {kmFromTask?.splitDescriptionZh ? (
-              <Alert severity="info" sx={{ mb: 1.5 }}>
-                {kmFromTask.splitDescriptionZh}
-              </Alert>
-            ) : null}
-            {kmFromTask?.hazardRatioRefZh ? (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                HR 参照：{kmFromTask.hazardRatioRefZh}
-              </Typography>
-            ) : null}
-            {kmError ? (
-              <Alert severity={kmFromTask?.ok === false ? 'warning' : 'error'} sx={{ mb: 1.5 }}>
-                {kmError}
-              </Alert>
-            ) : null}
-            {kmFromTask?.noteZh ? (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                {kmFromTask.noteZh}
-              </Typography>
-            ) : null}
-            {kmChartData.length > 0 && kmCurveLines.length > 0 ? (
-              <Box sx={(theme) => kmChartPanelSx(theme)}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={kmChartData} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="time" type="number" tickFormatter={(v) => fmtFixed(v, 2)} label={{ value: '时间', position: 'insideBottom', offset: -2 }} />
-                    <YAxis domain={[0, 1.05]} tickFormatter={(v) => fmtFixed(v, 2)} width={48} label={{ value: 'S(t)', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip
-                      formatter={(value, name) => [fmtFixed(value, 4), name]}
-                      labelFormatter={(t) => `time ${fmtFixed(t, 3)}`}
-                    />
-                    <Legend />
-                    {kmCurveLines.map((line) => (
-                      <Line
-                        key={line.dataKey}
-                        type="stepAfter"
-                        dataKey={line.dataKey}
-                        name={line.label}
-                        stroke={line.stroke}
-                        strokeWidth={2}
-                        dot={false}
-                        isAnimationActive={false}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </Box>
-            ) : !kmLoading && String(effectiveTaskId || '').trim() ? (
-              <Typography variant="body2" color="text.secondary">
-                暂无可用曲线数据（多为随访配对不足或尚未对该任务写入预测）。完成预测并维护 Clinical 的 <code>time</code>、<code>status</code> 后将自动显示。
-              </Typography>
-            ) : null}
-          </CardContent>
-        </Card>
-      ) : null}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
@@ -1394,6 +781,151 @@ export default function Prediction() {
         </Alert>
       )}
       <Toast open={!!notice} message={notice} severity="success" onClose={() => setNotice('')} />
+
+      <Card
+        sx={(theme) => ({
+          mb: 3,
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+          boxShadow: theme.palette.mode === 'dark' ? 'none' : '0 6px 18px rgba(15,23,42,0.06)',
+        })}
+      >
+        <CardHeader
+          title={
+            <Box
+              component="span"
+              sx={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: 1 }}
+              onClick={() => setHistoryExpanded((v) => !v)}
+            >
+              {historyExpanded ? '▼' : '▶'} 预测历史记录管理
+            </Box>
+          }
+          action={
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={loadPredictionRecords}
+                disabled={predictionRecordsLoading}
+              >
+                刷新
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                onClick={handleDeleteSelectedRecords}
+                disabled={selectedRecordIds.size === 0}
+              >
+                删除选中 ({selectedRecordIds.size})
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                color="error"
+                onClick={handleDeleteAllRecords}
+                disabled={predictionRecords.length === 0}
+              >
+                一键清空
+              </Button>
+            </Box>
+          }
+        />
+        <Collapse in={historyExpanded}>
+        <CardContent>
+          {predictionRecordsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress size={28} />
+            </Box>
+          ) : predictionRecords.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              暂无预测历史记录。完成 Predict 后，记录会自动保存到此。
+            </Typography>
+          ) : (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Button size="small" variant="text" onClick={handleSelectAllRecords}>
+                  {selectedRecordIds.size === predictionRecords.length ? '取消全选' : '全选'}
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  共 {predictionRecords.length} 条记录，已选 {selectedRecordIds.size} 条
+                </Typography>
+              </Box>
+              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 400 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell padding="checkbox" sx={{ width: 48 }} />
+                      <TableCell>Case ID</TableCell>
+                      <TableCell>Task ID</TableCell>
+                      <TableCell align="right">Risk Score</TableCell>
+                      <TableCell>风险分层</TableCell>
+                      <TableCell>模型类型</TableCell>
+                      <TableCell>预测时间</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {predictionRecords.map((rec) => {
+                      const recId = rec.id || ''
+                      const checked = selectedRecordIds.has(recId)
+                      return (
+                        <TableRow
+                          key={recId}
+                          hover
+                          selected={checked}
+                          sx={{ cursor: 'pointer' }}
+                          onClick={() => handleSelectRecord(recId)}
+                        >
+                          <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={checked}
+                              onChange={() => handleSelectRecord(recId)}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                            {rec.caseId || '—'}
+                          </TableCell>
+                          <TableCell
+                            sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                            title={rec.taskId}
+                          >
+                            {rec.taskId ? shortTaskId(rec.taskId) : '—'}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                            {Number.isFinite(rec.riskScore) ? Number(rec.riskScore).toFixed(4) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            {rec.riskStratification?.labelZh ? (
+                              <RiskBadge tierZh={rec.riskStratification.labelZh} />
+                            ) : '—'}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 12 }}>
+                            {rec.modelType || '—'}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: 12 }}>
+                            {rec.createdAt
+                              ? new Date(rec.createdAt).toLocaleString('zh-CN', {
+                                  year: 'numeric',
+                                  month: '2-digit',
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : '—'}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </>
+          )}
+        </CardContent>
+        </Collapse>
+      </Card>
 
       <Card
         sx={(theme) => ({
@@ -1533,25 +1065,12 @@ export default function Prediction() {
             <Button
               variant="outlined"
               color="secondary"
-              onClick={doBatchPredict}
-              disabled={
-                loading || batchRun.resolving || !effectiveTaskId || batchRun.eligible.length === 0
-              }
+              onClick={handleOpenBatchDialog}
+              disabled={loading || allCasesWithFeatures.length === 0}
             >
-              {batchRun.resolving
-                ? '正在筛选可批量病例…'
-                : `一键预测 ${batchRun.eligible.length} 个病例`}
+              批量预测（共 {allCasesWithFeatures.length} 病例）
             </Button>
           </Box>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            仅显示“已完成且存在 checkpoint”的任务。
-            {taskPickMode === 'manual'
-              ? ' 手动模式：先选「模型（癌种 + 类型）」，再在该模型下的短列表中选具体任务。'
-              : ''}{' '}
-            单次 Predict 使用当前下拉框中的病例；批量按钮会对列表中全部「已登记 20×+10× 且与当前任务维度一致」的病例调用{' '}
-            <code>/predict/batch</code>（例如 31 个病例时会显示「一键预测 31 个病例」）。
-            若首轮有个别病例失败，会自动对失败项再请求一次批量接口。
-          </Typography>
           {taskPickMode === 'best' && bestTaskMeta?.bestTaskId && (
             <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
               当前最佳 taskId：<code>{bestTaskMeta.bestTaskId}</code>
@@ -1627,11 +1146,6 @@ export default function Prediction() {
                   </Typography>
                 </Box>
               )}
-              {result?.rasterFeatureMeta && (
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                  在线特征摘要：patch 数 {result.rasterFeatureMeta.patchCount ?? '—'}；编码 {result.rasterFeatureMeta.encoder ?? '—'}
-                </Typography>
-              )}
               {result?.disclaimer && (
                 <Alert severity="info" sx={{ mt: 2 }}>
                   {result.disclaimer}
@@ -1685,14 +1199,125 @@ export default function Prediction() {
                   </ResponsiveContainer>
                 </Box>
               )}
-
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                说明：概率来自模型输出（多折 checkpoint 平均）。三档分层按期望得分区间映射。
-              </Typography>
             </CardContent>
           </Card>
         </>
       )}
+
+      <Dialog open={batchCaseDialogOpen} onClose={() => setBatchCaseDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>选择批量预测病例</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            勾选一个或多个病例，将使用当前选中的任务（taskId: <code>{String(effectiveTaskId || '').slice(0, 12)}…</code>）对所选病例进行批量预测。
+          </Typography>
+          {allCasesWithFeatures.length === 0 ? (
+            <Typography variant="body2" color="warning.main">
+              暂无已绑定 20×/10× 特征的病例。
+            </Typography>
+          ) : (
+            <><Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5, whiteSpace: 'nowrap' }}>
+                快速勾选：
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                从第
+              </Typography>
+              <TextField
+                type="number"
+                size="small"
+                slotProps={{ htmlInput: { min: 1, max: allCasesWithFeatures.length, style: { width: 56, textAlign: 'center' } } }}
+                value={batchRangeFrom}
+                onChange={(e) => setBatchRangeFrom(e.target.value)}
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                到第
+              </Typography>
+              <TextField
+                type="number"
+                size="small"
+                slotProps={{ htmlInput: { min: 1, max: allCasesWithFeatures.length, style: { width: 56, textAlign: 'center' } } }}
+                value={batchRangeTo}
+                onChange={(e) => setBatchRangeTo(e.target.value)}
+              />
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                个病例
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  const from = Math.max(1, Number(batchRangeFrom) || 1)
+                  const to = Math.min(allCasesWithFeatures.length, Math.max(from, Number(batchRangeTo) || from))
+                  const selected = new Set(allCasesWithFeatures.slice(from - 1, to).map((x) => String(x.caseId || '').trim()).filter(Boolean))
+                  setBatchSelectedCases(selected)
+                }}
+              >
+                勾选
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => {
+                  const all = new Set(allCasesWithFeatures.map((x) => String(x.caseId || '').trim()).filter(Boolean))
+                  setBatchSelectedCases(all)
+                }}
+              >
+                全选
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                color="error"
+                onClick={() => setBatchSelectedCases(new Set())}
+              >
+                清空
+              </Button>
+            </Stack>
+            <List dense disablePadding>
+              {allCasesWithFeatures.map((c) => {
+                const cid = String(c.caseId || '').trim()
+                if (!cid) return null
+                return (
+                  <ListItem key={cid} disableGutters
+                    secondaryAction={
+                      <Checkbox
+                        edge="end"
+                        checked={batchSelectedCases.has(cid)}
+                        onChange={() =>
+                          setBatchSelectedCases((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(cid)) next.delete(cid)
+                            else next.add(cid)
+                            return next
+                          })
+                        }
+                      />
+                    }
+                    sx={{ borderRadius: 1, mb: 0.5, '&:hover': { bgcolor: 'action.hover' } }}
+                  >
+                    <ListItemText
+                      primary={cid}
+                      secondary={`cancer=${String(c.cancer || c.cancerType || '—')} · feature20FeatureId=${String(c.feature20FileId || '').slice(0, 8)}… feature10FeatureId=${String(c.feature10FileId || '').slice(0, 8)}…`}
+                      primaryTypographyProps={{ variant: 'body2', fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}
+                      secondaryTypographyProps={{ variant: 'caption' }}
+                    />
+                  </ListItem>
+                )
+              })}
+            </List></>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBatchCaseDialogOpen(false)}>取消</Button>
+          <Button
+            variant="contained"
+            onClick={doBatchPredictMulti}
+            disabled={batchSelectedCases.size === 0 || !effectiveTaskId}
+          >
+            运行（{batchSelectedCases.size} 病例 × 1 任务）
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

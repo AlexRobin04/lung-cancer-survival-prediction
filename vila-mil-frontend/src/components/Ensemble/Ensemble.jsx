@@ -62,11 +62,8 @@ export default function Ensemble() {
 
   const { cancerOptions, cancer, setCancer } = useCancerOptions('LUSC')
   const [maxEpochs, setMaxEpochs] = useState(120)
-  const [learningRate, setLearningRate] = useState(1e-5)
   const [seed, setSeed] = useState(1)
   const [kFolds, setKFolds] = useState(4)
-  const [weightDecay, setWeightDecay] = useState(1e-5)
-  const [earlyStopping, setEarlyStopping] = useState(false)
 
   const [decisionFusion] = useState('avg_prob')
   const [ensembleBranchPriorAuto, setEnsembleBranchPriorAuto] = useState(true)
@@ -132,10 +129,7 @@ export default function Ensemble() {
         modelType: 'EnsembleDecision',
         mode: 'transformer',
         maxEpochs: Number(maxEpochs),
-        learningRate: Number(learningRate),
         kFolds: Math.min(20, Math.max(1, Number(kFolds) || 4)),
-        weightDecay: Number(weightDecay) >= 0 ? Number(weightDecay) : 1e-5,
-        earlyStopping,
         repeat: 1,
         seed: Number(seed) || 1,
         decisionFusion: String(decisionFusion || 'avg_prob').toLowerCase(),
@@ -254,32 +248,13 @@ export default function Ensemble() {
               helperText="写入任务元数据，供基线对齐；集成子进程不跑满该 epoch 数"
             />
             <TextField
-              label="learningRate"
-              type="number"
-              value={learningRate}
-              onChange={(e) => setLearningRate(e.target.value)}
-              inputProps={{ step: '0.000001' }}
-            />
-            <TextField
               label="kFolds"
               type="number"
               value={kFolds}
               onChange={(e) => setKFolds(e.target.value)}
               inputProps={{ min: 1, max: 20, step: 1 }}
             />
-            <TextField
-              label="weightDecay"
-              type="number"
-              value={weightDecay}
-              onChange={(e) => setWeightDecay(e.target.value)}
-              inputProps={{ step: '0.0000001', min: 0 }}
-            />
             <TextField label="seed" type="number" value={seed} onChange={(e) => setSeed(e.target.value)} />
-            <FormControlLabel
-              sx={{ gridColumn: { xs: '1 / -1', md: 'span 2' } }}
-              control={<Checkbox checked={earlyStopping} onChange={(e) => setEarlyStopping(e.target.checked)} />}
-              label="早停（--early_stopping）"
-            />
 
             <Box sx={{ gridColumn: '1 / -1' }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
@@ -376,9 +351,8 @@ export default function Ensemble() {
                       门控回退（tie-break λ）
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, maxWidth: 560 }}>
-                      服务端对 EnsembleDecision 默认<strong>蒸馏复用当前队列 C-index 最高的基线</strong>（同癌种、同 mode），并直接沿用该基线的
-                      risk，使集成任务与最强单模并列最高；仅当设置 <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=0</code> 时才走纯 checkpoint。本开关历史上用于 tie-break
-                      λ 的门控回退；当前默认蒸馏路径已不再改写最强基线 risk。偏好保存在本机浏览器，由{' '}
+                      服务端对 EnsembleDecision：仅当任务<strong>五路全开</strong>（无 <code>ensembleExclude</code>）且未设置{' '}
+                      <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=0</code> 时，才<strong>可</strong>
                       <strong>Prediction</strong> 页调用 <code>/api/predict</code> / <code>/predict/batch</code> 时自动附带{' '}
                       <code>ensembleTiebreakAllowFallback</code>。
                     </Typography>

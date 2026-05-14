@@ -190,8 +190,8 @@ export default function Settings() {
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                       与 <strong>Ensemble</strong> 页开关写入同一本地项；<strong>Prediction</strong> 发起{' '}
                       <code>/api/predict</code> 时会附带 <code>ensembleTiebreakAllowFallback</code>。开启=验证不足或全量退化时可将
-                      λ 置 0（稳健）；关闭=始终用学习到的 λ。服务端对 EnsembleDecision 默认启用「复用队列最强基线」蒸馏；仅当设置{' '}
-                      <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=0</code> 时才改走纯 checkpoint。
+                      λ 置 0（稳健）；关闭=始终用学习到的 λ。服务端对 EnsembleDecision 在<strong>五路全开</strong>（未配置{' '}
+                      <code>ensembleExclude</code>）且未设置 <code>VILAMIL_ENSEMBLE_DISTILL_BASELINE=0</code> 
                     </Typography>
                   </Box>
                 }

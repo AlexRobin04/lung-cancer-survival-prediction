@@ -302,6 +302,10 @@ export const predictApi = {
     })
     return data
   },
+  async deletePredictions(body) {
+    const { data } = await client.post('/predictions/delete', body)
+    return data
+  },
   async listPredictions(limit = 50, { taskId, cindexBootstrap, bustCache } = {}) {
     const params = { limit: Math.min(500, Math.max(1, Number(limit) || 50)) }
     if (taskId) params.taskId = taskId

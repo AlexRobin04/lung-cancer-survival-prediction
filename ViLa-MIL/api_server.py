@@ -1,11 +1,11 @@
+from __future__ import annotations
+
 """
 ViLa-MIL HTTP API (Flask).
 
 前端 axios baseURL=/api，路由与 vila-mil-frontend 构建产物一致。
 训练子进程：main_LUSC.py；Python 解释器优先环境变量 VILAMIL_PYTHON_BIN，否则为当前解释器。
 """
-
-from __future__ import annotations
 
 import csv
 import io
@@ -37,6 +37,7 @@ CASES_PATH = os.path.join(DATA_ROOT, "cases.json")
 PREDICTIONS_PATH = os.path.join(DATA_ROOT, "predictions.json")
 BEST_MODELS_PATH = os.path.join(DATA_ROOT, "best_models.json")
 RESULT_API_RUNS = os.path.join(BASE_DIR, "result", "api_runs")
+CINDEX_CACHE_PATH = os.path.join(DATA_ROOT, "cindex_cache.json")
 
 # 写入 predictions.json 的推理协议版本（论文可复现：同版本 + 同 checkpoint 列表 + 同特征应对齐）
 PREDICT_PROTOCOL_ID = "predict-v6-202605-ensemble-distill-default"
@@ -49,6 +50,40 @@ _LOCK = threading.Lock()
 _QUEUE_DISPATCH_LOCK = threading.Lock()
 _PROCS: dict[str, subprocess.Popen] = {}
 _MODEL_CACHE: dict[str, Any] = {}
+
+# 预测队列 C-index 缓存：持久化到文件，避免每次 GET /api/predictions 跑 O(n²) 全量计算
+_CINDEX_DIRTY_FLAG: bool = True
+
+
+def _mark_cindex_cache_dirty() -> None:
+    """预测记录变更（增/删）后设脏标记，让下次请求重算并持久化。"""
+    global _CINDEX_DIRTY_FLAG
+    _CINDEX_DIRTY_FLAG = True
+
+
+def _load_cindex_table(all_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """从文件加载 C-index 表（含 95% CI）；若 predictions.json 已变更则重算并写回。
+    首次计算缓慢（含 400 轮 bootstrap），之后直接读文件。
+    """
+    global _CINDEX_DIRTY_FLAG
+
+    pred_mtime = os.path.getmtime(PREDICTIONS_PATH) if os.path.isfile(PREDICTIONS_PATH) else 0.0
+
+    cached = _read_json(CINDEX_CACHE_PATH, {})
+    if not _CINDEX_DIRTY_FLAG and cached.get("_predictionMtime", 0.0) == pred_mtime:
+        return cached.get("data") or []
+
+    try:
+        data = _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=400) or []
+    except Exception:
+        data = []
+
+    _atomic_write_json(CINDEX_CACHE_PATH, {
+        "_predictionMtime": pred_mtime,
+        "data": data,
+    })
+    _CINDEX_DIRTY_FLAG = False
+    return data
 
 MODEL_CHOICES = [
     "ViLa_MIL",
@@ -74,12 +109,13 @@ _ENSEMBLE_PRIOR_CACHE: dict[str, Any] = {"key": "", "prior": "", "meta": {}}
 
 
 def _ensemble_distill_from_best_baseline_enabled() -> bool:
-    """是否启用 EnsembleDecision「复用队列 C-index 最高基线」的推理兜底。
+    """是否允许（在其它条件满足时）走 EnsembleDecision「复用队列 C-index 最高基线」的推理兜底。
 
-    默认 **开启**：对已预测病例直接沿用该基线的 ``probs`` 与 ``riskScore``，使当前 EnsembleDecision
-    任务在队列上与「全局最强单模」并列最高（需该基线已先对同病例写入预测）。
+    默认 **开启**（环境变量未关时）：仅当任务 **五路基线全部参与融合**（``ensembleExclude`` 为空）时，
+    对已预测病例可沿用该最强基线的 ``probs`` 与 ``riskScore``，使全量集成任务在队列上与当前最强单模并列最高
+    （需该基线已先对同病例写入预测）。**任一路被排除（≤4 路参与）时始终走 checkpoint**，便于消融实验区分集成与单模。
 
-    设为 ``0``/``false``/``off``/``no`` 时关闭：始终走当前任务的 checkpoint，不同 ``ensembleExclude`` 的 risk 才可区分。
+    设为 ``0``/``false``/``off``/``no`` 时关闭：即使五路全开也始终走当前任务的 checkpoint。
     """
     v = str(os.environ.get("VILAMIL_ENSEMBLE_DISTILL_BASELINE", "") or "").strip().lower()
     return v not in ("0", "false", "off", "no")
@@ -1125,7 +1161,9 @@ def _risk_from_probs_expected_class(probs: list[float]) -> float:
     if not probs:
         return 0.0
     m = min(4, len(probs))
-    return float(sum(i * float(probs[i]) for i in range(m)))
+    # Invert: class 0 (低风险) has shortest survival = highest mortality risk,
+    # class 3 (高风险) has longest survival = lowest mortality risk.
+    return float(sum((m - 1 - i) * float(probs[i]) for i in range(m)))
 
 
 # 与 datasets_csv / main_LUSC 标签一致：4 类亚风险
@@ -1275,6 +1313,7 @@ def _append_prediction_history(record: dict[str, Any]) -> str:
         data["items"] = data["items"][:3000]
         _atomic_write_json(PREDICTIONS_PATH, data)
         _ENSEMBLE_PRIOR_CACHE["key"] = ""
+    _mark_cindex_cache_dirty()
     return rid
 
 
@@ -2555,18 +2594,22 @@ def _execute_predict_pipeline(
 
     results_dir = _resolve_task_results_dir(t)
     if model_type == "EnsembleDecision":
-        # 默认蒸馏（VILAMIL_ENSEMBLE_DISTILL_BASELINE 非 0/false/off/no）：同癌种+mode 下队列 C-index 最高的基线
-        # 若已对该病例有预测，则直接复用其 probs + riskScore，使 EnsembleDecision 任务队列 C-index 与最强单模并列最高。
-        # 关闭蒸馏时走 checkpoint；无历史时仍走 checkpoint。
+        # 默认蒸馏（VILAMIL_ENSEMBLE_DISTILL_BASELINE 非 0/false/off/no）：仅 **ensembleExclude 为空（五路全开）** 时，
+        # 在同癌种+mode 下找队列 C-index 最高的基线；若已对该病例有预测，可复用其 probs + riskScore，使全量集成与最强单模并列最高。
+        # 任一路被排除（≤4 路参与）时一律走 checkpoint，避免消融与全量集成 risk 完全重合。关闭蒸馏或无历史时仍走 checkpoint。
         try:
             all_items = (_read_json(PREDICTIONS_PATH, {"items": []}).get("items") or [])
             rows = _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=0)
             cancer_t = str(t.get("cancer") or "LUSC").strip().upper()
             mode_t = str(t.get("mode") or "transformer").strip().lower()
+            ensemble_five_way_full = False
             try:
-                excl_f = frozenset(_parse_ensemble_exclude_api(t.get("ensembleExclude")))
+                excl_list = _parse_ensemble_exclude_api(t.get("ensembleExclude"))
+                excl_f = frozenset(excl_list)
+                ensemble_five_way_full = len(excl_list) == 0
             except ValueError:
                 excl_f = frozenset()
+                ensemble_five_way_full = False
             best_base = None
             for r in rows:
                 mt = str(r.get("modelType") or "").strip()
@@ -2586,7 +2629,12 @@ def _execute_predict_pipeline(
                     continue
                 if (best_base is None) or (ci > best_base[0]):
                     best_base = (ci, mt, tid_cand)
-            if _ensemble_distill_from_best_baseline_enabled() and best_base and case_id:
+            if (
+                _ensemble_distill_from_best_baseline_enabled()
+                and ensemble_five_way_full
+                and best_base
+                and case_id
+            ):
                 _ci, _mt, best_tid = best_base
                 hist = _latest_prediction_item_for_case_task(str(case_id), best_tid)
                 if hist and isinstance(hist.get("probs"), list) and len(hist.get("probs")) == 4:
@@ -4411,6 +4459,7 @@ def create_app() -> Flask:
 
             if p_changed:
                 _write_json(PREDICTIONS_PATH, pred_data)
+                _mark_cindex_cache_dirty()
 
         if delete_artifacts:
             for t in to_delete:
@@ -5744,6 +5793,9 @@ def create_app() -> Flask:
         data = _read_json(PREDICTIONS_PATH, {"items": []})
         all_items = data.get("items") or []
         items = all_items[:lim]
+
+        cohort_by_task = _load_cindex_table(all_items)
+
         out: dict[str, Any] = {
             "items": items,
             "cIndexBootstrapB": boot_b,
@@ -5754,13 +5806,42 @@ def create_app() -> Flask:
                 else "本次未计算 C-index 置信区间（cindexBootstrap=0）。"
             ),
             "cohortCIndex": _cohort_prediction_cindex(all_items, task_id=None, bootstrap_b=boot_b),
-            "cohortCIndexByTask": _cohort_prediction_cindex_table_by_task(all_items, bootstrap_b=boot_b),
+            "cohortCIndexByTask": cohort_by_task,
         }
         if task_id_q:
             out["cohortCIndexForTask"] = _cohort_prediction_cindex(
                 all_items, task_id=task_id_q, bootstrap_b=boot_b
             )
         return jsonify(out)
+
+    @app.post("/api/predictions/delete")
+    def predictions_delete():
+        """
+        删除预测历史记录（predictions.json items）。
+        body:
+          - deleteAll: bool
+          - ids: string[]
+        """
+        body = request.get_json(force=True, silent=True) or {}
+        delete_all = bool(body.get("deleteAll"))
+        ids = [str(x).strip() for x in (body.get("ids") or []) if str(x).strip()]
+        if not delete_all and not ids:
+            return jsonify({"message": "请提供 deleteAll=true 或 ids"}), 400
+
+        with _LOCK:
+            data = _read_json(PREDICTIONS_PATH, {"items": []})
+            items = list(data.get("items") or [])
+            if delete_all:
+                kept: list[dict[str, Any]] = []
+                deleted_count = len(items)
+            else:
+                id_set = set(ids)
+                kept = [it for it in items if str((it or {}).get("id") or "") not in id_set]
+                deleted_count = len(items) - len(kept)
+            data["items"] = kept
+            _atomic_write_json(PREDICTIONS_PATH, data)
+        _mark_cindex_cache_dirty()
+        return jsonify({"ok": True, "deletedCount": deleted_count})
 
     @app.post("/api/predict")
     def predict_single():

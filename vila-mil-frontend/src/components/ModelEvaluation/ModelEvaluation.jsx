@@ -85,8 +85,6 @@ const fmt = (v, digits = 4) => {
 const legendName = {
   trainLoss: '训练集 Loss',
   valLoss: '验证集 Loss',
-  trainF1: '训练集 F1',
-  valF1: '验证集 F1',
   trainError: '训练集 error',
   valError: '验证集 error',
 }
@@ -530,8 +528,6 @@ export default function ModelEvaluation() {
       valLoss: p.valLoss ?? '',
       trainError: p.trainError ?? '',
       valError: p.valError ?? '',
-      trainF1: p.trainF1 ?? '',
-      valF1: p.valF1 ?? '',
     }))
     const headers = [
       'epoch',
@@ -539,8 +535,6 @@ export default function ModelEvaluation() {
       'valLoss',
       'trainError',
       'valError',
-      'trainF1',
-      'valF1',
     ]
     const csv = toCsv(rows, headers)
     downloadText(`model-evaluation-${taskId}.csv`, csv)
@@ -842,8 +836,6 @@ export default function ModelEvaluation() {
                     {[
                       ['bestValLoss', '最低 val_loss'],
                       ['finalValLoss', '最后 val_loss'],
-                      ['bestValF1', '最高 val F1'],
-                      ['finalValF1', '最后 val F1'],
                       ['minValError', '最低 val error'],
                       ['finalValError', '最后 val error'],
                       ['finalTrainError', '最后 train error'],
@@ -934,46 +926,6 @@ export default function ModelEvaluation() {
                 </Grid>
                 <Grid item xs={12} md={6}>
                   <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
-                    验证集 / 训练集 F1
-                  </Typography>
-                  <Box sx={(theme) => chartPanelSx(theme)}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={series}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={alpha('#90a4ae', 0.35)} />
-                        <XAxis dataKey="epoch" />
-                        <YAxis domain={[0, 1]} tickFormatter={(v) => fmt(v, 3)} width={54} />
-                        <Tooltip
-                          formatter={(value, name) => [fmt(value), legendName[name] || name]}
-                          labelFormatter={(label) => `epoch ${label}`}
-                          contentStyle={{
-                            borderRadius: 10,
-                            border: '1px solid #d7dee8',
-                            boxShadow: '0 8px 18px rgba(15,23,42,0.12)',
-                          }}
-                        />
-                        <Legend />
-                        <Line
-                          type="monotone"
-                          dataKey="valF1"
-                          name={legendName.valF1}
-                          stroke="#c62828"
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="trainF1"
-                          name={legendName.trainF1}
-                          stroke="#2e7d32"
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>
                     验证集 / 训练集 error（分类错误率）
                   </Typography>
                   <Box sx={(theme) => chartPanelSx(theme)}>
@@ -1039,8 +991,6 @@ export default function ModelEvaluation() {
                           <TableCell align="right">valLoss</TableCell>
                           <TableCell align="right">trainError</TableCell>
                           <TableCell align="right">valError</TableCell>
-                          <TableCell align="right">trainF1</TableCell>
-                          <TableCell align="right">valF1</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -1051,8 +1001,6 @@ export default function ModelEvaluation() {
                             <TableCell align="right">{fmt(p.valLoss)}</TableCell>
                             <TableCell align="right">{fmt(p.trainError)}</TableCell>
                             <TableCell align="right">{fmt(p.valError)}</TableCell>
-                            <TableCell align="right">{fmt(p.trainF1)}</TableCell>
-                            <TableCell align="right">{fmt(p.valF1)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -1234,8 +1182,6 @@ export default function ModelEvaluation() {
                     <TableCell>bestTaskId</TableCell>
                     <TableCell align="right">bestValLoss</TableCell>
                     <TableCell align="right">final val c-index</TableCell>
-                    <TableCell align="right">bestValF1</TableCell>
-                    <TableCell align="right">finalValF1</TableCell>
                     <TableCell align="right">final test c-index</TableCell>
                     <TableCell align="right">epochCount</TableCell>
                   </TableRow>
@@ -1247,7 +1193,7 @@ export default function ModelEvaluation() {
                       return (
                         <TableRow key={modelType}>
                           <TableCell>{modelType}</TableCell>
-                          <TableCell colSpan={8} sx={{ color: 'text.secondary' }}>
+                          <TableCell colSpan={6} sx={{ color: 'text.secondary' }}>
                             暂无最佳任务
                           </TableCell>
                         </TableRow>
@@ -1278,8 +1224,6 @@ export default function ModelEvaluation() {
                         </TableCell>
                         <TableCell align="right">{fmt(s.bestValLoss ?? row.bestValLoss)}</TableCell>
                         <TableCell align="right">{fmt(s.finalValCIndex ?? s.finalValRocAuc)}</TableCell>
-                        <TableCell align="right">{fmt(s.bestValF1)}</TableCell>
-                        <TableCell align="right">{fmt(s.finalValF1)}</TableCell>
                         <TableCell align="right">{fmt(s.finalTestCIndex ?? s.finalTestRocAuc)}</TableCell>
                         <TableCell align="right">{Number.isFinite(Number(s.epochCount)) ? Number(s.epochCount) : '—'}</TableCell>
                       </TableRow>

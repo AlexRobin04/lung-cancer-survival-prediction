@@ -8,6 +8,7 @@ import Ensemble from './components/Ensemble/Ensemble.jsx'
 import ModelEvaluation from './components/ModelEvaluation/ModelEvaluation.jsx'
 import Clinical from './components/Clinical/Clinical.jsx'
 import Prediction from './components/Prediction/Prediction.jsx'
+import SurvivalKm from './components/SurvivalKm/SurvivalKm.jsx'
 import Settings from './components/Settings/Settings.jsx'
 
 const TopNav = () => {
@@ -19,6 +20,7 @@ const TopNav = () => {
     { to: '/model-evaluation', label: 'Evaluation' },
     { to: '/clinical', label: 'Clinical' },
     { to: '/prediction', label: 'Prediction' },
+    { to: '/survival-km', label: 'Survival KM' },
     { to: '/settings', label: 'Settings' },
   ]
   return (
@@ -87,6 +89,7 @@ export default function App() {
           <Route path="/model-evaluation" element={<ModelEvaluation />} />
           <Route path="/clinical" element={<Clinical />} />
           <Route path="/prediction" element={<Prediction />} />
+          <Route path="/survival-km" element={<SurvivalKm />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
